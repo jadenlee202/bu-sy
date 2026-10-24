@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>BUsy Manual Pilot</title>
+  <meta name="description" content="Manual controlled pilot — not live BU facility data. Team tool for counting entries and exits by hand.">
+  <meta name="theme-color" content="#cc0000">
+  <link rel="stylesheet" href="pilot.css">
+</head>
+<body>
+  <div class="label-bar" role="note"><strong>Manual controlled pilot — not live BU facility data.</strong></div>
+
+  <header class="top">
+    <span class="brand">BU<em>sy</em> <span class="muted">pilot counter</span></span>
+    <span class="clock num" id="clock" aria-label="Current time"></span>
+  </header>
+
+  <p class="notice" id="storage-note">
+    Saved only in this browser on this device. It is <strong>not shared</strong> with other devices or teammates:
+    export CSV to share. Don't enter names, student IDs or anything that identifies a person.
+  </p>
+  <p class="notice warn" id="storage-warn" hidden></p>
+  <p class="notice" id="sync-note" hidden></p>
+
+  <!-- ---------- setup ---------- -->
+  <main id="setup" hidden>
+    <form id="setup-form" class="card" novalidate>
+      <h1>New pilot session</h1>
+      <label>Session name
+        <input name="name" maxlength="80" autocomplete="off" placeholder="Room test 1">
+        <small class="err" data-for="name"></small>
+      </label>
+      <label>Facility ID
+        <input name="facilityId" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="PILOT_MUGAR_STUDY_3">
+        <small class="hint">Must start with PILOT_ so it can't be mixed up with real or sample facilities.</small>
+        <small class="err" data-for="facilityId"></small>
+      </label>
+      <label>Doorway / counter ID
+        <input name="sensorId" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="PILOT_MUGAR_STUDY_3_D1">
+        <small class="hint">One device per doorway. Becomes <code>sensor_id</code> in the export.</small>
+        <small class="err" data-for="sensorId"></small>
+      </label>
+      <label>Known starting occupancy
+        <input name="startOccupancy" inputmode="numeric" autocomplete="off" placeholder="0">
+        <small class="hint">Headcount the room right before you start.</small>
+        <small class="err" data-for="startOccupancy"></small>
+      </label>
+      <button class="btn primary wide" type="submit">Start counting</button>
+    </form>
+    <section class="card" id="previous" hidden>
+      <h2>Previous session</h2>
+      <p class="muted" id="previous-text"></p>
+      <button class="btn" type="button" id="previous-export">Download its audit CSV</button>
+    </section>
+  </main>
+
+  <!-- ---------- counting ---------- -->
+  <main id="count" hidden>
+    <section class="session-line">
+      <span id="session-name"></span>
+      <span class="muted num" id="session-ids"></span>
+    </section>
+
+    <section class="estimate" aria-live="polite">
+      <span class="estimate-label">Estimated occupancy</span>
+      <span class="estimate-value num" id="estimate">0</span>
+      <span class="muted num" id="breakdown"></span>
+    </section>
+    <p class="alert" id="negative" role="alert" hidden></p>
+
+    <section class="pad">
+      <button class="tap tap-in" type="button" id="btn-in">Entry <span>+1</span></button>
+      <button class="tap tap-out" type="button" id="btn-out">Exit <span>+1</span></button>
+    </section>
+    <div class="row">
+      <button class="btn" type="button" id="btn-undo">Undo last event</button>
+      <span class="muted small" id="undo-hint"></span>
+    </div>
+    <p class="toast" id="toast" aria-live="polite"></p>
+
+    <section class="card">
+      <h2>Manual headcount</h2>
+      <form id="hc-form" class="hc" novalidate>
+        <input name="observed" inputmode="numeric" autocomplete="off" placeholder="People in room" aria-label="People counted in the room">
+        <input name="note" maxlength="140" autocomplete="off" placeholder="Note (optional, no names)" aria-label="Observer note">
+        <button class="btn" type="submit">Record headcount</button>
+      </form>
+      <small class="err" id="hc-err"></small>
+      <div id="hc-result" hidden>
+        <p class="num" id="hc-text"></p>
+        <button class="btn primary" type="button" id="btn-reconcile">Reconcile estimate to headcount</button>
+        <small class="muted" id="hc-status"></small>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Export CSV</h2>
+      <div class="exports">
+        <button class="btn" type="button" data-export="events">Events</button>
+        <button class="btn" type="button" data-export="headcounts">Headcounts</button>
+        <button class="btn" type="button" data-export="occupancy">Occupancy</button>
+        <button class="btn" type="button" data-export="audit">Full audit log</button>
+      </div>
+      <small class="muted">Events and headcounts match the pilot templates. Occupancy matches <code>data/*.csv</code>.
+        The audit log keeps everything, including undone taps and corrections.</small>
+    </section>
+
+    <section class="card">
+      <h2>Event log <span class="muted small" id="log-count"></span></h2>
+      <ol class="log num" id="log" reversed></ol>
+    </section>
+
+    <div class="row end">
+      <button class="btn danger" type="button" id="btn-reset">Reset session…</button>
+    </div>
+  </main>
+
+  <dialog id="reset-dialog">
+    <form method="dialog">
+      <h2>Reset this session?</h2>
+      <p id="reset-text"></p>
+      <p class="muted small">A copy is kept as the “previous session” until the next reset. Export first if you need it.</p>
+      <div class="row end">
+        <button class="btn" value="cancel" id="reset-cancel" autofocus>Cancel</button>
+        <button class="btn danger" type="button" id="reset-confirm">Reset session</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pilot Counter Tests</title>
+  <style>
+    body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 16px; background: #fff; color: #161616; }
+    .pass { color: #1d6b3a; } .fail { color: #cc0000; font-weight: 600; }
+    #summary { font-weight: 700; }
+    iframe { width: 420px; height: 300px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <h1>Pilot counter tests</h1>
+  <p id="summary">running…</p>
+  <ol id="results"></ol>
+  <iframe id="app" title="Pilot counter under test"></iframe>
+  <script type="module" src="js/tests.js"></script>
+</body>
+</html>
