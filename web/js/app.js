@@ -26,6 +26,9 @@ const fmtHour = (h) => `${h % 12 || 12} ${h % 24 < 12 ? "AM" : "PM"}`;
 const fmtHHMM = (t) => fmtTime(clockSec(t) / 60);
 const fmtCount = (v) => (v == null ? "—" : v < 10 && !Number.isInteger(v) ? v.toFixed(1) : Math.round(v).toLocaleString());
 const isReal = (f) => f.data_mode !== "synthetic";
+// A place is study-eligible only when its verified metadata confirms it.
+// A dining hall never qualifies automatically — study_friendly must be true.
+const isStudyEligible = (f) => f.verified_info?.study_friendly === true;
 
 const level = (l) =>
   `<span class="level" data-level="${l}"><span class="meter" aria-hidden="true"><i></i><i></i><i></i></span>${LEVEL[l]}</span>`;
@@ -61,6 +64,91 @@ function loading(text = "Fetching the latest…") {
 function failure(err, retry = "location.reload()") {
   return `<div class="state">${terrier({ size: 44, sleepy: true })}<p>${esc(err.message || "Something went wrong.")}</p>
     <button class="btn" onclick="${retry}">Try again</button></div>`;
+}
+
+// ---------- verified facility info (hand-researched, own provenance) ----------
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** Formats a verified "HH:MM-HH:MM" range to a readable string, or a word. */
+function fmtRange(range) {
+  if (range == null) return "Not verified";
+  if (range === "closed") return "Closed";
+  const [a, b] = range.split("-");
+  return `${fmtHHMM(a + ":00")} – ${fmtHHMM(b + ":00")}`;
+}
+
+/**
+ * Renders the verified hours / access / amenities / walking block.
+ * Occupancy provenance is deliberately NOT touched here — this is a separate,
+ * clearly-labeled section so verified hours never imply the counts are real.
+ * Returns "" when nothing was verified (unknown stays unknown).
+ */
+function verifiedInfoSection(f) {
+  const info = f.verified_info;
+  if (!info) {
+    return `<details class="about">
+      <summary>Facility info</summary>
+      <p class="muted" style="font-size:14px;margin:6px 0 0">No official facility details were verified for this place. Hours, access and amenities are unknown here.</p>
+    </details>`;
+  }
+
+  const oh = f.opening_hours;
+  const regularRows = oh
+    ? WEEKDAYS.map((d, i) => `<tr><td>${d}</td><td>${esc(fmtRange(oh.weekly[String(i)]))}</td></tr>`).join("")
+    : "";
+
+  // Non-regular schedules (holiday / break / special event) kept separate.
+  const special = info.hours.filter((h) => h.schedule_kind !== "regular");
+  const specialRows = special.map((h) => `<li><strong>${esc(h.label)}</strong>${h.note ? ` — ${esc(h.note)}` : ""} <span class="pill" style="font-size:11px">${esc(h.schedule_kind.replace("_", " "))}</span></li>`).join("");
+
+  const walk = info.walking;
+  const amenityList = info.amenities_verified.length
+    ? `<ul style="margin:4px 0 0;padding-left:18px">${info.amenities_verified.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>`
+    : `<span class="muted">Specific amenities not individually verified.</span>`;
+
+  const studyLine = info.study_friendly == null
+    ? "Not assessed."
+    : info.study_friendly
+      ? `Yes — ${esc(info.study_note || "study suitability confirmed.")}`
+      : `No — ${esc(info.study_note || "not a study space.")}`;
+
+  const questions = info.open_questions.length
+    ? `<dt>Unresolved</dt><dd><ul style="margin:0;padding-left:18px">${info.open_questions.map((q) => `<li>${esc(q)}</li>`).join("")}</ul></dd>`
+    : "";
+
+  return `<details class="about">
+    <summary>Facility info (verified hours &amp; access)</summary>
+    <p class="muted" style="font-size:13px;margin:6px 0">These details were read by hand from official BU pages on the dates shown. They describe published schedules, not live status, and do <strong>not</strong> make the occupancy counts above real.</p>
+    <dl>
+      ${oh ? `<dt>Regular hours</dt><dd>
+        <div class="muted" style="font-size:13px;margin-bottom:4px">${esc(oh.label)}</div>
+        <table style="width:auto"><tbody>${regularRows}</tbody></table>
+      </dd>` : `<dt>Regular hours</dt><dd class="muted">Not verified — hours unknown for this place.</dd>`}
+
+      ${specialRows ? `<dt>Holiday / break / special</dt><dd><ul style="margin:0;padding-left:18px">${specialRows}</ul></dd>` : ""}
+
+      <dt>Access</dt>
+      <dd>${esc(info.access_summary || "Not verified.")}</dd>
+
+      <dt>Study space?</dt>
+      <dd>${studyLine}</dd>
+
+      <dt>Amenities</dt>
+      <dd>${amenityList}</dd>
+
+      ${walk ? `<dt>Walking time</dt><dd>~${walk.minutes_approx} min from ${esc(walk.from_label)}.
+        <span class="muted" style="display:block;font-size:12px">Hand estimate — not exact and not verified routing. ${esc(walk.basis)}</span></dd>` : ""}
+
+      ${questions}
+
+      <dt>Sources</dt>
+      <dd style="font-size:13px">
+        ${info.hours_source_url ? `Hours: <a href="${esc(info.hours_source_url)}" target="_blank" rel="noopener">bu.edu</a> (checked ${esc(info.hours_checked)})<br>` : ""}
+        ${info.access_source_url ? `Access: <a href="${esc(info.access_source_url)}" target="_blank" rel="noopener">bu.edu</a> (checked ${esc(info.access_checked)})<br>` : ""}
+        ${info.amenities_source_url ? `Amenities: <a href="${esc(info.amenities_source_url)}" target="_blank" rel="noopener">bu.edu</a> (checked ${esc(info.amenities_checked)})` : ""}
+      </dd>
+    </dl>
+  </details>`;
 }
 
 // ---------- playback (one clock shared by every screen) ----------
@@ -156,7 +244,7 @@ async function placesView() {
       const o = latestAt(h.observations, state.minute, h.coverage_end);
       return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
         <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
-          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}</span></span>
+          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isStudyEligible(f) ? ` <span class="tag">Study space</span>` : ""}</span></span>
         <span class="row-count num">${fmtCount(o?.occupancy_count)}</span>
         ${level(o?.busyness ?? "unknown")}
         ${icon("chevron", 16)}
@@ -205,6 +293,7 @@ async function placeView(id) {
       <details class="table-view"><summary>Show as table</summary>${hourTable(hist)}</details>
     </section>
     ${hist.areas.length ? `<section><h2 class="section-title">Areas</h2><ul class="list" id="areas"></ul></section>` : ""}
+    ${verifiedInfoSection(f)}
     <details class="about">
       <summary>How this works</summary>
       <dl>

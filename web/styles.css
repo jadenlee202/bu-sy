@@ -213,3 +213,9 @@ th { color: var(--muted); font-weight: 600; }
   .state .terrier { animation: bob 1.6s ease-in-out infinite; }
   @keyframes bob { 50% { transform: translateY(-3px); } }
 }
+
+/* ---------- verified facility info ---------- */
+.about table { width: auto; margin: 2px 0 0; }
+.about table td { padding: 3px 12px 3px 0; border: 0; font-size: 13px; }
+.about a { color: var(--red); }
+.about ul { font-size: 14px; }

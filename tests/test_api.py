@@ -129,3 +129,98 @@ def test_event_validation():
 def test_seed_events_are_upcoming_examples():
     events = client.get("/api/community-events").json()
     assert events and all(e["example"] for e in events)
+
+
+# ---------- verified facility metadata (feature/verified-facility-info) ----------
+
+def _by_id():
+    return {f["facility_id"]: f for f in client.get("/api/facilities?at=12:00").json()}
+
+
+def test_verified_info_separate_from_occupancy():
+    """Verified hours must not change occupancy provenance for a synthetic place."""
+    f = _by_id()["fitrec-synthetic"]
+    # verified_info is present...
+    assert f["verified_info"] is not None
+    assert f["verified_info"]["hours_source_url"].startswith("https://www.bu.edu/fitrec")
+    # ...but occupancy is still clearly synthetic and unchanged.
+    assert f["data_mode"] == "synthetic"
+    assert f["measurement_method"] == "synthetic"
+    assert "synthetic" in f["source"].lower()
+    assert f["capacity_is_illustrative"] is True
+
+
+def test_opening_hours_populated_only_when_verified():
+    """FitRec has a verified regular schedule; dining halls do not (left unknown)."""
+    rows = _by_id()
+    fitrec = rows["fitrec-synthetic"]
+    assert fitrec["opening_hours"] is not None
+    assert fitrec["opening_hours"]["weekly"]["0"] == "06:00-23:00"  # Monday
+    assert fitrec["opening_hours"]["source_url"].startswith("https://www.bu.edu/fitrec")
+    # Dining halls: meal windows were not pinned to dates -> unknown, not invented.
+    warren = rows["warren-dining-synthetic"]
+    assert warren["opening_hours"] is None
+
+
+def test_unverified_facility_has_no_verified_info():
+    """COD was not researched as a BU place; it must carry no verified metadata."""
+    cod = _by_id()[COD]
+    assert cod["verified_info"] is None
+    assert cod["opening_hours"] is None
+
+
+def test_schedule_kinds_are_distinguished():
+    """Regular, holiday and special-event schedules are kept separate, not merged."""
+    fitrec = _by_id()["fitrec-synthetic"]
+    kinds = {h["schedule_kind"] for h in fitrec["verified_info"]["hours"]}
+    assert "regular" in kinds
+    assert "holiday" in kinds   # Oct 12 adjusted + Thanksgiving closure
+
+
+def test_dining_hall_is_not_a_study_destination():
+    """A dining hall must not auto-qualify as a study space."""
+    for fid in ("warren-dining-synthetic", "marciano-dining-synthetic",
+                "west-dining-synthetic", "fenway-dining-synthetic"):
+        info = _by_id()[fid]["verified_info"]
+        assert info["study_friendly"] is False, f"{fid} wrongly marked study-friendly"
+        assert "meal" in info["access_summary"].lower()  # access is gated
+
+
+def test_library_is_a_confirmed_study_destination():
+    """Mugar is explicitly confirmed study-friendly."""
+    info = _by_id()["mugar-synthetic"]["verified_info"]
+    assert info["study_friendly"] is True
+
+
+def test_walking_time_never_claims_exact_or_verified_routing():
+    """Hand-estimated walking times must flag themselves as not exact/not routing."""
+    for fid, info in [(k, v) for k, v in
+                      {f["facility_id"]: f["verified_info"] for f in
+                       client.get("/api/facilities?at=12:00").json()}.items()
+                      if v and v.get("walking")]:
+        w = info["walking"]
+        assert w["is_exact"] is False, f"{fid} walking claims exact"
+        assert w["is_verified_routing"] is False, f"{fid} walking claims verified routing"
+        assert isinstance(w["minutes_approx"], int)
+
+
+def test_verified_info_records_source_and_checked_date():
+    """Every verified fact group must carry a source URL and a checked date."""
+    info = _by_id()["fitrec-synthetic"]["verified_info"]
+    assert info["hours_source_url"] and info["hours_checked"]
+    assert info["access_source_url"] and info["access_checked"]
+    assert info["amenities_source_url"] and info["amenities_checked"]
+
+
+def test_open_questions_are_preserved():
+    """Unresolved questions are surfaced, not dropped."""
+    info = _by_id()["fitrec-synthetic"]["verified_info"]
+    assert isinstance(info["open_questions"], list)
+    assert len(info["open_questions"]) >= 1
+
+
+def test_detail_endpoint_also_carries_verified_info():
+    """FacilityDetail inherits verified_info from FacilitySummary."""
+    d = client.get("/api/facilities/fitrec-synthetic?at=18:00").json()
+    assert d["verified_info"] is not None
+    assert d["opening_hours"] is not None

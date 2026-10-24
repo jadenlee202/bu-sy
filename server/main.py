@@ -40,6 +40,7 @@ from pydantic import BaseModel
 import community_events as ce
 from analytics import THRESHOLD_NOTE, latest_at
 from schedule_data import CLUB_SPORTS, INTRAMURALS, SCHEDULE
+from facility_info import get_info
 from sources import Facility, load_all
 
 app = FastAPI(title="BUsy API (synthetic campus demo + COD historical playback)")
@@ -105,6 +106,10 @@ class FacilitySummary(BaseModel):
     playback_at: Optional[datetime]
     opening_hours: Optional[dict]
     amenities: list[str]
+    # Manually researched hours/access/amenities/walking time with their OWN
+    # provenance (see facility_info.py). None when nothing was verified. This is
+    # kept separate from occupancy: verified hours never make occupancy real.
+    verified_info: Optional[dict] = None
 
 
 class FacilityDetail(FacilitySummary):
@@ -200,11 +205,31 @@ def active_event(area_id: str, when: datetime) -> Optional[Event]:
     return None
 
 
+def opening_hours_summary(info) -> Optional[dict]:
+    """A compact regular-hours view derived from verified metadata.
+
+    Returns None when no regular schedule was verified, so unknown stays unknown.
+    """
+    if info is None:
+        return None
+    regular = next((h for h in info.hours if h.schedule_kind == "regular"), None)
+    if regular is None or not any(regular.weekly.values()):
+        return None
+    return {
+        "label": regular.label,
+        "weekly": {str(k): v for k, v in regular.weekly.items()},
+        "source_url": info.hours_source_url,
+        "checked": info.hours_checked,
+        "note": "Published regular hours; verified by hand, subject to change.",
+    }
+
+
 def facility_fields(f: Facility, tod: time) -> dict:
     day = f.default_day
     playback_at = datetime.combine(day, tod)
     obs = latest_at(f.days[day], playback_at, f.coverage_end(day))
     count = obs[1] if obs else None
+    info = get_info(f.facility_id)
     return dict(
         facility_id=f.facility_id,
         facility_name=f.facility_name,
@@ -221,8 +246,9 @@ def facility_fields(f: Facility, tod: time) -> dict:
         timezone=f.timezone,
         time_note=f.time_note,
         playback_at=playback_at,
-        opening_hours=None,
+        opening_hours=opening_hours_summary(info),
         amenities=f.amenities,
+        verified_info=info.as_dict() if info else None,
     )
 
 

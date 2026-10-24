@@ -48,3 +48,32 @@ files in this folder are shared under the same license with this attribution.
 Made by the team for the demo. Capacities used for busyness (in `server/sources.py`) are illustrative too.
 The FitRec building total is the sum of its 21 areas. The `Hackathon.pdf` notes also contain this same table,
 plus an older sample (FitRec / Howard Thurman / Mugar / Agganis) that this CSV replaces, so it isn't used.
+
+## Verified facility metadata (hours, access, amenities, walking time)
+
+Separate from the occupancy data above. Lives in `server/facility_info.py`, not in any
+CSV, and is joined onto facilities by id at request time. **Attaching verified hours to a
+facility does not make its synthetic occupancy real** — `data_mode`, `measurement_method`,
+`source` and every count are untouched.
+
+Each fact group (hours / access / amenities / walking) carries its own source URL and the
+date it was checked. Walking times are hand estimates, flagged `is_exact: false` and
+`is_verified_routing: false`. Facilities with no entry in that module stay unknown (the COD
+room has none).
+
+**Checked 2026-10-24 against official bu.edu pages:**
+
+| Facility | Hours source | Access | Study space? |
+|---|---|---|---|
+| FitRec (`fitrec-synthetic`) | [fitrec/visit-us/hours](https://www.bu.edu/fitrec/visit-us/hours/) | BU ID / membership; not open to public | No (recreation center) |
+| Mugar (`mugar-synthetic`) | [library/mugar-memorial/about/hours](https://www.bu.edu/library/mugar-memorial/about/hours/) | BU community; reservable study rooms | **Yes** (confirmed) |
+| Warren Towers dining | [dining/where-to-eat](https://www.bu.edu/dining/where-to-eat/) | Meal plan / meal swipe | No (dining hall) |
+| Marciano Commons dining | [dining/location/marciano](https://www.bu.edu/dining/location/marciano/) | Meal plan / meal swipe | No (dining hall) |
+| West Campus dining | [dining/location/west](https://www.bu.edu/dining/location/west/) | Meal plan / meal swipe | No (dining hall) |
+| Fenway dining | [dining/location/fenway](https://www.bu.edu/dining/location/fenway/) | Meal plan / meal swipe | No (dining hall) |
+
+Only FitRec has a captured regular weekly schedule (Fall 2026 term, plus the Oct 12 adjusted
+day and the Nov 26–28 Thanksgiving closure as separate `holiday` entries). Mugar and the dining
+halls have known **access** but their full weekly hours were not pinned to exact dates, so those
+days stay `null` (unknown) rather than guessed. Remaining gaps are listed per-facility in
+`open_questions` and surfaced in the app's "Facility info" section.
