@@ -536,5 +536,19 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(() => view?.resize?.(), 150);
 });
 document.querySelector(".brand-mark").innerHTML = terrier({ size: 30 });
+
+// Always say where the data came from. Both sources carry the same demo labels;
+// neither is live. If an API was asked for but can't be reached, say so.
+src.getMode().then((mode) => {
+  document.getElementById("source-mode").textContent = mode === "api"
+    ? `Data source: BU-sy API${src.REQUESTED_API ? ` at ${src.REQUESTED_API}` : ""}`
+    : "Data source: built-in demo files (no server) · meetups stay on this device";
+  if (mode === "static" && src.REQUESTED_API) {
+    const $notice = document.getElementById("notice");
+    $notice.textContent = `Couldn't reach the API at ${src.REQUESTED_API}. Showing the built-in demo files instead: `
+      + "the same sample data, but meetups are saved on this device only.";
+    $notice.hidden = false;
+  }
+});
 window.addEventListener("hashchange", route);
 route();

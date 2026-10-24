@@ -32,6 +32,7 @@ Try:    /api/facilities?at=17:30
         /api/facilities/COD_Bosch_Office_1_Clemente/history
         /docs
 """
+import os
 from datetime import date, datetime, time
 from enum import Enum
 from pathlib import Path
@@ -39,6 +40,7 @@ from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -53,6 +55,15 @@ LOCAL_TZ = ZoneInfo("America/New_York")  # demo clock for "now" when no `at` is 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 FACILITIES = load_all()
 CAMPUS = load_campus(FACILITIES)
+
+# Lets a site on another origin use this API (`?api=https://host`). No cookies or
+# credentials are involved. Restrict with BUSY_CORS_ORIGINS="https://a,https://b".
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("BUSY_CORS_ORIGINS", "*").split(","),
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 
 
 # ---------- models ----------

@@ -3,11 +3,12 @@
 //   static - web/data/*.json written by server/export_static.py (GitHub Pages);
 //            community events are then kept in this browser's localStorage.
 // Swap in a real campus feed by changing the server, not the screens.
+// Both modes serve the same synthetic/historical data with its own labels;
+// neither is ever presented as live.
 
-const API_BASE = (() => {
-  const custom = new URLSearchParams(location.search).get("api");
-  return custom ? `${custom.replace(/\/$/, "")}/api` : "api";
-})();
+/** The API asked for with ?api=https://host, or null for "same origin if present". */
+export const REQUESTED_API = new URLSearchParams(location.search).get("api")?.replace(/\/$/, "") || null;
+const API_BASE = REQUESTED_API ? `${REQUESTED_API}/api` : "api";
 
 export class SourceError extends Error {
   constructor(status, message) {
@@ -78,6 +79,12 @@ export function getCampus() {
 }
 
 // ---------- per-device identity (anonymous) ----------
+// crypto.randomUUID only exists on https or localhost; a phone opening the demo
+// at http://<laptop-ip> still needs an ID, so fall back to getRandomValues.
+const uuid = () => crypto.randomUUID?.()
+  ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("")
+    .replace(/^(.{8})(.{4})(.{4})(.{4})/, "$1-$2-$3-$4-");
+
 const store = {
   get(key) {
     try { return localStorage.getItem(key); } catch { return null; }
@@ -87,7 +94,7 @@ const store = {
   },
 };
 
-const memoryToken = crypto.randomUUID();
+const memoryToken = uuid();
 export function deviceToken() {
   let token = store.get("busy.token");
   if (!token) {
@@ -176,7 +183,7 @@ export const communityEvents = {
     if ((await getMode()) === "api") return post("community-events", { ...data, token });
     const events = await local.load();
     const e = {
-      ...data, id: crypto.randomUUID().slice(0, 8), example: false, host_token: token,
+      ...data, id: uuid().slice(0, 8), example: false, host_token: token,
       invite_code: data.invite_only ? inviteCode() : null, going: [{ token, name: data.host }],
     };
     events.push(e);
