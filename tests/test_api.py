@@ -213,3 +213,9 @@ def test_static_export_matches_the_api():
     assert static("facilities.json") == client.get("/api/facilities?at=12:00").json()
     for facility_id in main.FACILITIES:
         assert static(f"history/{facility_id}.json") == client.get(f"/api/facilities/{facility_id}/history").json()
+
+
+def test_api_allows_cross_origin_reads():
+    """A site on another origin can use ?api=… (no credentials involved)."""
+    r = client.get("/api/campus", headers={"Origin": "https://example.github.io"})
+    assert r.headers["access-control-allow-origin"] == "*"

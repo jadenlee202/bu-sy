@@ -4,6 +4,10 @@ __pycache__/
 *.pyc
 .DS_Store
 
+# Local configuration (never commit secrets)
+.env
+.env.*
+
 # Runtime state for community events (recreated with examples on startup)
 server/community_events.json
 

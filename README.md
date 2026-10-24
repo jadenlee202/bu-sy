@@ -17,9 +17,13 @@ Independent student project, **not affiliated with Boston University**.
 
 ## Run it
 
+**Demo day?** Follow [`DEMO.md`](DEMO.md): exact startup, the demo sequence, checks and recovery steps.
+
+Requires **Python 3.12+**. Node 20+ is only needed for the engine tests. There are no accounts, keys or secrets.
+
 **Just the site (no install):**
 ```bash
-python -m http.server 8000 -d web
+python -m http.server 8000 -d web       # macOS/Linux: python3
 # open http://localhost:8000
 ```
 It reads the pre-built JSON in `web/data/`; meetups are saved in your browser.
@@ -27,14 +31,17 @@ It reads the pre-built JSON in `web/data/`; meetups are saved in your browser.
 **With the API** (meetups shared between everyone using the server):
 ```bash
 python -m venv .venv
-.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-cd server
-uvicorn main:app --reload
+.venv\Scripts\python -m pip install -r requirements.txt          # macOS/Linux: .venv/bin/python
+.venv\Scripts\python -m uvicorn main:app --app-dir server --reload
 # open http://127.0.0.1:8000   (API docs at /docs)
 ```
+This runs from the repo root and doesn't need `activate`, which PowerShell often blocks.
 The site detects the API automatically. To use an API on another host, add `?api=https://host` to the URL.
-Both modes give the same suggestions (see *Static and API modes* below).
+The API allows cross-origin requests (`BUSY_CORS_ORIGINS` restricts them).
+
+The footer always names the data source (*built-in demo files* or *BU-sy API*). If a requested API can't be
+reached, a notice says so and the built-in demo files are used. Both modes give the same suggestions
+(see *Static and API modes* below).
 
 **Try it:** press **Try a sample scenario** (70 free minutes at 3 PM, work out, from Mugar to a class at
 Warren Towers). The other samples show a best match chosen on evidence (*study, outlets needed*) and a
@@ -43,8 +50,8 @@ window where nothing fits, with a one-tap fix the engine has checked.
 ## Checks
 
 ```bash
-python -m pytest            # API, data loaders, analytics, events, static export == API
-node --test tests/recommend.test.mjs   # planner engine (Node 22+, no packages needed)
+python -m pytest                        # API, data loaders, analytics, events, CORS, static export == API
+node --test tests/recommend.test.mjs    # planner engine (Node 20+, no packages; or: npm test)
 ```
 CI runs both (`.github/workflows/tests.yml`).
 
@@ -165,6 +172,7 @@ web/       the site: index.html, styles.css, js/
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
 tests/     test_api.py (pytest), recommend.test.mjs (node --test)
+DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 ```
 
 ### API

@@ -68,6 +68,8 @@ main { padding-top: 20px; padding-bottom: 32px; display: flex; flex-direction: c
 .back { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; text-decoration: none; color: var(--muted); font-size: 15px; font-weight: 600; padding: 6px 0; margin-bottom: -8px; }
 .back:hover { color: var(--text); }
 .section-title { font-size: 17px; margin: 8px 0 4px; }
+.source-mode { display: block; margin-top: 4px; font-size: 12px; }
+.notice { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: var(--red-soft); font-size: 14px; font-weight: 600; }
 .foot { padding-top: 8px; padding-bottom: max(28px, env(safe-area-inset-bottom)); font-size: 13px; color: var(--muted); text-align: center; }
 
 /* ---------- playback ---------- */
