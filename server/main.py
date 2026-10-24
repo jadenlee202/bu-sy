@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -62,7 +62,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=os.environ.get("BUSY_CORS_ORIGINS", "*").split(","),
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-BUsy-Device"],
 )
 
 
@@ -370,8 +370,9 @@ def get_programs():
 
 # ---------- community events (unofficial) ----------
 @app.get("/api/community-events")
-def list_community_events(token: Optional[str] = None):
-    return ce.list_events(token)
+def list_community_events(device: Optional[str] = Header(None, alias="X-BUsy-Device")):
+    """The device token comes in a header, not the URL, so it stays out of access logs."""
+    return ce.list_events(device)
 
 
 @app.post("/api/community-events", status_code=201)

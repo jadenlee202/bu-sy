@@ -319,7 +319,9 @@ async function eventsView() {
   $view.innerHTML = `
     <div class="title-row"><h1 class="title">Events</h1>
       <a class="btn btn-primary" href="#/events/new">${icon("plus", 16)} New</a></div>
-    <p class="hint">Unofficial and student-run. Not FitRec programming.${mode === "static" ? " Demo mode: saved on this device only." : ""}</p>
+    <p class="hint">Unofficial and student-run. Not FitRec programming. ${mode === "static"
+      ? "<strong>Demo mode:</strong> events are saved in this browser only. Nobody else can see or join them."
+      : "Shared with everyone using this server: anyone can see each event's time and place."}</p>
     <div id="events" aria-live="polite">${loading()}</div>`;
   const $list = $view.querySelector("#events");
   let open = null; // id of the event whose join form is showing
@@ -348,7 +350,7 @@ async function eventsView() {
         : `<button class="btn" data-act="open" data-id="${esc(e.id)}">Join</button>`;
       return `${header}<li class="event">
         <div class="event-time num">${fmtHHMM(e.start)} – ${fmtHHMM(e.end)}</div>
-        <div class="event-title">${esc(e.title)}${e.invite_only ? ` <span class="lock">${icon("lock", 13)} Invite only</span>` : ""}</div>
+        <div class="event-title">${esc(e.title)}${e.invite_only ? ` <span class="lock" title="A code is needed to join. The time and place are visible to everyone.">${icon("lock", 13)} Invite only</span>` : ""}</div>
         <div class="event-place">${esc(e.place)}${e.note ? ` · ${esc(e.note)}` : ""}</div>
         <div class="event-foot"><span class="muted">${e.going_count}${e.spots ? `/${e.spots}` : ""} going · ${esc(e.host)}</span>${action}</div>
         ${open === e.id ? joinForm(e) : ""}
@@ -361,8 +363,8 @@ async function eventsView() {
   }
 
   const joinForm = (e) => `<form class="join-form" data-id="${esc(e.id)}">
-    <input name="name" required maxlength="30" placeholder="Your first name or nickname" aria-label="Your name" value="${esc(src.savedName())}">
-    ${e.invite_only ? `<input name="code" required maxlength="12" placeholder="Invite code" aria-label="Invite code" autocapitalize="characters">` : ""}
+    <input name="name" required maxlength="${src.LIMITS.name}" placeholder="Your first name or nickname" aria-label="Your name" value="${esc(src.savedName())}">
+    ${e.invite_only ? `<input name="code" required maxlength="${src.LIMITS.code}" placeholder="Invite code" aria-label="Invite code" autocapitalize="characters">` : ""}
     <button class="btn btn-primary">Join</button>
     <p class="form-error" role="alert"></p>
   </form>`;
@@ -414,31 +416,38 @@ async function newEventView() {
     $view.innerHTML = `<a class="back" href="#/events">${icon("back", 16)} Events</a>${failure(err)}`;
     return {};
   }
+  const mode = await src.getMode();
   const now = src.campusNow();
   const nextHour = Math.min(22, Number(now.time.slice(0, 2)) + 1);
   const pad = (n) => String(n).padStart(2, "0");
+  const lastDay = new Date(Date.parse(`${now.date}T12:00:00Z`) + src.LIMITS.daysAhead * 864e5).toISOString().slice(0, 10);
+  const L = src.LIMITS;
 
   $view.innerHTML = `
     <a class="back" href="#/events">${icon("back", 16)} Events</a>
     <h1 class="title">New event</h1>
-    <p class="hint">Unofficial. You're the host; nothing is booked with FitRec.</p>
+    <p class="hint">Unofficial. You're the host; nothing is booked with FitRec. ${mode === "static"
+      ? "<strong>Demo mode:</strong> this event is saved in this browser only. Nobody else will see it."
+      : "Everyone using this server will see it."}</p>
     <form class="form" id="new-event" novalidate>
-      <label>What<input name="title" required maxlength="60" placeholder="Basketball run"></label>
+      <label>What<input name="title" required maxlength="${L.title}" placeholder="Basketball run"></label>
       <label>Where<select name="place" required>
         ${Object.entries(places).map(([group, list]) => `<optgroup label="${esc(group)}">${list.map((p) => `<option>${esc(p)}</option>`).join("")}</optgroup>`).join("")}
       </select></label>
-      <label><span>Details <span class="opt">optional</span></span><input name="note" maxlength="80" placeholder="Court 4, bring a ball"></label>
+      <label><span>Details <span class="opt">optional</span></span><input name="note" maxlength="${L.note}" placeholder="Court 4, bring a ball"></label>
       <div class="form-row">
-        <label>Date<input name="date" type="date" required min="${now.date}" value="${now.date}"></label>
+        <label>Date<input name="date" type="date" required min="${now.date}" max="${lastDay}" value="${now.date}"></label>
         <label>Start<input name="start" type="time" required value="${pad(nextHour)}:00"></label>
         <label>End<input name="end" type="time" required value="${pad(nextHour + 1)}:00"></label>
       </div>
-      <label><span>Spots <span class="opt">optional</span></span><input name="spots" type="number" min="2" max="200" inputmode="numeric" placeholder="10"></label>
+      <label><span>Spots <span class="opt">optional</span></span><input name="spots" type="number" min="${L.minSpots}" max="${L.maxAttendees}" inputmode="numeric" placeholder="10"></label>
       <fieldset class="segmented"><legend>Who can join</legend>
         <label><input type="radio" name="visibility" value="open" checked><span>Anyone</span></label>
         <label><input type="radio" name="visibility" value="invite"><span>${icon("lock", 14)} Invite only</span></label>
       </fieldset>
-      <label>Your name<input name="host" required maxlength="30" placeholder="First name or nickname" value="${esc(src.savedName())}"></label>
+      <p class="help">Invite only means people need a code to join. Everyone can still see the time and place,
+        so don't use it for anything private.${mode === "static" ? " In demo mode the code only works in this browser." : ""}</p>
+      <label>Your name<input name="host" required maxlength="${L.host}" placeholder="First name or nickname" value="${esc(src.savedName())}"></label>
       <p class="form-error" role="alert"></p>
       <button class="btn btn-primary btn-block">Create event</button>
     </form>`;
@@ -449,23 +458,22 @@ async function newEventView() {
     const d = new FormData(form);
     const $err = form.querySelector(".form-error");
     const get = (k) => String(d.get(k) ?? "").trim();
-    const missing = ["title", "place", "date", "start", "end", "host"].find((k) => !get(k));
-    if (missing) { $err.textContent = "Please fill in what, where, when and your name."; return; }
-    if (get("end") <= get("start")) { $err.textContent = "End time needs to be after the start."; return; }
-    if (`${get("date")}T${get("end")}` <= `${now.date}T${now.time}`) { $err.textContent = "That time has already passed."; return; }
-    const spots = get("spots") ? Number(get("spots")) : null;
-    if (spots != null && !(spots >= 2 && spots <= 200)) { $err.textContent = "Spots should be between 2 and 200."; return; }
+    const data = {
+      title: get("title"), place: get("place"), note: get("note"), date: get("date"),
+      start: get("start"), end: get("end"), host: get("host"), spots: get("spots") ? Number(get("spots")) : null,
+      invite_only: d.get("visibility") === "invite",
+    };
+    const problem = src.eventProblem(data);  // same rules as the server
+    if (problem) { $err.textContent = problem; return; }
     try {
-      const e = await src.communityEvents.create({
-        title: get("title"), place: get("place"), note: get("note"), date: get("date"),
-        start: get("start"), end: get("end"), host: get("host"), spots,
-        invite_only: d.get("visibility") === "invite",
-      });
+      const e = await src.communityEvents.create(data);
       src.saveName(get("host"));
       if (!e.invite_code) { location.hash = "#/events"; return; }
       $view.innerHTML = `<div class="state">${terrier({ size: 52 })}
         <h1 class="title">You're hosting</h1>
-        <p>Share this code with the people you invite:</p>
+        <p>${mode === "static"
+          ? "Demo mode: this code only works in this browser, because the event isn't shared."
+          : "Share this code with the people you invite. Anyone who has it can join."}</p>
         <p class="code-big">${esc(e.invite_code)}</p>
         <a class="btn btn-primary" href="#/events">Done</a></div>`;
     } catch (err) {

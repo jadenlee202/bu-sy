@@ -123,15 +123,48 @@ const addDays = (iso, n) => {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 };
-const inviteCode = () =>
-  Array.from(crypto.getRandomValues(new Uint8Array(3)), (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+// ---------- meetup rules (mirrors server/community_events.py) ----------
+// Static mode keeps meetups in this browser only: nobody else can see or join
+// them, so invite codes there are a local simulation, not access control.
+export const LIMITS = { title: 60, place: 60, note: 80, host: 30, name: 30, code: 16, minSpots: 2, maxAttendees: 200, daysAhead: 60 };
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const CONTROL = /[\x00-\x1f\x7f]/;
+const inviteCode = () => {
+  const c = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => CODE_ALPHABET[b % 32]).join("");
+  return `${c.slice(0, 4)}-${c.slice(4)}`;
+};
+const normCode = (c) => String(c ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const ended = (e, now) => `${e.date}T${e.end}` <= `${now.date}T${now.time}`;
 
-// Mirrors server/community_events.py for the no-server demo.
+/** Same checks as the server's NewEvent; returns a message or null. */
+export function eventProblem(d, now = campusNow()) {
+  for (const k of ["title", "place", "host"]) if (!String(d[k] ?? "").trim()) return "Please fill in what, where and your name.";
+  for (const k of ["title", "place", "note", "host"]) {
+    const v = String(d[k] ?? "").trim();
+    if (v.length > LIMITS[k]) return `${k[0].toUpperCase()}${k.slice(1)} is too long (max ${LIMITS[k]}).`;
+    if (CONTROL.test(v)) return "Please remove line breaks and special characters.";
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date ?? "") || !HHMM.test(d.start ?? "") || !HHMM.test(d.end ?? "")) return "Please pick a date, start and end.";
+  if (d.end <= d.start) return "End time needs to be after the start.";
+  if (`${d.date}T${d.end}` <= `${now.date}T${now.time}`) return "That time has already passed.";
+  if (d.date > addDays(now.date, LIMITS.daysAhead)) return `Events can be at most ${LIMITS.daysAhead} days ahead.`;
+  if (d.spots != null && !(Number.isInteger(d.spots) && d.spots >= LIMITS.minSpots && d.spots <= LIMITS.maxAttendees)) {
+    return `Spots should be between ${LIMITS.minSpots} and ${LIMITS.maxAttendees}.`;
+  }
+  return null;
+}
+
 const local = {
   key: "busy.events.v1",
   async load() {
     const raw = store.get(this.key);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      try {
+        const events = JSON.parse(raw);
+        if (Array.isArray(events)) return events;
+      } catch { /* unreadable: start again from the examples */ }
+    }
     const seeds = await getJSON("data/community_events_seed.json");
     const today = campusNow().date;
     const events = seeds.map((s, i) => ({
@@ -139,7 +172,7 @@ const local = {
       date: addDays(today, s.day_offset), start: s.start, end: s.end, host: "Example host",
       spots: s.spots, invite_only: s.invite_only, invite_code: s.invite_only ? inviteCode() : null,
       host_token: "example", example: true,
-      going: Array.from({ length: s.going }, (_, k) => ({ token: `example-${k}`, name: "Example" })),
+      going: Array.from({ length: s.going }, (_, k) => ({ token: `ex${k}`, name: "Example" })),
     }));
     this.save(events);
     return events;
@@ -168,12 +201,13 @@ export const communityEvents = {
   async list() {
     const token = deviceToken();
     if ((await getMode()) === "api") {
-      return getJSON(`${API_BASE}/community-events?token=${encodeURIComponent(token)}`);
+      // Header, not query string: the token is this device's key, so keep it out of URLs and logs.
+      return getJSON(`${API_BASE}/community-events`, { headers: { "X-BUsy-Device": token } });
     }
     const now = campusNow();
     const events = await local.load();
     return events
-      .filter((e) => `${e.date}T${e.end}` > `${now.date}T${now.time}`)
+      .filter((e) => !ended(e, now))
       .sort((a, b) => `${a.date}${a.start}`.localeCompare(`${b.date}${b.start}`))
       .map((e) => local.public(e, token));
   },
@@ -181,10 +215,13 @@ export const communityEvents = {
   async create(data) {
     const token = deviceToken();
     if ((await getMode()) === "api") return post("community-events", { ...data, token });
+    const problem = eventProblem(data);
+    if (problem) throw new SourceError(422, problem);
     const events = await local.load();
+    const trimmed = Object.fromEntries(["title", "place", "note", "host"].map((k) => [k, String(data[k] ?? "").trim()]));
     const e = {
-      ...data, id: uuid().slice(0, 8), example: false, host_token: token,
-      invite_code: data.invite_only ? inviteCode() : null, going: [{ token, name: data.host }],
+      ...data, ...trimmed, id: uuid().slice(0, 8), example: false, host_token: token,
+      invite_code: data.invite_only ? inviteCode() : null, going: [{ token, name: trimmed.host }],
     };
     events.push(e);
     local.save(events);
@@ -196,11 +233,10 @@ export const communityEvents = {
     if ((await getMode()) === "api") return post(`community-events/${id}/join`, { token, name, code });
     const [events, e] = await local.find(id);
     if (!e.going.some((g) => g.token === token)) {
-      if (e.invite_only && (code || "").trim().toUpperCase() !== e.invite_code) {
-        throw new SourceError(403, "Wrong invite code");
-      }
-      if (e.spots && e.going.length >= e.spots) throw new SourceError(409, "Event is full");
-      e.going.push({ token, name });
+      if (ended(e, campusNow())) throw new SourceError(410, "This event has already ended");
+      if (e.invite_only && normCode(code) !== normCode(e.invite_code)) throw new SourceError(403, "Wrong invite code");
+      if (e.going.length >= (e.spots || LIMITS.maxAttendees)) throw new SourceError(409, "Event is full");
+      e.going.push({ token, name: String(name).trim() });
       local.save(events);
     }
     return local.public(e, token);
@@ -210,6 +246,7 @@ export const communityEvents = {
     const token = deviceToken();
     if ((await getMode()) === "api") return post(`community-events/${id}/leave`, { token });
     const [events, e] = await local.find(id);
+    if (e.host_token === token) throw new SourceError(400, "Hosts cancel instead of leaving");
     e.going = e.going.filter((g) => g.token !== token);
     local.save(events);
     return local.public(e, token);

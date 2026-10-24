@@ -8,7 +8,7 @@ unless it is marked *not verified*. All data in the demo is sample data; nothing
 | Need | Version | Used for |
 |---|---|---|
 | Python | 3.12 or newer (verified 3.14; CI uses 3.12) | the site's local server, the API, pytest |
-| Node | 20 or newer (verified 24) | **only** the planner engine tests; not needed to run the app |
+| Node | 22 or newer (verified 24; CI uses 22) | **only** the JS tests (planner engine, static meetups); not needed to run the app |
 | Browser | any current Chromium/Edge (verified); Firefox/Safari *not verified* | the app |
 
 ```bash
@@ -16,8 +16,8 @@ git clone https://github.com/jadenlee202/bu-sy.git
 cd bu-sy
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
-.venv\Scripts\python -m pytest -q                           # expect 23 passed
-node --test tests/recommend.test.mjs                        # expect 24 passed (or: npm test)
+.venv\Scripts\python -m pytest -q                           # expect 55 passed
+node --test "tests/*.test.mjs"                              # expect 32 passed (or: npm test)
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 
@@ -115,7 +115,7 @@ The only console error in static mode is an expected 404: the app checking wheth
   Source: GitHub Actions**, and a public repo (or a paid plan for private repos). The Pages workflow deploys
   on every push to `main` without waiting for the tests. The `/bu-sy/` layout was checked locally by
   serving the site from that subpath.
-- *Not verified:* Python 3.12 (CI uses it), Node 20/22, Firefox, Safari, physical phones, screen readers.
+- *Not verified:* Python 3.12 (CI uses it), Node 22, Firefox, Safari, physical phones, screen readers.
 - Meetup dates are relative to today's real date (by design). The planner and Places don't use the clock.
 - `--host 0.0.0.0` and the API's open CORS (`*`, no credentials) suit a demo network. Restrict CORS with
   `BUSY_CORS_ORIGINS` for anything public.

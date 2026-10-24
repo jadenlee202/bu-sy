@@ -2,10 +2,19 @@
 
 Stored in server/community_events.json (created on first run, git-ignored).
 People are identified only by a random per-device token plus a nickname they
-type; no accounts, no campus identity. Invite codes and tokens are never
-returned to anyone except the host.
+type; no accounts, no campus identity. That token is *identification, not
+authentication*: whoever holds it can act as that device. It travels in POST
+bodies or an X-BUsy-Device header, never in a URL, so it stays out of access logs.
+
+Invite-only is a sign-up gate, not privacy: every event's title, place and
+time are visible to everyone. Codes (8 characters, ~1e12 combinations) are
+only ever returned to the host. Attendee names and tokens are never returned.
+
+One process only: the lock below does not coordinate several uvicorn workers.
 """
 import json
+import os
+import re
 import secrets
 import threading
 from datetime import date, datetime, timedelta
@@ -19,6 +28,14 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 STORE = Path(__file__).resolve().parent / "community_events.json"
 _lock = threading.Lock()
 CAMPUS_TZ = ZoneInfo("America/New_York")  # event dates/times are campus-local
+
+HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
+MAX_DAYS_AHEAD = 60
+MAX_ATTENDEES = 200          # also the cap when the host leaves "spots" empty
+MAX_UPCOMING = 300           # creation is refused beyond this (disk/spam guard)
+KEEP_ENDED = timedelta(days=1)
+CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
+CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def _now() -> datetime:
@@ -35,34 +52,46 @@ SEED_EVENTS = [
 ]
 
 
+def _clean(v):
+    """Trim before length checks, so "   " counts as empty; refuse control characters."""
+    if isinstance(v, str):
+        v = v.strip()
+        if CONTROL_CHARS.search(v):
+            raise ValueError("must not contain control characters")
+    return v
+
+
 class NewEvent(BaseModel):
     title: str = Field(min_length=1, max_length=60)
     place: str = Field(min_length=1, max_length=60)
     note: str = Field("", max_length=80)
     date: date
-    start: str = Field(pattern=r"^\d{2}:\d{2}$")
-    end: str = Field(pattern=r"^\d{2}:\d{2}$")
+    start: str = Field(pattern=HHMM)
+    end: str = Field(pattern=HHMM)
     host: str = Field(min_length=1, max_length=30)
-    spots: Optional[int] = Field(None, ge=2, le=200)
+    spots: Optional[int] = Field(None, ge=2, le=MAX_ATTENDEES)
     invite_only: bool = False
     token: str = Field(min_length=8, max_length=64)
 
-    @field_validator("title", "place", "note", "host")
-    @classmethod
-    def strip(cls, v: str) -> str:
-        return v.strip()
+    _strip = field_validator("title", "place", "note", "host", mode="before")(_clean)
 
     @model_validator(mode="after")
     def check_times(self):
         if self.end <= self.start:
             raise ValueError("end must be after start")
+        if _ends_at(self.date.isoformat(), self.end) <= _now():
+            raise ValueError("that time has already passed")
+        if self.date > _now().date() + timedelta(days=MAX_DAYS_AHEAD):
+            raise ValueError(f"events can be at most {MAX_DAYS_AHEAD} days ahead")
         return self
 
 
 class JoinRequest(BaseModel):
     token: str = Field(min_length=8, max_length=64)
     name: str = Field(min_length=1, max_length=30)
-    code: Optional[str] = None
+    code: Optional[str] = Field(None, max_length=16)
+
+    _strip = field_validator("name", mode="before")(_clean)
 
 
 class TokenRequest(BaseModel):
@@ -70,7 +99,25 @@ class TokenRequest(BaseModel):
 
 
 def _code() -> str:
-    return secrets.token_hex(3).upper()
+    raw = "".join(secrets.choice(CODE_ALPHABET) for _ in range(8))
+    return f"{raw[:4]}-{raw[4:]}"
+
+
+def _norm_code(code: Optional[str]) -> str:
+    """Case, spaces and dashes don't matter when typing a code."""
+    return re.sub(r"[^A-Z0-9]", "", (code or "").upper())
+
+
+def _ends_at(day: str, end: str) -> datetime:
+    return datetime.fromisoformat(f"{day}T{end}")
+
+
+def _ended(e: dict, now: datetime) -> bool:
+    """Ended, or unreadable (an old store written before validation): never joinable."""
+    try:
+        return _ends_at(e["date"], e["end"]) <= now
+    except (KeyError, TypeError, ValueError):
+        return True
 
 
 def _seed() -> list[dict]:
@@ -83,21 +130,29 @@ def _seed() -> list[dict]:
             "start": s["start"], "end": s["end"], "host": "Example host", "spots": s["spots"],
             "invite_only": s["invite_only"], "invite_code": _code() if s["invite_only"] else None,
             "host_token": "example", "example": True,
-            "going": [{"token": f"example-{k}", "name": "Example"} for k in range(s["going"])],
+            # Shorter than any accepted token, so nobody can leave on their behalf.
+            "going": [{"token": f"ex{k}", "name": "Example"} for k in range(s["going"])],
         })
     return events
 
 
 def _load() -> list[dict]:
     if STORE.exists():
-        return json.loads(STORE.read_text(encoding="utf-8"))
+        try:
+            return json.loads(STORE.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=503, detail="Meetup storage is unreadable. "
+                                "Delete server/community_events.json to reset it.")
     events = _seed()
     _save(events)
     return events
 
 
 def _save(events: list[dict]) -> None:
-    STORE.write_text(json.dumps(events, indent=2), encoding="utf-8")
+    """Write-then-rename, so a crash mid-write never leaves a half-written file."""
+    tmp = STORE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(events, indent=2), encoding="utf-8")
+    os.replace(tmp, STORE)
 
 
 def _public(e: dict, token: Optional[str]) -> dict:
@@ -125,7 +180,7 @@ def list_events(token: Optional[str]) -> list[dict]:
     now = _now()
     with _lock:
         events = _load()
-    upcoming = [e for e in events if datetime.fromisoformat(f"{e['date']}T{e['end']}") > now]
+    upcoming = [e for e in events if not _ended(e, now)]
     upcoming.sort(key=lambda e: (e["date"], e["start"]))
     return [_public(e, token) for e in upcoming]
 
@@ -139,7 +194,10 @@ def create_event(body: NewEvent) -> dict:
         going=[{"token": body.token, "name": body.host}],
     )
     with _lock:
-        events = _load()
+        now = _now()
+        events = [e for e in _load() if not _ended(e, now - KEEP_ENDED)]  # prune old ones
+        if sum(not _ended(e, now) for e in events) >= MAX_UPCOMING:
+            raise HTTPException(status_code=503, detail="Too many upcoming events right now. Try again later.")
         events.append(event)
         _save(events)
     return _public(event, body.token)
@@ -150,9 +208,11 @@ def join_event(event_id: str, body: JoinRequest) -> dict:
         events = _load()
         e = _find(events, event_id)
         if not any(g["token"] == body.token for g in e["going"]):
-            if e["invite_only"] and (body.code or "").strip().upper() != e["invite_code"]:
+            if _ended(e, _now()):
+                raise HTTPException(status_code=410, detail="This event has already ended")
+            if e["invite_only"] and not secrets.compare_digest(_norm_code(body.code), _norm_code(e["invite_code"])):
                 raise HTTPException(status_code=403, detail="Wrong invite code")
-            if e["spots"] and len(e["going"]) >= e["spots"]:
+            if len(e["going"]) >= (e["spots"] or MAX_ATTENDEES):
                 raise HTTPException(status_code=409, detail="Event is full")
             e["going"].append({"token": body.token, "name": body.name.strip()})
             _save(events)

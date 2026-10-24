@@ -1,4 +1,4 @@
-// Planner engine tests. Run: node --test tests/
+// Planner engine tests. Run: node --test "tests/*.test.mjs"
 // Uses Node's built-in runner, no packages. The engine is the same file the browser loads.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

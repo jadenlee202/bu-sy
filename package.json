@@ -3,8 +3,8 @@
   "private": true,
   "description": "No packages to install. Marks web/js as ES modules so Node can test the planner engine.",
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=22" },
   "scripts": {
-    "test": "node --test tests/recommend.test.mjs"
+    "test": "node --test \"tests/*.test.mjs\""
   }
 }
