@@ -244,6 +244,11 @@ th { color: var(--muted); font-weight: 600; }
 .check input { width: 18px; height: 18px; margin: 0; accent-color: var(--red); flex: none; }
 .study-needs { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; border-left: 2px solid var(--line); margin: 2px 0 0; }
 .study-needs .help { margin: 0 0 4px; }
+.workout-interests { display: flex; flex-direction: column; gap: 4px; padding-left: 12px; border-left: 2px solid var(--line); margin: 2px 0 0; }
+.workout-interests .field-label { font-size: 14px; font-weight: 600; }
+.workout-interests .opt { font-weight: 400; color: var(--muted); }
+.interest-row { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.workout-interests .help { margin: 0; }
 
 .results { display: flex; flex-direction: column; gap: 12px; }
 .results:focus { outline: none; }
@@ -271,6 +276,12 @@ th { color: var(--muted); font-weight: 600; }
 .timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
 .timeline li { display: flex; flex-direction: column; }
 .timeline span { color: var(--muted); }
+.rec-areas { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.rec-areas-head { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.area-list { display: flex; flex-direction: column; gap: 4px; }
+.area-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 4px 0; }
+.area-row + .area-row { border-top: 1px solid var(--line); }
+.area-row .row-sub { font-size: 12px; }
 .rec-why { font-size: 14px; background: var(--subtle); border-radius: 10px; padding: 10px 12px; }
 .rec-why ul { margin: 4px 0 0; padding-left: 18px; }
 .rec .btn { align-self: flex-start; }

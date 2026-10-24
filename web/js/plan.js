@@ -153,6 +153,13 @@ function formHTML(campus) {
         ${Object.entries(campus.amenity_labels).map(([id, label]) => `<label class="check"><input type="checkbox" name="needs" value="${esc(id)}"><span>Needs ${esc(label.toLowerCase())}</span></label>`).join("")}
         <p class="help">Only places whose sample metadata lists it.</p>
       </div>
+      <div class="workout-interests">
+        <span class="field-label">Workout type <span class="opt">optional</span></span>
+        <div class="interest-row">
+          ${Object.entries(campus.interest_labels ?? {}).map(([id, label]) => `<label class="check"><input type="checkbox" name="interests" value="${esc(id)}"><span>${esc(label)}</span></label>`).join("")}
+        </div>
+        <p class="help">Narrows FitRec to areas tagged for that type in sample metadata. Leave blank for any.</p>
+      </div>
     </fieldset>
 
     <p class="form-error" role="alert"></p>
@@ -171,6 +178,7 @@ function readForm(f) {
     minActivity: num("minActivity"), buffer: num("buffer"),
     preferQuiet: d.has("preferQuiet"), preferShortTravel: d.has("preferShortTravel"),
     needs: activity === "study" ? d.getAll("needs") : [],
+    interests: activity === "workout" ? d.getAll("interests") : [],
   };
 }
 
@@ -188,6 +196,7 @@ function fill(f, req, campus) {
   el.preferQuiet.checked = req.preferQuiet;
   el.preferShortTravel.checked = req.preferShortTravel;
   for (const c of f.querySelectorAll('[name="needs"]')) c.checked = req.needs.includes(c.value);
+  for (const c of f.querySelectorAll('[name="interests"]')) c.checked = (req.interests ?? []).includes(c.value);
   f.dataset.verbs = JSON.stringify(Object.fromEntries(campus.activities.map((a) => [a.id, a.verb])));
   syncForm(f);
 }
@@ -198,6 +207,8 @@ function syncForm(f) {
   const custom = f.querySelector(".custom");
   custom.hidden = f.elements.preset.value !== "custom";
   f.querySelector(".study-needs").hidden = req.activity !== "study";
+  const interests = f.querySelector(".workout-interests");
+  if (interests) interests.hidden = req.activity !== "workout";
   f.querySelector("#verb").textContent = JSON.parse(f.dataset.verbs)[req.activity] ?? "";
   const end = /^\d\d:\d\d$/.test(req.start) && Number.isFinite(req.minutes) ? toMin(req.start) + req.minutes : null;
   f.querySelector("#until").textContent = end == null ? "—" : end > engine.DAY_END ? "After midnight" : fmtTime(end % (24 * 60));
@@ -211,6 +222,7 @@ function fieldFor(f, field) {
   return {
     activity: el.activity[0], start: el.start, from: el.from, to: el.to, buffer: el.buffer, minActivity: el.minActivity,
     minutes: f.elements.preset.value === "custom" ? el.custom : el.preset[0],
+    needs: f.querySelector('[name="needs"]'), interests: f.querySelector('[name="interests"]'),
   }[field];
 }
 
@@ -234,8 +246,8 @@ function resultsHTML(r, campus) {
       ${summary}${note}
       <ol class="recs">${r.options.map((o, i) => card(o, i === 0 ? r.featured : null, req, campus)).join("")}</ol>
       ${r.more.length ? `<details class="more"><summary>${r.more.length} more also fit</summary><ul class="list">
-        ${r.more.map((o) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(o.place.name)}</span>
-          <span class="row-sub">${o.activity} min · ${o.there + o.onward} min walking</span></span>${level(o.busy.level)}</li>`).join("")}
+        ${r.more.map((o) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(o.grouped ? o.facility_name : o.place.name)}</span>
+          <span class="row-sub">${o.grouped ? `${o.areas.length} eligible ${o.areas.length === 1 ? "area" : "areas"} · ` : ""}${o.activity} min · ${o.there + o.onward} min walking</span></span>${level(o.busy.level)}</li>`).join("")}
       </ul></details>` : ""}`;
   } else {
     const considered = r.excluded.length + r.checkHours.length;
@@ -251,13 +263,13 @@ function resultsHTML(r, campus) {
 
   const check = r.checkHours.length ? `<section class="check-hours"><h3 class="section-title">Check hours before going</h3>
     <p class="hint">These fit your time, but the sample data has no hours for them, so they aren't confirmed.</p>
-    <ul class="list">${r.checkHours.map((o) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(o.place.name)}</span>
+    <ul class="list">${r.checkHours.map((o) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(o.grouped ? o.facility_name : o.place.name)}</span>
       <span class="row-sub">${esc(engine.budgetSentence(o, req, campus))}</span></span>${level(o.busy.level)}</li>`).join("")}</ul></section>` : "";
 
   const excluded = r.excluded.length && total ? `<details class="more"><summary>Why ${r.excluded.length} other ${r.excluded.length === 1 ? "place doesn't" : "places don't"} fit</summary>
-    <ul class="list">${r.excluded.map((e) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(e.place.name)}</span>
+    <ul class="list">${r.excluded.map((e) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(e.displayName ?? e.place.name)}</span>
       <span class="row-sub">${esc(e.reason)}</span></span></li>`).join("")}</ul></details>` : "";
-  const excludedEmpty = r.excluded.length && !total ? `<ul class="list why-not">${r.excluded.map((e) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(e.place.name)}</span>
+  const excludedEmpty = r.excluded.length && !total ? `<ul class="list why-not">${r.excluded.map((e) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(e.displayName ?? e.place.name)}</span>
       <span class="row-sub">${esc(e.reason)}</span></span></li>`).join("")}</ul>` : "";
 
   return `${body}${excludedEmpty}${check}${excluded}
@@ -270,6 +282,13 @@ function card(o, featured, req, campus) {
   const busy = engine.busynessText(o, req);
   const hours = engine.hoursStatus(o.place);
   const toName = req.to ? engine.locationName(campus, req.to) : null;
+  const grouped = o.grouped && o.areas?.length;
+  // One destination card: for a grouped facility (e.g. FitRec) the title is the
+  // facility and the eligible areas are listed inside; otherwise it's the place.
+  const title = grouped ? o.facility_name : o.place.name;
+  const subtitle = grouped
+    ? `${esc(act.label)} · ${o.areas.length} eligible ${o.areas.length === 1 ? "area" : "areas"}`
+    : `${o.place.area_id ? `${esc(o.place.facility_name)} · ` : ""}${esc(act.label)}`;
   const steps = [
     [o.free ? "Leave at" : "Leave", fmtTime(o.depart)],
     ...(o.there ? [["Arrive", fmtTime(o.arrive)]] : []),
@@ -280,18 +299,33 @@ function card(o, featured, req, campus) {
   const badge = featured ? `<span class="badge">${featured.kind === "best" ? "Best match" : "Only fit"}</span>` : "";
   return `<li class="rec${featured?.kind === "best" ? " rec-best" : ""}">
     <div class="rec-top">${badge}<span class="tag">${esc(o.place.data_mode === "synthetic" ? "Demo · Synthetic" : o.place.data_mode)}</span></div>
-    <h3 class="rec-name">${esc(o.place.name)}</h3>
-    <p class="rec-sub">${o.place.area_id ? `${esc(o.place.facility_name)} · ` : ""}${esc(act.label)}</p>
+    <h3 class="rec-name">${esc(title)}</h3>
+    <p class="rec-sub">${subtitle}</p>
     <div class="rec-busy">${level(o.busy.level, busy.label)}</div>
-    <p class="rec-basis">${esc(busy.basis)}</p>
+    <p class="rec-basis">${esc(busy.basis)}${grouped ? " This is the top-ranked area below, not a whole-building count." : ""}</p>
     <div class="budget" aria-hidden="true">${o.budget.filter((b) => b.minutes > 0)
       .map((b) => `<span class="seg seg-${b.kind}" style="flex-grow:${b.minutes}"></span>`).join("")}</div>
     <p class="rec-budget">${esc(engine.budgetSentence(o, req, campus))}</p>
+    ${grouped ? areasBlock(o, req, campus) : ""}
     <ol class="timeline">${steps.map(([k, v]) => `<li><span>${esc(k)}</span><strong class="num">${v}</strong></li>`).join("")}</ol>
     <p class="rec-hours">${esc(hours.text)}</p>
     <div class="rec-why"><strong>Why this fits</strong>
       <ul>${engine.whyItFits(o, req, campus, featured).map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
     <a class="btn" href="#/place/${encodeURIComponent(o.place.facility_id)}">View facility ${icon("chevron", 16)}</a>
   </li>`;
+}
+
+/** Eligible areas inside one facility card. Each keeps its OWN synthetic count
+ *  (never summed to a building number) and shows any sample reservation. */
+function areasBlock(o, req, campus) {
+  const rows = o.areas.map((a) => {
+    const b = engine.busynessText(a, req);
+    const reserved = a.place.closures.map((c) => esc(c.reason.replace(/^Reserved: /, "")));
+    return `<li class="area-row"><span class="row-main"><span class="row-name">${esc(a.place.name)}</span>
+      <span class="row-sub">${a.activity} min · ${esc(b.basis)}${reserved.length ? ` · reserved for ${reserved.join(", ")} part of the day (sample)` : ""}</span></span>
+      ${level(a.busy.level, b.label)}</li>`;
+  }).join("");
+  return `<div class="rec-areas"><p class="rec-areas-head">Eligible areas (each a separate sample count, not a building total)</p>
+    <ul class="list area-list">${rows}</ul></div>`;
 }
 

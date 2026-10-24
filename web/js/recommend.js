@@ -18,6 +18,15 @@
 //   minActivity, buffer minutes; the buffer is kept free before the next commitment
 //   preferQuiet, preferShortTravel   ranking preferences
 //   needs               amenity ids a place must list (e.g. "outlets")
+//   interests           workout interest ids a place's area must be tagged with
+//                       (e.g. "weights"); empty = any eligible area. Only areas
+//                       carry interests, so this filters within a facility.
+//
+// Grouping: a facility whose eligible options are all areas (e.g. FitRec's
+// weight rooms, courts and pool) is shown as ONE destination, with its areas
+// listed inside, so one facility can't flood the top with near-identical cards.
+// The group shares the facility's single travel calculation and is ranked by its
+// best eligible area using the same keys as any other option — no new ranking.
 //
 // Fit rule: minutes >= travel there + activity (>= minActivity) + onward + buffer,
 // and the place is open (illustrative hours, minus sample reservations) for the
@@ -38,6 +47,7 @@ export function requestFromScenario(s) {
     activity: s.activity, start: s.start, minutes: s.minutes, source: s.source ?? "manual",
     from: s.start_location, to: s.next_location ?? null, minActivity: s.min_activity, buffer: s.buffer,
     preferQuiet: s.prefer_quiet, preferShortTravel: s.prefer_short_travel, needs: [...s.needs],
+    interests: [...(s.interests ?? [])],
   };
 }
 
@@ -57,6 +67,7 @@ export function validateRequest(req, campus) {
   if (!int(req.minActivity, 5, 600)) add("minActivity", "Minimum time should be 5 to 600 minutes.");
   if (!int(req.buffer, 0, 120)) add("buffer", "Buffer should be 0 to 120 minutes.");
   for (const n of req.needs ?? []) if (!(n in campus.amenity_labels)) add("needs", `Unknown need: ${n}`);
+  for (const i of req.interests ?? []) if (!(i in (campus.interest_labels ?? {}))) add("interests", `Unknown interest: ${i}`);
   return errors;
 }
 
@@ -105,6 +116,11 @@ function evaluate(place, req, campus, histories) {
     return out("not_campus", "Historical data demo, not a campus destination");
   }
   if (!place.activities.includes(req.activity)) return out("activity", "Doesn't support this activity");
+  if (req.interests?.length && !req.interests.includes(place.interest)) {
+    return out("interest", place.interest
+      ? `${campus.interest_labels[place.interest] ?? place.interest} area, not a type you picked`
+      : "No workout type listed in sample metadata");
+  }
   for (const need of req.needs) {
     if (place.amenities[need] !== true) {
       const label = campus.amenity_labels[need];
@@ -165,6 +181,35 @@ function closedReason(place, segs, from, to) {
   return `${overlaps ? "Not open long enough during your window" : "Closed then"} (illustrative hours ${hoursText(place)})`;
 }
 
+// ---------- grouping ----------
+// Collapse options that are areas of the same facility (e.g. FitRec's weight
+// rooms, courts, pool) into one destination. `ranked` is already sorted best
+// first, so each group inherits the keys of its best eligible area and keeps
+// that facility's single shared travel calculation. Facility-level options
+// (area_id === null, e.g. a dining hall or the library) pass through unchanged.
+function groupByFacility(ranked) {
+  const groups = new Map();   // facility_id -> group option (its best area first)
+  const out = [];
+  for (const o of ranked) {
+    if (!o.place.area_id) { out.push(o); continue; }   // not an area: stands alone
+    const existing = groups.get(o.place.facility_id);
+    if (!existing) {
+      // The best area becomes the group's representative: its travel, budget,
+      // busyness and rank keys describe the facility card. Areas are listed in
+      // rank order; each keeps its OWN synthetic count (never summed).
+      const group = {
+        ...o, grouped: true, facility_id: o.place.facility_id,
+        facility_name: o.place.facility_name, areas: [o], keys: o.keys,
+      };
+      groups.set(o.place.facility_id, group);
+      out.push(group);
+    } else {
+      existing.areas.push(o);   // already ranked, so this is no better than the rep
+    }
+  }
+  return out;
+}
+
 // ---------- ranking ----------
 // Lexicographic, smaller first. Primary key(s) follow the student's preference;
 // then busyness level, total sample walking, more activity time, study amenities
@@ -213,12 +258,14 @@ export function recommend(req, campus, histories, { suggest = true } = {}) {
   if (errors.length) return { ok: false, errors };
 
   const evaluated = campus.places.map((p) => evaluate(p, req, campus, histories));
-  const ranked = (status) => evaluated.filter((o) => o.status === status)
-    .map((o) => ({ ...o, keys: rankKeys(o, req) })).sort(compare);
+  const ranked = (status) => groupByFacility(
+    evaluated.filter((o) => o.status === status).map((o) => ({ ...o, keys: rankKeys(o, req) })).sort(compare),
+  );
   const fits = ranked("fit");
   const checkHours = ranked("check_hours");
-  const excluded = evaluated.filter((o) => o.status === "excluded" && o.code !== "activity")
+  const excludedAll = evaluated.filter((o) => o.status === "excluded" && o.code !== "activity")
     .sort((a, b) => (a.place.name < b.place.name ? -1 : a.place.name > b.place.name ? 1 : 0));
+  const excluded = dedupeExcludedByFacility(excludedAll);
   const start = toMin(req.start);
 
   const result = {
@@ -228,10 +275,25 @@ export function recommend(req, campus, histories, { suggest = true } = {}) {
     featured: feature(fits), reasons: [], suggestions: [],
   };
   if (!fits.length && suggest) {
-    result.reasons = summarize(excluded);
-    result.suggestions = suggestions(req, campus, histories, excluded);
+    result.reasons = summarize(excludedAll);
+    result.suggestions = suggestions(req, campus, histories, excludedAll);
   }
   return result;
+}
+
+/** One "why not" row per facility. Areas of a facility collapse to a single
+ *  row; a non-interest reason (time, closed, route) wins over a bare interest
+ *  mismatch, so the student sees the real blocker, not "wrong type" noise. */
+function dedupeExcludedByFacility(excluded) {
+  const RANK = { route: 0, closed: 1, time: 2, amenity: 3, not_campus: 4, interest: 5 };
+  const best = new Map();
+  for (const e of excluded) {
+    const prev = best.get(e.place.facility_id);
+    if (!prev || (RANK[e.code] ?? 9) < (RANK[prev.code] ?? 9)) best.set(e.place.facility_id, e);
+  }
+  return [...best.values()]
+    .map((e) => ({ ...e, displayName: e.place.area_id ? e.place.facility_name : e.place.name }))
+    .sort((a, b) => (a.displayName < b.displayName ? -1 : a.displayName > b.displayName ? 1 : 0));
 }
 
 const REASON_TEXT = {
@@ -239,6 +301,7 @@ const REASON_TEXT = {
   closed: "closed or reserved during the visit (illustrative hours)",
   route: "no sample walking time for the route",
   amenity: "missing a study need you picked",
+  interest: "not one of the workout types you picked",
   not_campus: "not a campus destination",
 };
 
@@ -273,6 +336,11 @@ function suggestions(req, campus, histories, excluded) {
     const n = fitsWith({ needs: [] });
     const names = req.needs.map((k) => campus.amenity_labels[k].toLowerCase()).join(" or ");
     if (n) out.push({ label: `Don't require ${names}`, detail: plural(n), patch: { needs: [] } });
+  }
+  if (req.interests?.length) {
+    const n = fitsWith({ interests: [] });
+    const names = req.interests.map((k) => (campus.interest_labels[k] ?? k).toLowerCase()).join(" or ");
+    if (n) out.push({ label: `Show all workout types, not just ${names}`, detail: plural(n), patch: { interests: [] } });
   }
   for (const a of campus.activities) {
     if (a.id === req.activity) continue;

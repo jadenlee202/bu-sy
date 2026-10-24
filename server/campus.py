@@ -37,6 +37,7 @@ class ActivityInfo(BaseModel):
     verb: str
     noun: str
     default_min: int
+    interests: list[str] = []   # workout interest ids a student may filter by; empty = none offered
 
 
 class Location(BaseModel):
@@ -57,6 +58,7 @@ class Place(BaseModel):
     facility_id: str
     facility_name: str
     area_id: Optional[str]
+    interest: Optional[str]     # workout interest tag (weights, basketball, ...); None = untagged
     location_id: str
     activities: list[Activity]
     data_mode: Literal["synthetic", "live"]   # never historical_playback
@@ -96,6 +98,7 @@ class Campus(BaseModel):
     default_buffer: int
     activities: list[ActivityInfo]
     amenity_labels: dict[str, str]
+    interest_labels: dict[str, str]
     locations: list[Location]
     places: list[Place]
     travel_basis: str
@@ -158,6 +161,13 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
     locations = [Location(**loc) for loc in raw["locations"]]
     location_ids = {loc.id for loc in locations}
     activities = [ActivityInfo(**a) for a in raw["activities"]]
+    interest_labels = raw.get("interest_labels", {})
+    # Every interest an activity offers must have a label, and vice versa, so the
+    # UI never shows an unlabeled filter and places can't tag an unknown interest.
+    for a in activities:
+        unknown = set(a.interests) - set(interest_labels)
+        if unknown:
+            raise ValueError(f"activity {a.id}: interests {sorted(unknown)} have no label")
 
     places = []
     for p in raw["places"]:
@@ -178,6 +188,9 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
             name = area.name
         else:
             name = f.facility_name
+        interest = p.get("interest")
+        if interest is not None and interest not in interest_labels:
+            raise ValueError(f"place: {fid}:{area_id} has unknown interest {interest!r}")
         hours = meta["hours"]
         if hours is not None:
             _check_intervals(hours, f"hours for {fid}")
@@ -187,6 +200,7 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
         places.append(Place(
             place_id=f"{fid}:{area_id}" if area_id else fid,
             name=name, facility_id=fid, facility_name=f.facility_name, area_id=area_id,
+            interest=interest,
             location_id=meta["location"], activities=p["activities"], data_mode=f.data_mode,
             hours=hours, hours_basis="illustrative" if hours is not None else "unknown",
             closures=_closures(area_id, weekday),
@@ -206,7 +220,8 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
     return Campus(
         label=raw["label"], demo_day=raw["demo_day"], timezone="America/New_York",
         default_buffer=raw["default_buffer"], activities=activities,
-        amenity_labels=raw["amenity_labels"], locations=locations, places=places,
+        amenity_labels=raw["amenity_labels"], interest_labels=interest_labels,
+        locations=locations, places=places,
         travel_basis="Sample walking time",
         travel_note="Illustrative minutes between demo locations, not routed. "
                     "A pair that isn't listed is unknown, not zero.",

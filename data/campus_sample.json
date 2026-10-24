@@ -6,9 +6,10 @@
   "activities": [
     { "id": "study", "label": "Study", "verb": "study", "noun": "study session", "default_min": 30 },
     { "id": "eat", "label": "Eat", "verb": "eat", "noun": "meal", "default_min": 20 },
-    { "id": "workout", "label": "Work out", "verb": "work out", "noun": "workout", "default_min": 35 }
+    { "id": "workout", "label": "Work out", "verb": "work out", "noun": "workout", "default_min": 35, "interests": ["weights", "basketball", "cardio", "swimming", "climbing"] }
   ],
   "amenity_labels": { "outlets": "Outlets", "quiet_space": "Quiet space" },
+  "interest_labels": { "weights": "Weights", "basketball": "Basketball", "cardio": "Cardio", "swimming": "Swimming", "climbing": "Climbing" },
   "locations": [
     { "id": "mugar", "name": "Mugar Library" },
     { "id": "warren", "name": "Warren Towers" },
@@ -31,13 +32,13 @@
     { "facility_id": "west-dining-synthetic", "activities": ["eat", "study"] },
     { "facility_id": "warren-dining-synthetic", "activities": ["eat"] },
     { "facility_id": "fenway-dining-synthetic", "activities": ["eat"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "weight-room-floor-1", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "weight-room-floor-2", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "biking-area", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "climbing-wall", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "competition-pool", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "basketball-court-floor-2", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "basketball-court-basement", "activities": ["workout"] }
+    { "facility_id": "fitrec-synthetic", "area_id": "weight-room-floor-1", "activities": ["workout"], "interest": "weights" },
+    { "facility_id": "fitrec-synthetic", "area_id": "weight-room-floor-2", "activities": ["workout"], "interest": "weights" },
+    { "facility_id": "fitrec-synthetic", "area_id": "biking-area", "activities": ["workout"], "interest": "cardio" },
+    { "facility_id": "fitrec-synthetic", "area_id": "climbing-wall", "activities": ["workout"], "interest": "climbing" },
+    { "facility_id": "fitrec-synthetic", "area_id": "competition-pool", "activities": ["workout"], "interest": "swimming" },
+    { "facility_id": "fitrec-synthetic", "area_id": "basketball-court-floor-2", "activities": ["workout"], "interest": "basketball" },
+    { "facility_id": "fitrec-synthetic", "area_id": "basketball-court-basement", "activities": ["workout"], "interest": "basketball" }
   ],
   "scenarios": [
     {

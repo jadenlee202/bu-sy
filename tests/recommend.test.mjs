@@ -15,13 +15,18 @@ const ACTIVITIES = [
   { id: "workout", label: "Work out", verb: "work out", noun: "workout", default_min: 35 },
 ];
 const place = (id, over = {}) => ({
-  place_id: id, name: id, facility_id: id, facility_name: id, area_id: null, location_id: "b",
+  place_id: id, name: id, facility_id: id, facility_name: id, area_id: null, interest: null, location_id: "b",
   activities: ["workout"], data_mode: "synthetic", hours: [["06:00", "24:00"]], hours_basis: "illustrative",
   closures: [], amenities: {}, amenities_basis: "illustrative", ...over,
+});
+// An area of a facility: shares facility_id/location, has its own area_id + interest.
+const area = (facilityId, areaId, over = {}) => place(`${facilityId}:${areaId}`, {
+  name: areaId, facility_id: facilityId, facility_name: facilityId, area_id: areaId, ...over,
 });
 const makeCampus = (places) => ({
   label: "Demo · Synthetic campus data", default_buffer: 10, activities: ACTIVITIES,
   amenity_labels: { outlets: "Outlets", quiet_space: "Quiet space" },
+  interest_labels: { weights: "Weights", basketball: "Basketball", cardio: "Cardio", swimming: "Swimming" },
   locations: ["a", "b", "c", "x"].map((id) => ({ id, name: id.toUpperCase() })),
   travel: [
     { from_id: "a", to_id: "b", minutes: 10 }, { from_id: "b", to_id: "c", minutes: 15 }, { from_id: "c", to_id: "a", minutes: 25 },
@@ -224,6 +229,114 @@ test("invalid input is reported, not guessed", () => {
   assert.deepEqual(fields({ minutes: Number.NaN }), ["minutes"]);
   assert.deepEqual(fields({ buffer: -1 }), ["buffer"]);
   assert.deepEqual(fields({ activity: "nap" }), ["activity"]);
+});
+
+// ---------- grouping FitRec areas into one destination ----------
+// Three FitRec areas at the same location, plus a standalone gym elsewhere.
+const fitrecAreas = (over = {}) => [
+  area("fitrec", "weights-1", { interest: "weights", ...over }),
+  area("fitrec", "court-1", { interest: "basketball", ...over }),
+  area("fitrec", "pool-1", { interest: "swimming", ...over }),
+];
+const groupHist = {
+  "fitrec": hist(10, "quiet"),        // facility-level series (unused for areas, but present)
+};
+// Per-area histories live under hist.areas keyed by area_id.
+function histWithAreas(areaCounts) {
+  return {
+    coverage_start: "08:00:00", coverage_end: "23:00:00", capacity: 100,
+    observations: [{ observed_at: "2026-10-19T08:00:00", occupancy_count: 5, busyness: "quiet" }],
+    areas: Object.entries(areaCounts).map(([area_id, [count, busyness]]) => ({
+      area_id, capacity: 50,
+      observations: count == null ? [] : [{ observed_at: "2026-10-19T08:00:00", occupancy_count: count, busyness }],
+    })),
+  };
+}
+
+test("FitRec areas collapse into ONE destination, not several cards", () => {
+  const places = fitrecAreas();
+  const histories = { fitrec: histWithAreas({ "weights-1": [10, "quiet"], "court-1": [20, "moderate"], "pool-1": [30, "busy"] }) };
+  const r = recommend(req({ minutes: 90 }), makeCampus(places), histories);
+  assert.equal(r.options.length, 1, "one FitRec card, not three");
+  const g = r.options[0];
+  assert.equal(g.grouped, true);
+  assert.equal(g.facility_name, "fitrec");
+  assert.equal(g.areas.length, 3, "all eligible areas listed inside");
+  assert.equal(r.more.length, 0);
+});
+
+test("a grouped facility shares one travel calculation across its areas", () => {
+  const places = fitrecAreas();
+  const histories = { fitrec: histWithAreas({ "weights-1": [10, "quiet"], "court-1": [10, "quiet"], "pool-1": [10, "quiet"] }) };
+  const g = recommend(req({ minutes: 90 }), makeCampus(places), histories).options[0];
+  // location "b" -> a:10, c:15. from a, to c => there 10, onward 15, shared by all areas.
+  assert.deepEqual([g.there, g.onward], [10, 15]);
+  assert.equal(sum(g), 90);                       // time budget intact after grouping
+  assert.ok(g.areas.every((a) => a.there === g.there && a.onward === g.onward));
+});
+
+test("grouping keeps each area's own count; it never sums to a building number", () => {
+  const places = fitrecAreas();
+  const histories = { fitrec: histWithAreas({ "weights-1": [11, "quiet"], "court-1": [22, "moderate"], "pool-1": [33, "busy"] }) };
+  const g = recommend(req({ minutes: 90 }), makeCampus(places), histories).options[0];
+  const counts = g.areas.map((a) => a.busy.count).sort((x, y) => x - y);
+  assert.deepEqual(counts, [11, 22, 33]);
+  assert.ok(!counts.includes(66), "areas are not summed into a building total");
+});
+
+test("choosing a workout interest narrows FitRec to matching areas only", () => {
+  const places = fitrecAreas();
+  const histories = { fitrec: histWithAreas({ "weights-1": [10, "quiet"], "court-1": [10, "quiet"], "pool-1": [10, "quiet"] }) };
+  const r = recommend(req({ minutes: 90, interests: ["swimming"] }), makeCampus(places), histories);
+  assert.equal(r.options.length, 1);
+  assert.deepEqual(r.options[0].areas.map((a) => a.place.area_id), ["pool-1"]);
+});
+
+test("an interest with no eligible area yields nothing, and suggests dropping it", () => {
+  const places = fitrecAreas();                   // no "cardio" area exists
+  const histories = { fitrec: histWithAreas({ "weights-1": [10, "quiet"], "court-1": [10, "quiet"], "pool-1": [10, "quiet"] }) };
+  const r = recommend(req({ minutes: 90, interests: ["cardio"] }), makeCampus(places), histories);
+  assert.equal(r.options.length, 0);
+  assert.ok(r.suggestions.some((s) => JSON.stringify(s.patch) === JSON.stringify({ interests: [] })),
+    "offers to show all workout types");
+});
+
+test("a reserved area is excluded but its sibling areas still fit the same card", () => {
+  const places = fitrecAreas();
+  const histories = { fitrec: histWithAreas({ "weights-1": [10, "quiet"], "court-1": [10, "quiet"], "pool-1": [10, "quiet"] }) };
+  // Reserve the basketball court across the whole window so it can't fit.
+  places[1].closures = [{ start: "15:00", end: "17:00", reason: "Reserved: Intramurals (sample)", source: "sample schedule" }];
+  const r = recommend(req({ minutes: 90 }), makeCampus(places), histories);
+  assert.equal(r.options.length, 1);
+  const ids = r.options[0].areas.map((a) => a.place.area_id);
+  assert.ok(!ids.includes("court-1"), "reserved area not offered as a fit");
+  assert.ok(ids.includes("weights-1") && ids.includes("pool-1"));
+});
+
+test("excluded FitRec collapses to one 'why not' row, not one per area", () => {
+  // Window too tight for any area: all three excluded on time.
+  const places = fitrecAreas();
+  const histories = { fitrec: histWithAreas({ "weights-1": [10, "quiet"], "court-1": [10, "quiet"], "pool-1": [10, "quiet"] }) };
+  const r = recommend(req({ minutes: 40 }), makeCampus(places), histories);
+  assert.equal(r.options.length, 0);
+  const fitrecRows = r.excluded.filter((e) => e.place.facility_id === "fitrec");
+  assert.equal(fitrecRows.length, 1, "one FitRec row in why-not, not three");
+});
+
+test("grouping does not affect non-area places (dining/study unchanged)", () => {
+  const places = [
+    place("mugar", { activities: ["study"], area_id: null }),
+    place("marciano", { activities: ["study"], area_id: null }),
+  ];
+  const histories = { mugar: hist(10), marciano: hist(10) };
+  const r = recommend(req({ activity: "study", minActivity: 30, minutes: 90 }), makeCampus(places), histories);
+  assert.equal(r.options.length, 2, "two separate study cards, never grouped");
+  assert.ok(r.options.every((o) => !o.grouped));
+});
+
+test("unknown interest is reported as invalid input, not guessed", () => {
+  const r = recommend(req({ interests: ["yoga"] }), makeCampus(fitrecAreas()), { fitrec: histWithAreas({ "weights-1": [1, "quiet"] }) });
+  assert.deepEqual(r.errors?.map((e) => e.field), ["interests"]);
 });
 
 // ---------- the real exported sample data (what static mode serves) ----------
