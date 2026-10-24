@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
+
+# Runtime state for community events (recreated with examples on startup)
+server/community_events.json
+
+# Raw download, if you keep a local copy
+COD.zip

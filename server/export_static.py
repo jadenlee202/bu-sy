@@ -1,0 +1,29 @@
+"""Write the API's responses to web/data/ so the site works with no server
+(GitHub Pages). Re-run after changing data or server logic:
+
+    python server/export_static.py
+"""
+import json
+from pathlib import Path
+
+import main
+from community_events import SEED_EVENTS
+
+OUT = main.WEB_DIR / "data"
+
+
+def write(path: Path, payload) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+    print(f"wrote {path.relative_to(main.WEB_DIR.parent)}")
+
+
+def dump(model) -> dict:
+    return model.model_dump(mode="json")
+
+
+if __name__ == "__main__":
+    write(OUT / "facilities.json", [dump(f) for f in main.list_facilities(at="12:00")])
+    for facility_id in main.FACILITIES:
+        write(OUT / "history" / f"{facility_id}.json", dump(main.get_history(facility_id, on=None)))
+    write(OUT / "community_events_seed.json", SEED_EVENTS)

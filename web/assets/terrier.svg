@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs><mask id="m">
+    <rect width="64" height="64" fill="#fff"/>
+    <path d="M30 15.5h4l2.6 23h-9.2z" fill="#000"/>
+    <ellipse cx="32" cy="45" rx="11.5" ry="7" fill="#000"/>
+    <circle cx="22.5" cy="32" r="3.2" fill="#000"/><circle cx="41.5" cy="32" r="3.2" fill="#000"/>
+  </mask></defs>
+  <g fill="#cc0000">
+    <g mask="url(#m)">
+      <path d="M12.5 30C9.5 20 8.5 10.5 10.5 4.5c.7-2.2 3.1-2.6 4.7-1L28.5 17z"/>
+      <path d="M51.5 30c3-10 4-19.5 2-25.5-.7-2.2-3.1-2.6-4.7-1L35.5 17z"/>
+      <ellipse cx="32" cy="35.5" rx="21" ry="18.5"/>
+    </g>
+    <ellipse cx="32" cy="41.6" rx="4.6" ry="3.1"/>
+    <path d="M32 44.5v2M28.8 47.2q3.2 2 6.4 0" stroke="#cc0000" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>
