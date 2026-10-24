@@ -19,7 +19,7 @@ Independent student project, **not affiliated with Boston University**.
 
 **Demo day?** Follow [`DEMO.md`](DEMO.md): exact startup, the demo sequence, checks and recovery steps.
 
-Requires **Python 3.12+**. Node 20+ is only needed for the engine tests. There are no accounts, keys or secrets.
+Requires **Python 3.12+**. Node 22+ is only needed for the JS tests. There are no accounts, keys or secrets.
 
 **Just the site (no install):**
 ```bash
@@ -51,7 +51,7 @@ window where nothing fits, with a one-tap fix the engine has checked.
 
 ```bash
 python -m pytest                        # API, data loaders, analytics, events, CORS, static export == API
-node --test tests/recommend.test.mjs    # planner engine (Node 20+, no packages; or: npm test)
+node --test "tests/*.test.mjs"          # planner engine + static meetups (Node 22+, no packages; or: npm test)
 ```
 CI runs both (`.github/workflows/tests.yml`).
 
@@ -171,7 +171,7 @@ web/       the site: index.html, styles.css, js/
              app.js        router, Places, playback, meetups, About
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
-tests/     test_api.py (pytest), recommend.test.mjs (node --test)
+tests/     test_api.py (pytest), recommend.test.mjs + meetups_static.test.mjs (node --test)
 DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 ```
 
@@ -183,7 +183,35 @@ DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 | `GET /api/facilities/{id}?at=18:00` | one place (+ FitRec areas and sample class reservations) |
 | `GET /api/facilities/{id}/history` | the recorded day: observations, hourly averages, typical profile |
 | `GET /api/schedule`, `GET /api/programs` | **sample** official schedule (placeholders) |
-| `GET/POST /api/community-events`, `POST …/{id}/join`, `…/leave`, `…/cancel` | unofficial student meetups |
+| `GET/POST /api/community-events`, `POST …/{id}/join`, `…/leave`, `…/cancel` | unofficial student meetups (device ID in the `X-BUsy-Device` header or POST body) |
+
+## Meetups (unofficial, secondary)
+
+Students can post things like "basketball run, court 4". It's kept deliberately simple, and here is what it
+does **not** protect:
+
+- **No accounts.** A person is a nickname plus a random device ID kept in their browser. That ID is
+  *identification, not authentication*: anyone holding it can act as that device. It is sent in POST bodies
+  or the `X-BUsy-Device` header, never in a URL, so it stays out of server logs.
+- **Invite only means "a code is needed to join"; it is not private.** Every event's title, place and time
+  are visible to everyone using the server. Codes (8 characters from 32 symbols, ~10¹² combinations) are
+  returned only to the host and compared in constant time. There's no HTTPS locally, so don't use it for
+  anything sensitive.
+- **Static mode (GitHub Pages)** keeps meetups in that one browser. Nobody else can see or join them, and
+  the screens say so.
+- **The server enforces the rules:**
+  - only the host can cancel, and you can only leave yourself;
+  - joining twice is a no-op;
+  - capacity holds under concurrent joins (200 max when no limit is set);
+  - ended or cancelled events can't be joined;
+  - text is trimmed and length-limited, and control characters are refused;
+  - dates must be in the future and at most 60 days ahead;
+  - at most 300 upcoming events, and old ones are pruned;
+  - saves are atomic.
+
+  Static mode follows the same rules (`tests/meetups_static.test.mjs`).
+- **Run one server process.** Storage is a JSON file guarded by an in-process lock, so it isn't safe with
+  several uvicorn workers.
 
 ## What a real BU pilot would need
 
