@@ -1,4 +1,5 @@
 // Data adapter. Two interchangeable backends with the same response shapes:
+// (see also prefs.js for user preference persistence)
 //   api    - server/main.py (same origin, or ?api=https://host for another one)
 //   static - web/data/*.json written by server/export_static.py (GitHub Pages);
 //            community events are then kept in this browser's localStorage.

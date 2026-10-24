@@ -129,3 +129,108 @@ def test_event_validation():
 def test_seed_events_are_upcoming_examples():
     events = client.get("/api/community-events").json()
     assert events and all(e["example"] for e in events)
+
+
+# ---------- data-trust invariants (Prompt 2) ----------
+
+def test_zero_occupancy_is_valid_not_missing():
+    """A count of zero from the COD data must be preserved, not treated as missing."""
+    from sources import load_cod
+    cod = load_cod()
+    assert cod is not None
+    # At least one day must contain a zero-count observation
+    zeros = [(d, c) for d, s in cod.days.items() for _, c in s if c == 0]
+    assert zeros, "Expected at least one zero-count observation in COD data"
+
+
+def test_missing_occupancy_before_window_is_not_zero():
+    """latest_at must return None (not 0) for times before the first observation."""
+    from analytics import latest_at
+    from datetime import datetime, timedelta
+    from sources import load_cod
+    cod = load_cod()
+    assert cod is not None
+    day = cod.default_day
+    series = cod.days[day]
+    # One second before the first observation
+    first_ts, _ = series[0]
+    before = first_ts - timedelta(seconds=1)
+    result = latest_at(series, before, cod.coverage_end(day))
+    assert result is None, f"Expected None before window, got {result}"
+
+
+def test_unknown_capacity_produces_no_percentage():
+    """COD has no capacity, so no percentage-full should be shown."""
+    r = client.get(f"/api/facilities/{COD}").json()
+    assert r["capacity"] is None
+    assert r["capacity_is_illustrative"] is False
+    # busyness_basis must not contain a '%' that implies capacity-based computation
+    basis = r["busyness_basis"]
+    # It should mention the reference (people), not a capacity percentage
+    assert "capacity" not in basis.lower() or "typical" in basis.lower() or "not capacity" in basis.lower()
+
+
+def test_cod_not_in_synthetic_category():
+    """COD must appear with data_mode 'historical_playback', never 'synthetic'."""
+    rows = {f["facility_id"]: f for f in client.get("/api/facilities?at=12:00").json()}
+    assert rows[COD]["data_mode"] == "historical_playback"
+    assert rows[COD]["data_mode"] != "synthetic"
+
+
+def test_synthetic_facilities_have_illustrative_capacity():
+    """Every synthetic facility must declare capacity_is_illustrative=True."""
+    facilities = client.get("/api/facilities?at=12:00").json()
+    synthetic = [f for f in facilities if f["data_mode"] == "synthetic"]
+    assert synthetic, "Expected at least one synthetic facility"
+    for f in synthetic:
+        assert f["capacity_is_illustrative"] is True, f"{f['facility_id']} missing illustrative flag"
+
+
+def test_failed_request_outside_hours_preserves_none_not_zero():
+    """Outside the synthetic window, occupancy_count must be None, never 0."""
+    # FitRec synthetic window starts at 08:00
+    d = client.get("/api/facilities/fitrec-synthetic?at=06:00").json()
+    assert d["occupancy_count"] is None
+    assert d["busyness"] == "unknown"
+
+
+def test_observation_time_is_preserved_not_offset():
+    """COD observation timestamps must match the source exactly — no TZ offset applied."""
+    h = client.get(f"/api/facilities/{COD}/history").json()
+    # All observations must be naive (no +HH:MM offset)
+    for obs in h["observations"]:
+        ts = obs["observed_at"]
+        assert "+" not in ts and "Z" not in ts, f"TZ offset found in COD timestamp: {ts}"
+
+
+def test_history_last_observation_separated_from_coverage():
+    """History endpoint must expose coverage_start/end separate from individual observation times."""
+    h = client.get(f"/api/facilities/{COD}/history").json()
+    assert "coverage_start" in h
+    assert "coverage_end" in h
+    assert h["coverage_start"] != h["coverage_end"]
+    # coverage_end should be after the last observation's time component
+    last_obs_time = h["observations"][-1]["observed_at"][11:19]  # HH:MM:SS
+    cov_end = h["coverage_end"]  # HH:MM:SS
+    assert last_obs_time <= cov_end
+
+
+def test_synthetic_data_label_in_source_field():
+    """Synthetic facilities must carry 'Synthetic' in their source attribution."""
+    facilities = client.get("/api/facilities?at=12:00").json()
+    for f in facilities:
+        if f["data_mode"] == "synthetic":
+            assert "synthetic" in f["source"].lower() or "Synthetic" in f["source"], \
+                f"{f['facility_id']} source field doesn't mention synthetic: {f['source']}"
+
+
+def test_cod_source_attribution_present():
+    """COD must carry its full citation in the source field."""
+    facilities = {f["facility_id"]: f for f in client.get("/api/facilities?at=12:00").json()}
+    cod_src = facilities[COD]["source"]
+    cod_src_lower = cod_src.lower()
+    assert "zenodo" in cod_src_lower or "cod" in cod_src_lower, \
+        f"COD source field missing citation: {cod_src}"
+    # The source should clarify it is not a BU space (i.e., say "not BU" or "not a BU")
+    assert "not bu" in cod_src_lower, \
+        f"COD source field must explicitly note it is not BU data: {cod_src}"

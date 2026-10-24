@@ -213,3 +213,80 @@ th { color: var(--muted); font-weight: 600; }
   .state .terrier { animation: bob 1.6s ease-in-out infinite; }
   @keyframes bob { 50% { transform: translateY(-3px); } }
 }
+
+/* ---------- preferences panel ---------- */
+.pref-section { display: flex; flex-direction: column; gap: 8px; }
+.pref-heading { font-size: 16px; font-weight: 700; margin: 0; }
+.pref-label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
+.pref-toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+.pref-toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px;
+  cursor: pointer; font-size: 14px; font-weight: 600; min-height: 42px;
+  transition: border-color 0.15s;
+}
+.pref-toggle input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--red); cursor: pointer; }
+.pref-toggle:has(input:checked) { border-color: var(--red); background: var(--red-soft); color: var(--red); }
+.pref-toggle-full { width: 100%; }
+.pref-num-row { display: flex; align-items: center; gap: 8px; }
+.pref-num {
+  width: 80px; min-height: 42px; padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--subtle); font-weight: 400; text-align: right;
+}
+.pref-num:focus { outline: none; border-color: var(--red); background: var(--surface); }
+.pref-unit { font-size: 13px; color: var(--muted); font-weight: 400; }
+.pref-time {
+  min-height: 42px; padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--subtle); font-weight: 400; width: 100%;
+}
+.pref-time:focus { outline: none; border-color: var(--red); background: var(--surface); }
+.pref-time-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pref-notif-detail { display: flex; flex-direction: column; gap: 10px; transition: opacity 0.2s; }
+.pref-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.pref-saved { font-size: 13px; color: var(--muted); margin: 0; min-height: 1em; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+/* ---------- demo notification overlay ---------- */
+.demo-notif {
+  position: fixed; bottom: max(24px, env(safe-area-inset-bottom));
+  left: max(16px, env(safe-area-inset-left));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 100; max-width: 420px; margin: 0 auto;
+}
+.demo-notif-inner {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.18);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.demo-notif-header { display: flex; align-items: center; justify-content: space-between; }
+.demo-notif-badge {
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  background: var(--red-soft); color: var(--red); padding: 2px 8px; border-radius: 999px;
+}
+.demo-notif-close { font-size: 18px; font-weight: 700; width: 32px; height: 32px; }
+.demo-notif-title { margin: 0; font-size: 15px; font-weight: 700; }
+.demo-notif-reason { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+.demo-notif-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.demo-notif-actions .btn { min-height: 36px; font-size: 13px; }
+.demo-notif-footer { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.4; }
+.demo-notif-trigger-row { display: flex; justify-content: flex-start; }
+.demo-notif-trigger-row .btn { font-size: 13px; }
+
+/* ---------- toast ---------- */
+.busy-toast {
+  position: fixed; bottom: max(80px, env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%);
+  z-index: 200; background: var(--text); color: var(--bg);
+  font-size: 13px; font-weight: 600; padding: 8px 16px;
+  border-radius: 999px; white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ---------- about this data (per-facility) ---------- */
+.about dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 6px 0 0; font-size: 14px; }
+.about dt { color: var(--muted); font-weight: 600; white-space: nowrap; }
+.about dd { margin: 0; }
+
+/* Ensure the about summary is clearly clickable on mobile */
+.about summary { padding: 10px 0; font-size: 14px; font-weight: 700; color: var(--red); }
