@@ -1,5 +1,8 @@
+import { clockSec, fmtHHMM, fmtHour, fmtTime, latestAt, obsMinute } from "./clock.js";
 import { icon, paw, terrier } from "./icons.js";
+import { planView } from "./plan.js";
 import * as src from "./source.js";
+import { LEVEL, esc, failure, fmtCount, level, loading } from "./ui.js";
 
 // ---------- constants ----------
 const DAY_START = 7 * 60;          // playback runs 7 AM - 11 PM
@@ -8,7 +11,6 @@ const FIRST_VIEW = 17 * 60 + 30;   // open on a busy moment instead of an empty 
 const STEP_MIN = 5;
 const TICK_MS = 300;
 
-const LEVEL = { quiet: "Quiet", moderate: "Moderate", busy: "Busy", unknown: "No data" };
 const CATEGORY = { fitness: "Fitness", dining: "Dining", library: "Library", office: "Office" };
 const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], ["library", "Library"], ["real", "Real data"]];
 
@@ -17,31 +19,9 @@ const $view = document.getElementById("view");
 let view = null; // the mounted screen: { update?(), resize?() }
 
 // ---------- helpers ----------
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const clockSec = (hms) => { const [h, m, s = 0] = hms.split(":").map(Number); return h * 3600 + m * 60 + s; };
-// Timestamps are read as text (never `new Date(...)`), so no viewer timezone is applied.
-const obsSec = (o) => (o._sec ??= clockSec(o.observed_at.slice(11, 19)));
-const fmtTime = (min) => { const h = Math.floor(min / 60) % 24; return `${h % 12 || 12}:${String(min % 60).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
-const fmtHour = (h) => `${h % 12 || 12} ${h % 24 < 12 ? "AM" : "PM"}`;
-const fmtHHMM = (t) => fmtTime(clockSec(t) / 60);
-const fmtCount = (v) => (v == null ? "—" : v < 10 && !Number.isInteger(v) ? v.toFixed(1) : Math.round(v).toLocaleString());
 const isReal = (f) => f.data_mode !== "synthetic";
-
-const level = (l) =>
-  `<span class="level" data-level="${l}"><span class="meter" aria-hidden="true"><i></i><i></i><i></i></span>${LEVEL[l]}</span>`;
 const tag = (f) => (isReal(f) ? `<span class="tag tag-real">Real data</span>` : `<span class="tag">Sample</span>`);
-
-/** Latest observation at or before `minute`; null before the first one or after coverage ends. */
-function latestAt(observations, minute, coverageEnd) {
-  const sec = minute * 60;
-  if (sec > clockSec(coverageEnd)) return null;
-  let lo = 0, hi = observations.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (obsSec(observations[mid]) <= sec) lo = mid + 1; else hi = mid;
-  }
-  return lo ? observations[lo - 1] : null;
-}
+const backToPlaces = `<a class="back" href="#/places">${icon("back", 16)} All places</a>`;
 
 /** Quietest hour that starts after `minute`, from the typical profile when there is one. */
 function quieterTime(hist, minute) {
@@ -53,14 +33,6 @@ function quieterTime(hist, minute) {
   const thisHour = series.find((b) => b.hour === Math.floor(minute / 60));
   if (thisHour?.occupancy != null && best.occupancy >= thisHour.occupancy) return { kind: "now", basis };
   return { kind: "later", hour: best.hour, value: best.occupancy, basis, usual: !!hist.typical };
-}
-
-function loading(text = "Fetching the latest…") {
-  return `<div class="state">${terrier({ size: 44 })}<p>${text}</p></div>`;
-}
-function failure(err, retry = "location.reload()") {
-  return `<div class="state">${terrier({ size: 44, sleepy: true })}<p>${esc(err.message || "Something went wrong.")}</p>
-    <button class="btn" onclick="${retry}">Try again</button></div>`;
 }
 
 // ---------- playback (one clock shared by every screen) ----------
@@ -118,7 +90,8 @@ async function placesView() {
   $view.innerHTML = `
     <h1 class="title">How busy is it?</h1>
     ${playbackBar()}
-    <p class="hint">Replaying one recorded Monday. Places marked <em>Sample</em> use made-up data.</p>
+    <p class="hint">Replaying one recorded Monday. Places marked <em>Sample</em> use made-up data.
+      <em>Real data</em> is an office room from the COD dataset, shown as a data demo and never suggested as a campus place.</p>
     <label class="search">${icon("search")}<input type="search" placeholder="Search places" aria-label="Search places" value="${esc(state.query)}"></label>
     <div class="chips" role="group" aria-label="Filter places">
       ${FILTERS.map(([id, label]) => `<button class="chip" data-filter="${id}" aria-pressed="${state.filter === id}">${label}</button>`).join("")}
@@ -178,7 +151,7 @@ async function placesView() {
 
 // ---------- screen: one place ----------
 async function placeView(id) {
-  $view.innerHTML = `<a class="back" href="#/">${icon("back", 16)} All places</a>${loading()}`;
+  $view.innerHTML = `${backToPlaces}${loading()}`;
   let f, hist;
   try {
     const facilities = await src.listFacilities();
@@ -186,15 +159,15 @@ async function placeView(id) {
     if (!f) throw new Error("We couldn't find that place.");
     hist = await src.getHistory(id);
   } catch (err) {
-    $view.innerHTML = `<a class="back" href="#/">${icon("back", 16)} All places</a>${failure(err)}`;
+    $view.innerHTML = `${backToPlaces}${failure(err)}`;
     return {};
   }
   const real = isReal(f);
 
   $view.innerHTML = `
-    <a class="back" href="#/">${icon("back", 16)} All places</a>
+    ${backToPlaces}
     <h1 class="title">${esc(f.facility_name)}</h1>
-    <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${real ? `<span class="muted">Office room, not BU</span>` : ""}</p>
+    <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${real ? `<span class="muted">Office room, not BU · never a campus suggestion</span>` : ""}</p>
     ${playbackBar()}
     <section class="hero" id="hero" aria-live="polite"></section>
     <section class="suggest" id="suggest"></section>
@@ -225,7 +198,7 @@ async function placeView(id) {
   const update = () => {
     const o = latestAt(hist.observations, state.minute, hist.coverage_end);
     const when = o
-      ? real ? `Last recorded event ${fmtTime(Math.floor(obsSec(o) / 60))}` : `At ${fmtTime(state.minute)}`
+      ? real ? `Last recorded event ${fmtTime(obsMinute(o))}` : `At ${fmtTime(state.minute)}`
       : state.minute * 60 < clockSec(hist.coverage_start) ? "Nothing recorded yet at this time" : "Recording has ended for the day";
     $hero.innerHTML = `
       <div class="hero-count"><span class="big num">${fmtCount(o?.occupancy_count)}</span><span class="unit">${o ? "people" : ""}</span></div>
@@ -505,26 +478,33 @@ async function newEventView() {
 // ---------- screen: about ----------
 function aboutView() {
   $view.innerHTML = `
-    <a class="back" href="#/">${icon("back", 16)} All places</a>
+    <a class="back" href="#/">${icon("back", 16)} What fits now?</a>
     <h1 class="title">About the data</h1>
     <div class="prose">
-      <p><strong>Sample places</strong> (FitRec, dining, Mugar) use synthetic counts from one made-up Monday. They are not BU measurements, and capacities are illustrative.</p>
-      <p><strong>Clemente Room</strong> is real: an office conference room from the public COD dataset (Liu et al., 2017, <a href="https://doi.org/10.5281/zenodo.996587" target="_blank" rel="noopener">doi:10.5281/zenodo.996587</a>). It shows the app working on real sensor data. It is not a BU space.</p>
+      <p><strong>What fits now?</strong> checks each campus place against your free window: walking there, at least your minimum activity time, walking on, and your buffer all have to fit, and the place has to be open. Walking times, opening hours and amenities are <em>illustrative samples</em>, not routed or verified. Places with unknown hours are listed separately, never as confirmed.</p>
+      <p><strong>Sample places</strong> (FitRec, dining, Mugar) use synthetic counts from one made-up Monday. They are not BU measurements, and capacities are illustrative. Busyness in suggestions is the demo count at the selected time, not a forecast for when you arrive.</p>
+      <p><strong>Clemente Room</strong> is real: an office conference room from the public COD dataset (Liu et al., 2017, <a href="https://doi.org/10.5281/zenodo.996587" target="_blank" rel="noopener">doi:10.5281/zenodo.996587</a>). It shows the app working on real sensor data. It is not a BU space, so it is never suggested as a place to go, and its timestamps stay in their unverified source timezone.</p>
       <p><strong>Busyness</strong> compares a count with capacity (sample places) or with the room's usual high (Clemente). Under 40% is quiet, under 75% moderate, above that busy. These are demo thresholds.</p>
       <p><strong>Hourly averages</strong> are time-weighted: each count holds until the next one, and never past the end of the recorded day.</p>
       <p><strong>Events</strong> are created by students and are unofficial. We store only a nickname and a random device ID.</p>
-      <p>BUsy is an independent student prototype and is not affiliated with Boston University. A real deployment would need an authorized, aggregate campus count.</p>
+      <p><strong>Your inputs</strong> stay in this browser. BU-sy never detects your location; you choose where you start and where you're heading.</p>
+      <p>BU-sy is an independent student prototype and is not affiliated with Boston University. A real deployment would need verified hours, real walking routes and an authorized, aggregate campus count.</p>
     </div>`;
   return {};
 }
+
+// The planner reads and sets the same demo clock as playback.
+const clock = {
+  get minute() { return state.minute; },
+  set(minute) { state.minute = minute; setPlaying(false); },
+};
 
 // ---------- router ----------
 async function route() {
   const hash = location.hash.replace(/^#\/?/, "");
   const [section, id] = hash.split("/");
-  for (const a of document.querySelectorAll(".nav a")) {
-    a.toggleAttribute("aria-current", a.dataset.section === (section === "events" ? "events" : "places"));
-  }
+  const current = section === "" ? "plan" : section === "place" ? "places" : section;
+  for (const a of document.querySelectorAll(".nav a")) a.toggleAttribute("aria-current", a.dataset.section === current);
   view = null;
   window.scrollTo(0, 0);
   const next =
@@ -532,7 +512,8 @@ async function route() {
     : section === "events" && id === "new" ? newEventView()
     : section === "events" ? eventsView()
     : section === "about" ? aboutView()
-    : placesView();
+    : section === "places" ? placesView()
+    : planView($view, clock);
   const mounted = await next;
   if (location.hash.replace(/^#\/?/, "") === hash) view = mounted;
 }

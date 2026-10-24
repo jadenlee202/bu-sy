@@ -43,6 +43,19 @@ files in this folder are shared under the same license with this attribution.
 - **Capacity unknown.** We show no "% full". Busyness is relative to the room's own history: its
   95th-percentile time-weighted count (4 people).
 
+## Planner samples (illustrative)
+
+Used by "What fits now?". Loaded and validated by `server/campus.py`, then exported to `web/data/campus.json`.
+
+| File | What |
+|---|---|
+| `campus_sample.json` | 6 demo locations; which place supports study / eat / work out (12 places, 7 of them FitRec areas); illustrative opening hours (Fenway Dining deliberately has none, so it shows "check hours"); illustrative study amenities; 3 demo scenarios. |
+| `sample_travel_times.csv` | Undirected sample walking minutes between those locations. Not routed. West Campus ↔ Fenway is deliberately missing, so it is treated as unknown, never zero. |
+
+Sample-schedule reservations in `server/schedule_data.py` (e.g. intramural basketball 7–9 PM in the
+basement courts) become closures. None of this is verified BU information; replace each file with a
+verified source before a pilot.
+
 ## Synthetic campus data
 
 Made by the team for the demo. Capacities used for busyness (in `server/sources.py`) are illustrative too.
