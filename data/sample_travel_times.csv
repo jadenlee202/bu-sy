@@ -1,0 +1,15 @@
+from_location,to_location,walk_minutes
+west,fitrec,5
+west,mugar,15
+west,warren,18
+west,marciano,17
+fitrec,mugar,10
+fitrec,warren,14
+fitrec,marciano,12
+fitrec,fenway,25
+mugar,warren,4
+mugar,marciano,5
+mugar,fenway,20
+warren,marciano,6
+warren,fenway,18
+marciano,fenway,22

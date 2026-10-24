@@ -26,4 +26,5 @@ if __name__ == "__main__":
     write(OUT / "facilities.json", [dump(f) for f in main.list_facilities(at="12:00")])
     for facility_id in main.FACILITIES:
         write(OUT / "history" / f"{facility_id}.json", dump(main.get_history(facility_id, on=None)))
+    write(OUT / "campus.json", dump(main.get_campus()))
     write(OUT / "community_events_seed.json", SEED_EVENTS)

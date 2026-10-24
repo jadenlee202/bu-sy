@@ -1,0 +1,59 @@
+{
+  "_about": "ILLUSTRATIVE planner metadata for the demo, made by the team. Hours, amenities and locations are not verified BU facts. Walking times live in sample_travel_times.csv. Loaded and validated by server/campus.py.",
+  "label": "Demo · Synthetic campus data",
+  "demo_day": "Monday",
+  "default_buffer": 10,
+  "activities": [
+    { "id": "study", "label": "Study", "verb": "study", "noun": "study session", "default_min": 30 },
+    { "id": "eat", "label": "Eat", "verb": "eat", "noun": "meal", "default_min": 20 },
+    { "id": "workout", "label": "Work out", "verb": "work out", "noun": "workout", "default_min": 35 }
+  ],
+  "amenity_labels": { "outlets": "Outlets", "quiet_space": "Quiet space" },
+  "locations": [
+    { "id": "mugar", "name": "Mugar Library" },
+    { "id": "warren", "name": "Warren Towers" },
+    { "id": "marciano", "name": "Marciano Commons" },
+    { "id": "fitrec", "name": "FitRec" },
+    { "id": "west", "name": "West Campus" },
+    { "id": "fenway", "name": "Fenway Campus" }
+  ],
+  "facilities": {
+    "mugar-synthetic": { "location": "mugar", "hours": [["08:00", "24:00"]] },
+    "warren-dining-synthetic": { "location": "warren", "hours": [["07:00", "23:00"]] },
+    "marciano-dining-synthetic": { "location": "marciano", "hours": [["07:00", "23:00"]] },
+    "west-dining-synthetic": { "location": "west", "hours": [["07:00", "23:00"]] },
+    "fenway-dining-synthetic": { "location": "fenway", "hours": null },
+    "fitrec-synthetic": { "location": "fitrec", "hours": [["06:00", "24:00"]] }
+  },
+  "places": [
+    { "facility_id": "mugar-synthetic", "activities": ["study"], "amenities": { "outlets": true, "quiet_space": true } },
+    { "facility_id": "marciano-dining-synthetic", "activities": ["eat", "study"], "amenities": { "outlets": true, "quiet_space": false } },
+    { "facility_id": "west-dining-synthetic", "activities": ["eat", "study"] },
+    { "facility_id": "warren-dining-synthetic", "activities": ["eat"] },
+    { "facility_id": "fenway-dining-synthetic", "activities": ["eat"] },
+    { "facility_id": "fitrec-synthetic", "area_id": "weight-room-floor-1", "activities": ["workout"] },
+    { "facility_id": "fitrec-synthetic", "area_id": "weight-room-floor-2", "activities": ["workout"] },
+    { "facility_id": "fitrec-synthetic", "area_id": "biking-area", "activities": ["workout"] },
+    { "facility_id": "fitrec-synthetic", "area_id": "climbing-wall", "activities": ["workout"] },
+    { "facility_id": "fitrec-synthetic", "area_id": "competition-pool", "activities": ["workout"] },
+    { "facility_id": "fitrec-synthetic", "area_id": "basketball-court-floor-2", "activities": ["workout"] },
+    { "facility_id": "fitrec-synthetic", "area_id": "basketball-court-basement", "activities": ["workout"] }
+  ],
+  "scenarios": [
+    {
+      "id": "workout-between-classes", "label": "70 free minutes, workout, then class",
+      "activity": "workout", "start": "15:00", "minutes": 70, "from": "mugar", "to": "warren",
+      "min_activity": 35, "buffer": 10, "prefer_quiet": true, "prefer_short_travel": false, "needs": []
+    },
+    {
+      "id": "study-with-outlets", "label": "An hour to study, outlets needed",
+      "activity": "study", "start": "15:00", "minutes": 60, "from": "mugar", "to": "warren",
+      "min_activity": 30, "buffer": 10, "prefer_quiet": true, "prefer_short_travel": false, "needs": ["outlets"]
+    },
+    {
+      "id": "lunch-too-tight", "label": "30-minute lunch across campus (nothing fits)",
+      "activity": "eat", "start": "12:00", "minutes": 30, "from": "west", "to": "warren",
+      "min_activity": 20, "buffer": 10, "prefer_quiet": true, "prefer_short_travel": false, "needs": []
+    }
+  ]
+}

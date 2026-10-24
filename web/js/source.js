@@ -63,6 +63,20 @@ export async function getHistory(id) {
   return historyCache.get(id);
 }
 
+// ---------- planner data ----------
+// Same normalized payload in both modes (server/campus.py), so the planner
+// engine (recommend.js) sees identical input with or without a server.
+let campusPromise;
+export function getCampus() {
+  campusPromise ??= getMode()
+    .then((mode) => getJSON(mode === "api" ? `${API_BASE}/campus` : "data/campus.json"))
+    .catch((e) => {
+      campusPromise = null;
+      throw e;
+    });
+  return campusPromise;
+}
+
 // ---------- per-device identity (anonymous) ----------
 const store = {
   get(key) {

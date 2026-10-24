@@ -1,4 +1,5 @@
 """Run: python -m pytest"""
+import json
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -9,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "server"))
 
 from fastapi.testclient import TestClient  # noqa: E402
 
+import campus  # noqa: E402
 import community_events  # noqa: E402
 import main  # noqa: E402
 from analytics import classify, hourly_time_weighted, latest_at, time_weighted_percentile  # noqa: E402
@@ -129,3 +131,85 @@ def test_event_validation():
 def test_seed_events_are_upcoming_examples():
     events = client.get("/api/community-events").json()
     assert events and all(e["example"] for e in events)
+
+
+# ---------- planner data (/api/campus) ----------
+def test_campus_places_are_synthetic_campus_only():
+    data = client.get("/api/campus").json()
+    assert data["label"] == "Demo · Synthetic campus data"
+    assert data["places"] and all(p["data_mode"] == "synthetic" for p in data["places"])
+    assert COD not in {p["facility_id"] for p in data["places"]}
+    assert data["travel_basis"] == "Sample walking time"
+
+
+def test_campus_hours_closures_and_amenities_are_labelled():
+    places = {p["place_id"]: p for p in client.get("/api/campus").json()["places"]}
+    basement = places["fitrec-synthetic:basketball-court-basement"]
+    assert basement["closures"] == [{"start": "19:00", "end": "21:00", "source": "sample schedule",
+                                     "reason": "Reserved: Intramural basketball (sample)"}]
+    assert places["fenway-dining-synthetic"]["hours"] is None
+    assert places["fenway-dining-synthetic"]["hours_basis"] == "unknown"
+    assert places["mugar-synthetic"]["hours_basis"] == "illustrative"
+    assert all(p["amenities_basis"] == "illustrative" for p in places.values())
+
+
+def test_campus_travel_leaves_missing_routes_unknown():
+    pairs = {frozenset((t["from_id"], t["to_id"])) for t in client.get("/api/campus").json()["travel"]}
+    assert frozenset(("west", "fenway")) not in pairs      # unknown, not zero
+
+
+def write_campus(tmp_path, mutate):
+    raw = json.loads(campus.PLACES_JSON.read_text(encoding="utf-8"))
+    mutate(raw)
+    path = tmp_path / "campus.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    return path
+
+
+def test_campus_loader_refuses_cod_as_a_place(tmp_path):
+    def add_cod(raw):
+        raw["facilities"][COD] = {"location": "mugar", "hours": [["07:00", "20:00"]]}
+        raw["places"].append({"facility_id": COD, "activities": ["study"]})
+    with pytest.raises(ValueError, match="not a campus destination"):
+        campus.load_campus(main.FACILITIES, write_campus(tmp_path, add_cod))
+
+
+@pytest.mark.parametrize("mutate, message", [
+    (lambda r: r["places"].append({"facility_id": "nope", "activities": ["eat"]}), "unknown facility"),
+    (lambda r: r["facilities"]["mugar-synthetic"].update(hours=[["09:00", "08:00"]]), "increasing"),
+    (lambda r: r["facilities"]["mugar-synthetic"].update(hours=[["9am", "17:00"]]), "HH:MM"),
+    (lambda r: r["places"][0].update(amenities={"wifi": True}), "unknown amenities"),
+    (lambda r: r["scenarios"][0].update({"from": "mars"}), "unknown location"),
+])
+def test_campus_loader_rejects_bad_data(tmp_path, mutate, message):
+    with pytest.raises(ValueError, match=message):
+        campus.load_campus(main.FACILITIES, write_campus(tmp_path, mutate))
+
+
+def test_travel_loader_rejects_duplicates_and_unknown_places(tmp_path):
+    ids = {"a", "b"}
+    dup = tmp_path / "dup.csv"
+    dup.write_text("from_location,to_location,walk_minutes\na,b,5\nb,a,6\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="twice"):
+        campus.load_travel(dup, ids)
+    bad = tmp_path / "bad.csv"
+    bad.write_text("from_location,to_location,walk_minutes\na,z,5\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown location"):
+        campus.load_travel(bad, ids)
+
+
+# ---------- static mode == API mode ----------
+STATIC = Path(main.WEB_DIR) / "data"
+
+
+def static(name):
+    return json.loads((STATIC / name).read_text(encoding="utf-8"))
+
+
+def test_static_export_matches_the_api():
+    """The planner engine gets identical input in both modes. If this fails, run
+    `python server/export_static.py` and commit web/data/."""
+    assert static("campus.json") == client.get("/api/campus").json()
+    assert static("facilities.json") == client.get("/api/facilities?at=12:00").json()
+    for facility_id in main.FACILITIES:
+        assert static(f"history/{facility_id}.json") == client.get(f"/api/facilities/{facility_id}/history").json()

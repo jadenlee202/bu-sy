@@ -1,9 +1,10 @@
-"""BUsy API: campus busyness (synthetic) + one real historical room (COD).
+"""BU-sy API: campus busyness (synthetic) + one real historical room (COD).
 
 Endpoint shapes follow the shared brief:
     GET  /api/facilities
     GET  /api/facilities/{id}
     GET  /api/facilities/{id}/history
+    GET  /api/campus                                   (planner data: places, sample hours + walking times)
     GET  /api/schedule, /api/programs                  (sample official schedule)
     GET  /api/community-events                         (unofficial, student-run)
     POST /api/community-events, /{id}/join, /{id}/leave, /{id}/cancel
@@ -19,6 +20,10 @@ How it works
        room's typical high (COD: 95th time-weighted percentile). FitRec weight
        rooms and basketball courts divide by a crowd tolerance of 1.25.
        Demo thresholds: quiet < 40%, moderate < 75%, busy >= 75%.
+    4. Planner ("What fits now?"): /api/campus returns normalized, validated
+       planner data (campus.py). The rules that turn a free window into
+       suggestions run in web/js/recommend.js, the same code in API and static
+       mode, so there is no second copy here to drift.
 
 Setup:  pip install -r requirements.txt
 Run:    cd server && uvicorn main:app --reload      then open http://127.0.0.1:8000
@@ -38,14 +43,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import community_events as ce
+from campus import Campus, load_campus
 from analytics import THRESHOLD_NOTE, latest_at
 from schedule_data import CLUB_SPORTS, INTRAMURALS, SCHEDULE
 from sources import Facility, load_all
 
-app = FastAPI(title="BUsy API (synthetic campus demo + COD historical playback)")
+app = FastAPI(title="BU-sy API (synthetic campus demo + COD historical playback)")
 LOCAL_TZ = ZoneInfo("America/New_York")  # demo clock for "now" when no `at` is given
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 FACILITIES = load_all()
+CAMPUS = load_campus(FACILITIES)
 
 
 # ---------- models ----------
@@ -321,6 +328,12 @@ def get_history(facility_id: str, on: Optional[date] = Query(None, alias="date")
             for a in f.areas
         ],
     )
+
+
+@app.get("/api/campus", response_model=Campus)
+def get_campus():
+    """Planner data for web/js/recommend.js. Everything here is illustrative demo data."""
+    return CAMPUS
 
 
 @app.get("/api/schedule", response_model=list[Event])
