@@ -1,0 +1,177 @@
+{
+  "_note": "SYNTHETIC DATA ONLY. No real people, calendars, or BU accounts. Times are invented for testing interval math.",
+  "cases": [
+    {
+      "name": "overlapping and adjacent events merge; short gap dropped; tail clipped; Z offset normalized",
+      "input": {
+        "request": { "selectedDate": "2026-10-26", "horizonDays": 1, "timeZone": "America/New_York", "dailyStart": "09:00", "dailyEnd": "17:00", "minDurationMinutes": 30 },
+        "source": { "kind": "synthetic", "provider": "fixture", "connection": "connected" },
+        "retrievedAt": "2026-10-25T12:00:00-04:00",
+        "calendars": [
+          { "ref": "cal-a", "status": "ok", "busy": [
+            { "start": "2026-10-26T09:30:00-04:00", "end": "2026-10-26T10:30:00-04:00" },
+            { "start": "2026-10-26T10:00:00-04:00", "end": "2026-10-26T11:00:00-04:00" },
+            { "start": "2026-10-26T11:00:00-04:00", "end": "2026-10-26T11:30:00-04:00" },
+            { "start": "2026-10-26T17:00:00Z",      "end": "2026-10-26T17:20:00Z" },
+            { "start": "2026-10-26T13:40:00-04:00", "end": "2026-10-26T14:00:00-04:00" },
+            { "start": "2026-10-26T16:45:00-04:00", "end": "2026-10-26T18:00:00-04:00" }
+          ] }
+        ]
+      },
+      "expected": {
+        "status": "ok",
+        "busyIntervals": [
+          ["2026-10-26T09:30:00-04:00", "2026-10-26T11:30:00-04:00"],
+          ["2026-10-26T13:00:00-04:00", "2026-10-26T13:20:00-04:00"],
+          ["2026-10-26T13:40:00-04:00", "2026-10-26T14:00:00-04:00"],
+          ["2026-10-26T16:45:00-04:00", "2026-10-26T17:00:00-04:00"]
+        ],
+        "freeWindows": [
+          ["2026-10-26T09:00:00-04:00", "2026-10-26T09:30:00-04:00", 30],
+          ["2026-10-26T11:30:00-04:00", "2026-10-26T13:00:00-04:00", 90],
+          ["2026-10-26T14:00:00-04:00", "2026-10-26T16:45:00-04:00", 165]
+        ]
+      }
+    },
+    {
+      "name": "empty calendar yields the whole planning window",
+      "input": {
+        "request": { "selectedDate": "2026-10-26", "horizonDays": 1, "timeZone": "America/New_York", "dailyStart": "09:00", "dailyEnd": "17:00", "minDurationMinutes": 30 },
+        "source": { "kind": "synthetic", "provider": "fixture", "connection": "connected" },
+        "retrievedAt": "2026-10-25T12:00:00-04:00",
+        "calendars": [ { "ref": "cal-a", "status": "ok", "busy": [] } ]
+      },
+      "expected": {
+        "status": "ok",
+        "busyIntervals": [],
+        "freeWindows": [ ["2026-10-26T09:00:00-04:00", "2026-10-26T17:00:00-04:00", 480] ]
+      }
+    },
+    {
+      "name": "fully occupied window yields no free windows but status ok",
+      "input": {
+        "request": { "selectedDate": "2026-10-26", "horizonDays": 1, "timeZone": "America/New_York", "dailyStart": "09:00", "dailyEnd": "17:00", "minDurationMinutes": 30 },
+        "source": { "kind": "synthetic", "provider": "fixture", "connection": "connected" },
+        "retrievedAt": "2026-10-25T12:00:00-04:00",
+        "calendars": [ { "ref": "cal-a", "status": "ok", "busy": [
+          { "start": "2026-10-26T08:00:00-04:00", "end": "2026-10-26T12:00:00-04:00" },
+          { "start": "2026-10-26T12:00:00-04:00", "end": "2026-10-26T18:00:00-04:00" }
+        ] } ]
+      },
+      "expected": {
+        "status": "ok",
+        "busyIntervals": [ ["2026-10-26T09:00:00-04:00", "2026-10-26T17:00:00-04:00"] ],
+        "freeWindows": []
+      }
+    },
+    {
+      "name": "evening window crossing midnight over a 2-day horizon; event crosses midnight",
+      "input": {
+        "request": { "selectedDate": "2026-10-23", "horizonDays": 2, "timeZone": "America/New_York", "dailyStart": "18:00", "dailyEnd": "02:00", "minDurationMinutes": 45 },
+        "source": { "kind": "synthetic", "provider": "fixture", "connection": "connected" },
+        "retrievedAt": "2026-10-23T08:00:00-04:00",
+        "calendars": [ { "ref": "cal-a", "status": "ok", "busy": [
+          { "start": "2026-10-23T22:30:00-04:00", "end": "2026-10-24T00:30:00-04:00" },
+          { "start": "2026-10-24T19:00:00-04:00", "end": "2026-10-24T20:00:00-04:00" }
+        ] } ]
+      },
+      "expected": {
+        "status": "ok",
+        "busyIntervals": [
+          ["2026-10-23T22:30:00-04:00", "2026-10-24T00:30:00-04:00"],
+          ["2026-10-24T19:00:00-04:00", "2026-10-24T20:00:00-04:00"]
+        ],
+        "freeWindows": [
+          ["2026-10-23T18:00:00-04:00", "2026-10-23T22:30:00-04:00", 270],
+          ["2026-10-24T00:30:00-04:00", "2026-10-24T02:00:00-04:00", 90],
+          ["2026-10-24T18:00:00-04:00", "2026-10-24T19:00:00-04:00", 60],
+          ["2026-10-24T20:00:00-04:00", "2026-10-25T02:00:00-04:00", 360]
+        ]
+      }
+    },
+    {
+      "name": "DST spring-forward day is 23 hours; event spans the gap",
+      "input": {
+        "request": { "selectedDate": "2026-03-08", "horizonDays": 1, "timeZone": "America/New_York", "dailyStart": "00:00", "dailyEnd": "24:00", "minDurationMinutes": 30 },
+        "source": { "kind": "synthetic", "provider": "fixture", "connection": "connected" },
+        "retrievedAt": "2026-03-07T12:00:00-05:00",
+        "calendars": [ { "ref": "cal-a", "status": "ok", "busy": [
+          { "start": "2026-03-08T01:30:00-05:00", "end": "2026-03-08T03:30:00-04:00" }
+        ] } ]
+      },
+      "expected": {
+        "status": "ok",
+        "busyIntervals": [ ["2026-03-08T01:30:00-05:00", "2026-03-08T03:30:00-04:00"] ],
+        "freeWindows": [
+          ["2026-03-08T00:00:00-05:00", "2026-03-08T01:30:00-05:00", 90],
+          ["2026-03-08T03:30:00-04:00", "2026-03-09T00:00:00-04:00", 1230]
+        ]
+      }
+    },
+    {
+      "name": "DST fall-back day is 25 hours; event spans the repeated hour",
+      "input": {
+        "request": { "selectedDate": "2026-11-01", "horizonDays": 1, "timeZone": "America/New_York", "dailyStart": "00:00", "dailyEnd": "24:00", "minDurationMinutes": 30 },
+        "source": { "kind": "synthetic", "provider": "fixture", "connection": "connected" },
+        "retrievedAt": "2026-10-31T12:00:00-04:00",
+        "calendars": [ { "ref": "cal-a", "status": "ok", "busy": [
+          { "start": "2026-11-01T01:15:00-04:00", "end": "2026-11-01T01:45:00-05:00" }
+        ] } ]
+      },
+      "expected": {
+        "status": "ok",
+        "busyIntervals": [ ["2026-11-01T01:15:00-04:00", "2026-11-01T01:45:00-05:00"] ],
+        "freeWindows": [
+          ["2026-11-01T00:00:00-04:00", "2026-11-01T01:15:00-04:00", 75],
+          ["2026-11-01T01:45:00-05:00", "2026-11-02T00:00:00-05:00", 1335]
+        ]
+      }
+    },
+    {
+      "name": "invalid intervals are reported, not silently dropped; snapshot downgraded to partial",
+      "input": {
+        "request": { "selectedDate": "2026-10-26", "horizonDays": 1, "timeZone": "America/New_York", "dailyStart": "09:00", "dailyEnd": "17:00", "minDurationMinutes": 30 },
+        "source": { "kind": "synthetic", "provider": "fixture", "connection": "connected" },
+        "retrievedAt": "2026-10-25T12:00:00-04:00",
+        "calendars": [ { "ref": "cal-a", "status": "ok", "busy": [
+          { "start": "2026-10-26T12:00:00-04:00", "end": "2026-10-26T13:00:00-04:00" },
+          { "start": "2026-10-26T14:00:00",       "end": "2026-10-26T15:00:00" },
+          { "start": "2026-10-26T16:00:00-04:00", "end": "2026-10-26T15:00:00-04:00" },
+          { "start": "2026-02-30T10:00:00-05:00", "end": "2026-02-30T11:00:00-05:00" },
+          { "start": "2026-10-26T10:00:00-04:00" },
+          { "start": "2026-10-26T11:00:00-04:00", "end": "2026-10-26T11:00:00-04:00" }
+        ] } ]
+      },
+      "expected": {
+        "status": "partial",
+        "requiresUserConfirmation": true,
+        "invalidIntervalIssues": 4,
+        "busyIntervals": [ ["2026-10-26T12:00:00-04:00", "2026-10-26T13:00:00-04:00"] ],
+        "freeWindows": [
+          ["2026-10-26T09:00:00-04:00", "2026-10-26T12:00:00-04:00", 180],
+          ["2026-10-26T13:00:00-04:00", "2026-10-26T17:00:00-04:00", 240]
+        ]
+      }
+    },
+    {
+      "name": "revoked connection returns disconnected with no windows (manual fallback)",
+      "input": {
+        "request": { "selectedDate": "2026-10-26", "horizonDays": 1, "timeZone": "America/New_York", "dailyStart": "09:00", "dailyEnd": "17:00", "minDurationMinutes": 30 },
+        "source": { "kind": "calendar", "provider": "google", "connection": "revoked" },
+        "retrievedAt": "2026-10-25T12:00:00-04:00",
+        "calendars": []
+      },
+      "expected": { "status": "disconnected", "busyIntervals": [], "freeWindows": [] }
+    },
+    {
+      "name": "invalid request (unknown zone, horizon too long) returns error",
+      "input": {
+        "request": { "selectedDate": "2026-10-26", "horizonDays": 30, "timeZone": "Mars/Olympus_Mons", "dailyStart": "09:00", "dailyEnd": "17:00", "minDurationMinutes": 30 },
+        "source": { "kind": "synthetic", "provider": "fixture", "connection": "connected" },
+        "retrievedAt": "2026-10-25T12:00:00-04:00",
+        "calendars": [ { "ref": "cal-a", "status": "ok", "busy": [] } ]
+      },
+      "expected": { "status": "error", "busyIntervals": [], "freeWindows": [] }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "busy-member-2-calendar-prototype",
+  "private": true,
+  "description": "Isolated availability prototype for BU-sy. Local calculations only; no calendar connection.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "demo": "node demo.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

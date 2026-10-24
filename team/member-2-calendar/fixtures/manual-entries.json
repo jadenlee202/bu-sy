@@ -1,0 +1,10 @@
+{
+  "_note": "SYNTHETIC manual free windows equal to the calendar-derived result of the first snapshot case, used to prove both sources produce the same freeWindows shape.",
+  "request": { "selectedDate": "2026-10-26", "horizonDays": 1, "timeZone": "America/New_York", "dailyStart": "09:00", "dailyEnd": "17:00", "minDurationMinutes": 30 },
+  "enteredAt": "2026-10-25T12:00:00-04:00",
+  "entries": [
+    { "date": "2026-10-26", "start": "09:00", "end": "09:30" },
+    { "date": "2026-10-26", "start": "11:30", "end": "13:00" },
+    { "date": "2026-10-26", "start": "14:00", "end": "16:45" }
+  ]
+}
