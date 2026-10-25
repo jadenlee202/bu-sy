@@ -27,6 +27,7 @@ const SHELL = [
   "./js/availability.js",
   "./js/calendar.js",
   "./js/clock.js",
+  "./js/clubevents.js",
   "./js/clubs.js",
   "./js/findtime.js",
   "./js/hours.js",

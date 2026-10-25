@@ -390,7 +390,9 @@ export async function joinView($main, id) {
 function confirmation($view, c) {
   const a = c.my_application;
   const text = {
-    approved: ["You're in", `You're a member of ${esc(c.name)}. Next: come to the next meeting (${esc(schedule(c))}).`],
+    approved: ["You're in", `You're a member of ${esc(c.name)}. ${schedule(c) === "Schedule TBD"
+      ? "Its meeting schedule isn't set yet; check the club's page for updates."
+      : `Next: come to the next meeting (${esc(schedule(c))}).`}`],
     pending: ["Application sent", `An officer of ${esc(c.name)} reviews it in BU-sy. Check My clubs for the decision; you won't get an email.`],
     waitlisted: [`You're #${a.position} on the waitlist`, `If a spot opens at ${esc(c.name)}, you move up automatically in sign-up order${c.requires_approval ? ", then an officer approves it" : ""}. Check My clubs.`],
   }[a.status];
