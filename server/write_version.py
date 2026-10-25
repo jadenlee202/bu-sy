@@ -1,13 +1,13 @@
-"""Write web/version.json: the site's version history, read from main's git history.
+"""Write web/version.json: which build is deployed, read from main's git history.
 
-The GitHub Pages workflow runs this on every deploy (every push or merge to main), so the
-version note in the page's corner updates by itself. Each commit on main's first-parent line
-is one version: a merge brings in a whole branch, a direct commit is one change. v1 is the
-oldest; the newest is the version being deployed.
+The GitHub Pages workflow runs this on every deploy (every push or merge to main), so Version
+history in the app can name the live commit ("Deployed build"). Each commit on main's
+first-parent line is one build: a merge brings in a whole branch, a direct commit is one change.
+The app's version and release notes are web/app/releases.js, written by hand at release time.
 
     python server/write_version.py            # optional locally, to preview the note
 
-web/version.json is generated, not committed (.gitignore); without it the note stays hidden.
+web/version.json is generated, not committed (.gitignore); without it the panel leaves the build out.
 Standard library only.
 """
 import json
