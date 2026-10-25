@@ -1278,7 +1278,9 @@ main {
   max-height: none !important; overflow: visible !important;
 }
 
-/* Bottom tab bar: always shown, pinned to the frame (not the viewport) on wide. */
+/* Bottom tab bar: always shown, pinned to the frame (not the viewport) on wide.
+   Surfaced as Liquid Glass (see the glass layer further down); the solid
+   background here is the no-backdrop-filter fallback. */
 .tabbar {
   display: flex !important;
   position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; z-index: 30;
@@ -1475,3 +1477,95 @@ a.row.is-featured:is(:hover, :focus-visible) { border-color: var(--red); }
 .row.is-club { border-left: 3px solid var(--red); }
 .row-issue { font-size: 13px; font-weight: 600; color: var(--red-text); }
 .day-event.is-club { background: color-mix(in srgb, var(--text) 12%, var(--surface)); box-shadow: inset 3px 0 0 var(--red); }
+
+/* ======================================================================
+   LIQUID GLASS  (Apple-style rim refraction, web implementation)
+   Applied to the app chrome only — top bar (.side) and bottom tab bar
+   (.tabbar) — never to content surfaces, so text/legibility and the
+   data-honesty labels are never distorted (spec: content isolation + WCAG).
+
+   Layering, from back to front:
+     1. ::before  — the glass surface: backdrop-filter blur/saturate + the
+        SVG rim-refraction filter (#liquid-glass). Distortion is edge-only
+        (the displacement map is neutral in the center).
+     2. ::after   — a thin specular rim stroke that catches light.
+     3. the element's own children (brand, icons, labels) — undistorted,
+        full contrast, on top.
+   ====================================================================== */
+:root {
+  /* Accented (default): tinted glass that reads as part of the BU theme. */
+  --glass-tint: color-mix(in srgb, var(--side) 58%, transparent);
+  --glass-rim: rgba(255, 255, 255, 0.55);     /* specular rim highlight */
+  --glass-edge: rgba(255, 255, 255, 0.14);    /* inner top edge sheen */
+  --glass-blur: 18px;
+  --glass-sat: 1.6;
+}
+/* Full-Color mode: near-clear "liquid" glass. Opt in with data-glass="clear". */
+:root[data-glass="clear"] {
+  --glass-tint: color-mix(in srgb, var(--surface) 30%, transparent);
+  --glass-rim: rgba(255, 255, 255, 0.7);
+  --glass-edge: rgba(255, 255, 255, 0.22);
+}
+:root[data-theme="dark"], :root:not([data-theme="light"]) {
+  --glass-rim: rgba(255, 255, 255, 0.4);
+  --glass-edge: rgba(255, 255, 255, 0.1);
+}
+
+/* Turn the chrome into a glass host: content sits above, glass layers behind. */
+.tabbar, .side { position: relative; isolation: isolate; }
+
+/* The refractive glass surface. */
+.tabbar::before, .side::before {
+  content: ""; position: absolute; inset: 0; z-index: -2; pointer-events: none;
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+}
+/* Rim refraction + specular: only applied where the SVG filter is supported. */
+@supports (filter: url(#liquid-glass)) {
+  .tabbar::before, .side::before { filter: url(#liquid-glass); }
+}
+
+/* Specular rim stroke + inner edge sheen (the "caught light"). */
+.tabbar::after, .side::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  border: 1px solid transparent;
+  /* bright hairline on the edge facing the content, fading around the rim */
+  box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+.tabbar::after { border-top: 1px solid var(--glass-rim); }
+.side::after   { border-bottom: 1px solid var(--glass-rim); }
+
+/* A slow specular sweep so the rim "catches light" as it would on device. */
+@media (prefers-reduced-motion: no-preference) {
+  .tabbar::after, .side::after {
+    background: linear-gradient(100deg, transparent 40%, rgba(255,255,255,0.10) 50%, transparent 60%);
+    background-size: 220% 100%; background-repeat: no-repeat;
+    animation: glass-sheen 9s var(--ease, ease) infinite;
+  }
+  @keyframes glass-sheen { 0%, 100% { background-position: 160% 0; } 50% { background-position: -60% 0; } }
+}
+
+/* The element's own solid background is only the fallback; with glass on, clear it. */
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .tabbar { background: transparent; }
+  /* .side keeps a faint base so the dark bar never goes fully see-through on busy photos */
+  .side { background: color-mix(in srgb, var(--side) 30%, transparent); }
+}
+
+/* ---- Accessibility & low-spec fallbacks ---- */
+/* No backdrop-filter support: keep the original solid bars (already set above). */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .tabbar::before, .side::before, .tabbar::after, .side::after { display: none; }
+}
+/* Reduced motion: glass stays, the light sweep does not (handled by the media
+   query above only adding the animation when motion is allowed). */
+/* High contrast / forced colors: drop the glass entirely for solid, legible bars. */
+@media (forced-colors: active) {
+  .tabbar::before, .side::before, .tabbar::after, .side::after { display: none; }
+  .tabbar { background: Canvas; }
+  .side { background: Canvas; }
+}
+
+/* The inline SVG filter host takes no space and is never interactive. */
+.glass-defs { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
