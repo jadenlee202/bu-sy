@@ -1,0 +1,25 @@
+{
+  "_note": "SYNTHETIC response body shaped like the documented Google Calendar freebusy.query response. Not captured from a live API. Calendar IDs use the reserved .invalid TLD.",
+  "requestedRefs": {
+    "primary": "cal-a",
+    "synthetic-club@group.calendar.invalid": "cal-b",
+    "synthetic-course@group.calendar.invalid": "cal-c"
+  },
+  "body": {
+    "kind": "calendar#freeBusy",
+    "timeMin": "2026-10-26T13:00:00.000Z",
+    "timeMax": "2026-10-26T21:00:00.000Z",
+    "calendars": {
+      "primary": {
+        "busy": [
+          { "start": "2026-10-26T14:00:00Z", "end": "2026-10-26T15:30:00Z" },
+          { "start": "2026-10-26T18:00:00Z", "end": "2026-10-26T19:00:00Z" }
+        ]
+      },
+      "synthetic-club@group.calendar.invalid": {
+        "errors": [ { "domain": "global", "reason": "notFound" } ],
+        "busy": []
+      }
+    }
+  }
+}
