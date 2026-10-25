@@ -73,7 +73,7 @@ export async function clubsView($main) {
     <p class="hint">Find a club, see when it meets and whether it's taking members, then sign up.
       Student-run listings plus labeled sample clubs; not an official BU directory. ${modeNote(mode)}</p>
     <label class="search">${icon("search")}<input type="search" placeholder="Search clubs" aria-label="Search clubs" value="${esc(f.query)}"></label>
-    <div id="club-filters"></div>
+    <div class="club-filters" id="club-filters"></div>
     <p class="sr-only" id="club-count" role="status"></p>
     <div id="clubs" aria-live="polite">${loading("Loading clubs…")}</div>`;
   const $list = $view.querySelector("#clubs");
@@ -87,11 +87,18 @@ export async function clubsView($main) {
 
   const chips = (name, label, items) => `<div class="chips" role="group" aria-label="${label}">
     ${items.map(([id, text]) => `<button class="chip" data-${name}="${esc(id)}" aria-pressed="${f[name] === id}">${esc(text)}</button>`).join("")}</div>`;
+  // Labelled rows; the visible labels repeat each group's aria-label, so they're hidden from screen readers.
   $view.querySelector("#club-filters").innerHTML = `
-    ${chips("category", "Filter by category", [["all", "All"], ...o.categories.map((c) => [c, c])])}
-    <div class="chips" role="group" aria-label="Filter by meeting day">
-      ${[["all", "Any day"], ...o.days.map((d) => [d, dayShort(d)])].map(([id, text]) => `<button class="chip" data-day="${id}" aria-pressed="${f.day === id}"${id !== "all" ? ` aria-label="${id}"` : ""}>${text}</button>`).join("")}
-      <button class="chip chip-toggle" data-open aria-pressed="${f.openOnly}">Open only</button>
+    <span class="filter-label" aria-hidden="true">Category</span>
+    <div class="filter-chips">${chips("category", "Filter by category", [["all", "All"], ...o.categories.map((c) => [c, c])])}</div>
+    <span class="filter-label" aria-hidden="true">Day</span>
+    <div class="filter-chips">
+      <div class="chips" role="group" aria-label="Filter by meeting day">
+        ${[["all", "Any day"], ...o.days.map((d) => [d, dayShort(d)])].map(([id, text]) => `<button class="chip" data-day="${id}" aria-pressed="${f.day === id}"${id !== "all" ? ` aria-label="${id}"` : ""}>${text}</button>`).join("")}
+      </div>
+      <div class="chips filter-end" role="group" aria-label="Filter by availability">
+        <button class="chip chip-toggle" data-open aria-pressed="${f.openOnly}">Open only</button>
+      </div>
     </div>`;
 
   const save = () => src.store.set(FILTER_KEY, JSON.stringify(f));
