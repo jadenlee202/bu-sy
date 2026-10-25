@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="BU-sy app icon">
+  <!-- Maskable: BU-red full-bleed background with the terrier inside the safe zone
+       (center 80%), so platform mask shapes never clip the mark. -->
+  <rect width="512" height="512" fill="#cc0000"/>
+  <defs>
+    <mask id="m">
+      <rect width="512" height="512" fill="#fff"/>
+      <path d="M240 124h32l20.8 184h-73.6z" fill="#000"/>
+      <ellipse cx="256" cy="360" rx="92" ry="56" fill="#000"/>
+      <circle cx="180" cy="256" r="25.6" fill="#000"/>
+      <circle cx="332" cy="256" r="25.6" fill="#000"/>
+    </mask>
+  </defs>
+  <g fill="#ffffff">
+    <g mask="url(#m)">
+      <path d="M100 240C76 160 68 84 84 36c5.6-17.6 24.8-20.8 37.6-8L228 136z"/>
+      <path d="M412 240c24-80 32-156 16-204-5.6-17.6-24.8-20.8-37.6-8L284 136z"/>
+      <ellipse cx="256" cy="284" rx="168" ry="148"/>
+    </g>
+    <ellipse cx="256" cy="332.8" rx="36.8" ry="24.8"/>
+    <path d="M256 356v16M230.4 377.6q25.6 16 51.2 0" stroke="#ffffff" stroke-width="12.8" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>
