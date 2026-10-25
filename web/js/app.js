@@ -1,8 +1,9 @@
 import { icon, paw, terrier } from "./icons.js";
 import * as src from "./source.js";
 import {
-  addDays, campusDateTime, dateLabel, daySchedule, formatPeriod, openStatus,
-  statusLabel, todayHoursSummary, weekRangeLabel,
+  addDays, campusDateTime, dateLabel, daySchedule, formatPeriod,
+  openStatus, selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel,
+  statusLabel, todayBuildingHoursSummary, weekRangeLabel,
 } from "./hours.js";
 
 // ---------- constants ----------
@@ -162,13 +163,13 @@ async function placesView() {
       const placeHours = hours.locations[f.facility_id];
       const now = new Date();
       const todayStatus = openStatus(placeHours, now);
-      const summary = todayHoursSummary(placeHours, now);
+      const summary = todayBuildingHoursSummary(placeHours, now);
       const statusText = todayStatus.status === "unverified" || todayStatus.status === "unpublished"
         ? "" : `<span class="row-hours-status" data-status="${esc(todayStatus.status)}">${esc(statusLabel(todayStatus))}</span>`;
       return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
         <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
-          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}</span>
-          <span class="row-hours">${summary === "Hours unverified" || summary === "Today's hours not published" ? esc(summary) : `Today: ${esc(summary)}`}</span>
+          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)}</span>
+          <span class="row-hours">${summary === "Hours unverified" || summary === "Today's hours not published" || summary === "Closed today" ? esc(summary) : `Today: ${esc(summary)}`}</span>
           ${statusText}</span>
         <span class="row-count num">${fmtCount(o?.occupancy_count)}</span>
         ${level(o?.busyness ?? "unknown")}
@@ -206,7 +207,7 @@ async function placeView(id) {
   const real = isReal(f);
   let hoursOffset = 0;
   let renderedDate = "";
-  let renderedAtMinute = "";
+  let selectedDate = campusDateTime().date;
 
   $view.innerHTML = `
     <a class="back" href="#/">${icon("back", 16)} All places</a>
@@ -215,7 +216,7 @@ async function placeView(id) {
     ${playbackBar()}
     <section class="hours-card" id="weekly-hours" aria-label="Weekly operating hours">
       <div class="hours-head">
-        <div><h2>Operating hours</h2><p id="hours-today" class="hours-today"></p></div>
+        <div><h2>Building hours</h2><p id="hours-today" class="hours-today"></p></div>
         <div class="hours-week-nav" role="group" aria-label="Navigate weekly hours">
           <button class="hours-nav-btn" type="button" data-hours-nav="-7" aria-label="Previous 7 days">‹</button>
           <span id="hours-week-label" aria-live="polite"></span>
@@ -225,6 +226,7 @@ async function placeView(id) {
       <p class="hours-status-note" id="hours-note"></p>
       <ul class="hours-days" id="hours-days"></ul>
       <p class="hours-source" id="hours-source"></p>
+      <div class="selected-hours" id="selected-hours" aria-live="polite"></div>
     </section>
     <section class="hero" id="hero" aria-live="polite"></section>
     <section class="suggest" id="suggest"></section>
@@ -253,21 +255,18 @@ async function placeView(id) {
   const $areas = $view.querySelector("#areas");
   const renderHours = () => {
     const now = new Date();
-    const { date, minute } = campusDateTime(now);
-    const refreshKey = `${date}:${minute}`;
-    if (renderedAtMinute === refreshKey) return;
-    renderedAtMinute = refreshKey;
+    const { date } = campusDateTime(now);
     if (renderedDate !== date) {
       hoursOffset = 0;
+      selectedDate = date;
       renderedDate = date;
     }
-    const today = daySchedule(placeHours, date);
     const status = openStatus(placeHours, now);
     const $today = $view.querySelector("#hours-today");
-    const summary = todayHoursSummary(placeHours, now);
+    const summary = todayBuildingHoursSummary(placeHours, now);
     const currentStatus = status.status === "unverified" || status.status === "unpublished"
       ? "" : `<strong class="hours-current-status" data-status="${esc(status.status)}">${esc(statusLabel(status))}</strong>`;
-    $today.innerHTML = `<span>${summary === "Hours unverified" || summary === "Today's hours not published" ? esc(summary) : `Today: ${esc(summary)}`}</span>${currentStatus}`;
+    $today.innerHTML = `<span>${summary === "Hours unverified" || summary === "Today's hours not published" || summary === "Closed today" ? esc(summary) : `Today: ${esc(summary)}`}</span>${currentStatus}`;
 
     const start = addDays(date, hoursOffset);
     $view.querySelector("#hours-week-label").textContent = `7 days · ${weekRangeLabel(start)}`;
@@ -276,32 +275,60 @@ async function placeView(id) {
       const schedule = daySchedule(placeHours, currentDate);
       let details;
       if (schedule.status === "closed") details = `<span class="hours-closed">Closed${schedule.note ? ` · ${esc(schedule.note)}` : ""}</span>`;
-      else if (schedule.status === "unverified") details = `<span class="hours-unknown">${esc(placeHours?.unverifiedReason || "Hours unverified.")}</span>`;
+      else if (schedule.status === "unverified") details = `<span class="hours-unknown">${esc(schedule.reason || "Hours unverified.")}</span>`;
       else if (schedule.status === "unpublished") details = `<span class="hours-unknown">No official schedule published for this date.</span>`;
       else details = schedule.periods.map((period) =>
-        `<span class="hours-period"><strong>${esc(period.label)}</strong> ${esc(formatPeriod(period))}</span>`,
+        `<span class="hours-period"><strong>Building hours</strong> ${esc(formatPeriod(period))}</span>`,
       ).join("");
-      return `<li class="hours-day${currentDate === date ? " is-today" : ""}"${currentDate === date ? ' aria-current="date"' : ""}>
+      return `<li><button type="button" class="hours-day${currentDate === date ? " is-today" : ""}${currentDate === selectedDate ? " is-selected" : ""}" data-hours-date="${currentDate}"${currentDate === date ? ' aria-current="date"' : ""}>
         <span class="hours-day-name">${esc(dateLabel(currentDate))}${currentDate === date ? " · Today" : ""}</span>
         <span class="hours-day-periods">${details}</span>
-      </li>`;
+      </button></li>`;
     }).join("");
 
-    const freshness = placeHours?.verificationStatus === "verified"
-      ? `${esc(placeHours.scheduleNote)} Last verified ${esc(placeHours.lastVerified)}.`
-      : `${esc(placeHours?.unverifiedReason || "Hours have not been verified.")} Last checked ${esc(placeHours?.lastVerified || "unknown")}.`;
+    const buildingSchedule = placeHours?.buildingHours;
+    const serviceSchedule = placeHours?.serviceHours;
+    const freshness = buildingSchedule?.status === "verified"
+      ? `${esc(buildingSchedule.scheduleNote)} Last verified ${esc(placeHours.lastVerified)}.`
+      : `${esc(buildingSchedule?.unverifiedReason || "Building hours have not been verified.")} Last checked ${esc(placeHours?.lastVerified || "unknown")}.`;
     $view.querySelector("#hours-note").textContent = freshness;
     const sourceUrl = placeHours?.sourceUrl;
     $view.querySelector("#hours-source").innerHTML = sourceUrl
       ? `Source: <a href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(placeHours?.sourceLabel || "source checked")}</a> · Times in America/New_York`
       : "No official hours source found.";
+
+    const buildingStatus = selectedBuildingStatus(placeHours, selectedDate, state.minute);
+    const service = serviceAtTime(placeHours, selectedDate, state.minute);
+    const selectedSchedule = daySchedule(placeHours, selectedDate);
+    const selectedInfo = selectedSchedule.status === "unpublished"
+      ? "Hours not published for this date."
+      : selectedSchedule.status === "unverified"
+        ? esc(selectedSchedule.reason || "Building hours unverified for this date.")
+        : selectedSchedule.status === "closed"
+          ? "Closed all day."
+          : selectedSchedule.periods.map((period) => `Building hours: ${formatPeriod(period)}`).join(" · ");
+    const selectedServiceLabel = serviceStatusLabel(service, buildingStatus);
+    const serviceMeta = serviceSchedule?.status === "verified"
+      ? `Food-service source verified ${esc(placeHours.lastVerified)}.`
+      : serviceSchedule?.status === "unverified"
+        ? esc(serviceSchedule.unverifiedReason || "Food-service hours are unverified.")
+        : "";
+    $view.querySelector("#selected-hours").innerHTML = `
+      <p class="selected-time">${esc(dateLabel(selectedDate))} · ${fmtTime(state.minute)}</p>
+      <p><strong>${esc(selectedStatusLabel(buildingStatus))}</strong><span>${esc(selectedInfo)}</span></p>
+      <p><strong>${esc(selectedServiceLabel)}</strong>${serviceMeta ? `<span>${serviceMeta}</span>` : ""}</p>`;
   };
   $view.querySelector(".hours-week-nav").addEventListener("click", (event) => {
     const button = event.target.closest("[data-hours-nav]");
     if (!button) return;
     hoursOffset += Number(button.dataset.hoursNav);
-    renderedDate = campusDateTime().date;
-    renderedAtMinute = "";
+    selectedDate = addDays(campusDateTime().date, hoursOffset);
+    renderHours();
+  });
+  $view.querySelector("#hours-days").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-hours-date]");
+    if (!button) return;
+    selectedDate = button.dataset.hoursDate;
     renderHours();
   });
   renderHours();

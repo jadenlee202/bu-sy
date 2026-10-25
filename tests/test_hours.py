@@ -40,48 +40,65 @@ def test_hours_entries_have_valid_status_source_and_verification_date():
     hours = read_json(HOURS_FILE)
     assert hours["timezone"] == "America/New_York"
     for facility_id, entry in hours["locations"].items():
-        assert entry["verificationStatus"] in {"verified", "unverified"}, facility_id
         assert entry["sourceUrl"].startswith("https://"), facility_id
         date.fromisoformat(entry["lastVerified"])
-        if entry["verificationStatus"] == "unverified":
-            assert entry.get("unverifiedReason"), facility_id
-            assert entry["weeklyHours"] is None
-        else:
-            start = date.fromisoformat(entry["effectiveFrom"])
-            end = date.fromisoformat(entry["effectiveThrough"])
-            assert start <= end, facility_id
-            assert set(entry["weeklyHours"]) == DAYS, facility_id
+        for kind in ("buildingHours", "serviceHours"):
+            schedule = entry[kind]
+            assert schedule["status"] in {"verified", "unverified", "not_applicable"}, (facility_id, kind)
+            if schedule["status"] == "unverified":
+                assert schedule.get("unverifiedReason"), (facility_id, kind)
+                assert schedule["weeklyHours"] is None, (facility_id, kind)
+            elif schedule["status"] == "verified":
+                start = date.fromisoformat(schedule["effectiveFrom"])
+                end = date.fromisoformat(schedule["effectiveThrough"])
+                assert start <= end, (facility_id, kind)
+                assert set(schedule["weeklyHours"]) == DAYS, (facility_id, kind)
+            else:
+                assert schedule["weeklyHours"] is None, (facility_id, kind)
 
 
 def test_verified_periods_and_special_hours_are_unambiguous():
     hours = read_json(HOURS_FILE)
     for facility_id, entry in hours["locations"].items():
-        if entry["verificationStatus"] != "verified":
-            continue
-        for weekday, periods in entry["weeklyHours"].items():
-            previous_end = -1
-            for period in periods:
-                assert period["label"].strip(), (facility_id, weekday)
-                assert TIME.fullmatch(period["start"]), (facility_id, weekday, period)
-                assert TIME.fullmatch(period["end"]), (facility_id, weekday, period)
-                start_hour, start_minute = map(int, period["start"].split(":"))
-                end_hour, end_minute = map(int, period["end"].split(":"))
-                start = start_hour * 60 + start_minute
-                end = end_hour * 60 + end_minute
-                assert start != end, (facility_id, weekday, period)
-                assert start >= previous_end, (facility_id, weekday, period)
-                previous_end = end
+        for kind in ("buildingHours", "serviceHours"):
+            schedule = entry[kind]
+            if schedule["status"] != "verified":
+                continue
+            for weekday, periods in schedule["weeklyHours"].items():
+                previous_end = -1
+                for period in periods:
+                    assert period["label"].strip(), (facility_id, kind, weekday)
+                    assert TIME.fullmatch(period["start"]), (facility_id, weekday, period)
+                    assert TIME.fullmatch(period["end"]), (facility_id, weekday, period)
+                    start_hour, start_minute = map(int, period["start"].split(":"))
+                    end_hour, end_minute = map(int, period["end"].split(":"))
+                    start = start_hour * 60 + start_minute
+                    end = end_hour * 60 + end_minute
+                    assert start != end, (facility_id, weekday, period)
+                    if kind == "buildingHours":
+                        assert start >= previous_end, (facility_id, weekday, period)
+                        previous_end = end
 
-        special_dates = set()
-        for special in entry["specialHours"]:
-            special_date = date.fromisoformat(special["date"])
-            assert special_date.isoformat() not in special_dates, facility_id
-            special_dates.add(special_date.isoformat())
-            assert special["status"] in {"open", "closed"}, facility_id
-            if special["status"] == "closed":
-                assert special["periods"] == [], facility_id
-            else:
-                assert special["periods"], facility_id
+            special_dates = set()
+            for special in schedule["specialHours"]:
+                special_date = date.fromisoformat(special["date"])
+                assert special_date.isoformat() not in special_dates, (facility_id, kind)
+                special_dates.add(special_date.isoformat())
+                assert special["status"] in {"open", "closed"}, (facility_id, kind)
+                if special["status"] == "closed":
+                    assert special["periods"] == [], (facility_id, kind)
+                else:
+                    assert special["periods"], (facility_id, kind)
+
+
+def test_meal_periods_are_never_used_as_unverified_building_hours():
+    hours = read_json(HOURS_FILE)
+    for facility_id, entry in hours["locations"].items():
+        service = entry["serviceHours"]
+        building = entry["buildingHours"]
+        if service["status"] == "verified" and facility_id != "fitrec-synthetic":
+            assert building["status"] == "unverified", facility_id
+            assert building["weeklyHours"] is None, facility_id
 
 
 @pytest.mark.parametrize("invalid", ["24:00", "12:60", "noon", "7:00"])

@@ -38,19 +38,34 @@ export function dateLabel(isoDate) {
   }).format(new Date(`${isoDate}T12:00:00Z`));
 }
 
-export function daySchedule(location, isoDate) {
-  if (!location || location.verificationStatus !== "verified" || !location.weeklyHours) {
-    return { status: "unverified", periods: [] };
+function scheduleFor(location, kind) {
+  return kind === "service" ? location?.serviceHours : location?.buildingHours;
+}
+
+export function daySchedule(location, isoDate, kind = "building") {
+  const schedule = scheduleFor(location, kind);
+  if (!schedule || schedule.status === "not_applicable") {
+    return { status: "not_applicable", periods: [] };
+  }
+  if (schedule.status !== "verified" || !schedule.weeklyHours) {
+    return { status: "unverified", periods: [], reason: schedule.unverifiedReason };
   }
 
-  const special = (location.specialHours ?? []).find((item) => item.date === isoDate);
-  if (special) return { status: special.status, periods: special.periods ?? [], note: special.note, special: true };
-  if (isoDate < location.effectiveFrom || isoDate > location.effectiveThrough) {
+  const special = (schedule.specialHours ?? []).find((item) => item.date === isoDate);
+  if (special) {
+    return {
+      status: special.status === "open" ? "scheduled" : special.status,
+      periods: special.periods ?? [],
+      note: special.note,
+      special: true,
+    };
+  }
+  if (isoDate < schedule.effectiveFrom || isoDate > schedule.effectiveThrough) {
     return { status: "unpublished", periods: [] };
   }
 
   const weekday = DAYS[new Date(`${isoDate}T12:00:00Z`).getUTCDay()];
-  const periods = location.weeklyHours[weekday];
+  const periods = schedule.weeklyHours[weekday];
   return periods
     ? { status: periods.length ? "scheduled" : "closed", periods }
     : { status: "unverified", periods: [] };
@@ -61,36 +76,55 @@ function timeValue(hhmm) {
   return hour * 60 + minute;
 }
 
-function periodIsOpen(period, minute) {
+function periodIsActive(period, minute) {
   const start = timeValue(period.start);
   const end = timeValue(period.end);
   return end > start ? minute >= start && minute < end : minute >= start;
+}
+
+function overnightPeriodFrom(scheduleLocation, date, minute, kind) {
+  const previous = daySchedule(scheduleLocation, addDays(date, -1), kind);
+  return previous.periods.find((period) =>
+    timeValue(period.end) <= timeValue(period.start) && minute < timeValue(period.end));
 }
 
 export function openStatus(location, now = new Date()) {
   const { date, minute } = campusDateTime(now);
   const today = daySchedule(location, date);
   if (today.status === "closed" && today.special) return { status: "closed" };
-  const yesterday = daySchedule(location, addDays(date, -1));
+  const yesterdayOpen = today.special ? null : overnightPeriodFrom(location, date, minute, "building");
+  if (yesterdayOpen) return { status: "open", period: yesterdayOpen };
+  if (today.status !== "scheduled" && today.status !== "closed") return { status: today.status };
 
-  const openPeriod = yesterday.periods.find((period) =>
-    timeValue(period.end) <= timeValue(period.start) && minute < timeValue(period.end));
-  if (openPeriod) return { status: "open", period: openPeriod };
-
-  const todayStatus = today.status === "open" ? "scheduled" : today.status;
-  if (todayStatus !== "scheduled" && todayStatus !== "closed") {
-    return { status: today.status };
-  }
-  const firstOpening = today.periods.length ? timeValue(today.periods[0].start) : 0;
-  if (todayStatus === "scheduled" && minute < firstOpening &&
-      yesterday.status !== "scheduled" && yesterday.status !== "closed") {
-    return { status: yesterday.status };
-  }
-  const active = today.periods.find((period) => periodIsOpen(period, minute));
+  const active = today.periods.find((period) => periodIsActive(period, minute));
   if (active) return { status: "open", period: active };
 
   const next = today.periods.find((period) => timeValue(period.start) > minute);
   return next ? { status: "opens", period: next } : { status: "closed" };
+}
+
+export function selectedBuildingStatus(location, date, minute) {
+  const today = daySchedule(location, date);
+  if (today.status === "closed") return { status: "closed" };
+  if (today.status !== "scheduled") return { status: today.status };
+  if (!today.special && overnightPeriodFrom(location, date, minute, "building")) return { status: "open" };
+  return today.periods.some((period) => periodIsActive(period, minute))
+    ? { status: "open" }
+    : { status: "closed" };
+}
+
+export function serviceAtTime(location, date, minute) {
+  const today = daySchedule(location, date, "service");
+  if (today.status === "not_applicable") return { status: "not_applicable", periods: [] };
+  if (today.status === "unverified" || today.status === "unpublished") {
+    return { status: today.status, periods: [] };
+  }
+  const yesterday = today.special ? null : overnightPeriodFrom(location, date, minute, "service");
+  const periods = [
+    ...(yesterday ? [yesterday] : []),
+    ...(today.status === "scheduled" ? today.periods.filter((period) => periodIsActive(period, minute)) : []),
+  ];
+  return { status: periods.length ? "serving" : "none", periods };
 }
 
 export function formatClock(hhmm) {
@@ -107,14 +141,36 @@ export function formatPeriod(period) {
   return `${formatClock(period.start)}–${ending}`;
 }
 
-export function todayHoursSummary(location, now = new Date()) {
-  const { date } = campusDateTime(now);
+export function buildingHoursSummary(location, date) {
   const schedule = daySchedule(location, date);
   if (schedule.status === "unverified") return "Hours unverified";
   if (schedule.status === "unpublished") return "Today's hours not published";
   if (schedule.status === "closed") return "Closed today";
-  return schedule.periods.map((period) =>
-    `${period.label}: ${formatPeriod(period)}`).join(" · ");
+  if (schedule.status !== "scheduled") return "Hours unverified";
+  return schedule.periods.map((period) => formatPeriod(period)).join(" · ");
+}
+
+export function todayBuildingHoursSummary(location, now = new Date()) {
+  return buildingHoursSummary(location, campusDateTime(now).date);
+}
+
+export function selectedStatusLabel(status) {
+  if (status.status === "open") return "Open at selected time";
+  if (status.status === "closed") return "Closed at selected time";
+  if (status.status === "unpublished") return "Building hours not published";
+  return "Building hours unverified";
+}
+
+export function serviceStatusLabel(service, buildingStatus) {
+  if (buildingStatus.status === "closed") return "No meal service — building closed";
+  if (service.status === "unverified" || service.status === "unpublished") return "Service hours unavailable";
+  if (service.status === "not_applicable") return "Food service not applicable";
+  if (service.status === "serving") {
+    const labels = [...new Set(service.periods.map((period) => period.label))];
+    return `Serving ${labels.join(", ")}`;
+  }
+  if (buildingStatus.status === "open") return "Open — no meal service currently scheduled";
+  return "No meal service currently scheduled";
 }
 
 export function statusLabel(status) {
