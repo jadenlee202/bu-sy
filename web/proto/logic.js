@@ -40,7 +40,22 @@ export function visitWords(o) {
   const ordered = levels.filter((l, i) => l !== levels[i - 1]);
   if (ordered.every((l) => l === "unknown")) return { level: "unknown", text: "no busyness data" };
   const known = ordered.filter((l) => l !== "unknown");
-  return { level: known[0], text: known.length === 1 ? known[0] : known.join(", then ") };
+  return { level: known[0], text: known.length === 1 ? known[0] : known.join(", then "), peak: peakLevel(known) };
+}
+
+// ---------- busyness icon: three ascending bars, filled by level ----------
+export const BARS = { quiet: 1, moderate: 2, busy: 3 };
+/** The busiest known level in a list (the icon shows the worst part of a visit). */
+export const peakLevel = (levels) => levels.reduce((a, l) => ((BARS[l] ?? 0) > (BARS[a] ?? 0) ? l : a), "unknown");
+
+/**
+ * A minimal meter: 1 bar quiet, 2 moderate, 3 busy, none for closed or no data. Never colour alone:
+ * the caller always sets the word beside it, and the label names the level for screen readers.
+ */
+export function busyIcon(level, label = level) {
+  const n = BARS[level] ?? 0;
+  const bars = [0, 1, 2].map((i) => `<rect class="${i < n ? "on" : ""}" x="${i * 7}" y="${12 - (i + 1) * 4}" width="5" height="${(i + 1) * 4}" rx="1.5" style="--i:${i}"/>`).join("");
+  return `<svg class="busy-icon" data-level="${level}" viewBox="0 0 19 12" width="19" height="12" role="img" aria-label="Busyness: ${label}">${bars}</svg>`;
 }
 
 /** The request the shared engine evaluates, built from the sentence plus remembered defaults. */

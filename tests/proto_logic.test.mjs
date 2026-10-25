@@ -41,11 +41,23 @@ test("the next event skips free and all-day entries", () => {
   assert.equal(L.nextEvent(events, 9), null);
 });
 
-test("visit busyness reads as one level or the order it changes in", () => {
-  assert.deepEqual(L.visitWords({ visit: { segments: [{ level: "quiet" }] } }), { level: "quiet", text: "quiet" });
+test("visit busyness reads as one level or the order it changes in; the icon takes the peak", () => {
+  assert.deepEqual(L.visitWords({ visit: { segments: [{ level: "quiet" }] } }), { level: "quiet", text: "quiet", peak: "quiet" });
   assert.deepEqual(L.visitWords({ visit: { segments: [{ level: "quiet" }, { level: "unknown" }, { level: "busy" }] } }),
-    { level: "quiet", text: "quiet, then busy" });
+    { level: "quiet", text: "quiet, then busy", peak: "busy" });
   assert.deepEqual(L.visitWords({ visit: null, busy: { level: "unknown" } }), { level: "unknown", text: "no busyness data" });
+});
+
+test("the busyness icon fills one bar per level and none when closed or unknown", () => {
+  const filled = (svg) => (svg.match(/class="on"/g) ?? []).length;
+  assert.equal(filled(L.busyIcon("quiet")), 1);
+  assert.equal(filled(L.busyIcon("moderate")), 2);
+  assert.equal(filled(L.busyIcon("busy")), 3);
+  assert.equal(filled(L.busyIcon("closed")), 0);
+  assert.equal(filled(L.busyIcon("unknown")), 0);
+  assert.match(L.busyIcon("busy", "busy, simulated"), /role="img" aria-label="Busyness: busy, simulated"/);
+  assert.equal(L.peakLevel(["quiet", "moderate", "quiet"]), "moderate");
+  assert.equal(L.peakLevel([]), "unknown");
 });
 
 test("the engine request keeps defaults, then the sentence, then suggestion patches", () => {
