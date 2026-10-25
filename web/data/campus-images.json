@@ -1,14 +1,8 @@
 {
-  "note": "Campus photos by location id. A location with no usable file shows the built-in fallback illustration, never a broken image or a misleading photo. Only add a photo you have the right to publish; record its credit and license. The app never fetches remote images.",
+  "note": "Campus photos by location id. A location with no usable file shows the built-in fallback illustration, never a broken image or a misleading photo. Only add a photo you hold the rights to or that is under a license permitting this use; record its credit, license, and source. Do NOT add copyrighted images (e.g. official BU photos) without permission. The app never fetches remote images.",
   "fallback_credit": "Built-in illustration (BU-sy)",
   "images": {
-    "fitrec": {
-      "src": "assets/campus/fitrec.jpg",
-      "alt": "The Boston University Fitness and Recreation Center: a curved glass building with flower beds and steps at the entrance.",
-      "credit": "Provided by the site owner",
-      "license": "Used with permission of the site owner",
-      "source_url": null
-    },
+    "fitrec": null,
     "mugar": null,
     "warren": null,
     "marciano": null,
