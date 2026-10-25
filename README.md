@@ -37,16 +37,19 @@ Places-page hours are static data in `web/data/hours.json`; the site does not fe
 operator websites when visitors load the page. Each location entry is keyed by its existing
 facility ID and separates `buildingHours` from `serviceHours`. Each schedule includes its own
 verification state, effective dates, and date-specific exceptions where available. Dates without
-a published schedule display as unpublished or unverified. All calculations use
-`America/New_York`.
+a published schedule display as unpublished or unverified. Verified meal periods are shown
+separately for each day and drive the selected-time service label. For the dining halls, the
+building opening window is the first-to-last published meal-service window, per user confirmation;
+individual meal labels still reflect the source schedule. Places-card open/closed markers use the
+selected slider time and display “Open now” or “Closed now”; today's schedule remains based on the
+current Boston date. All calculations use `America/New_York`.
 
 To update hours, check the official source linked in that location's data entry, transcribe the
 published building schedule and food-service periods separately, update `lastVerified` and the
-effective dates (and any date-specific `specialHours`), then run `python -m pytest`. Do not
-derive building hours from meal periods or extend a schedule beyond its published period unless
-the source confirms it applies. BU Dining sources checked for the dining halls publish service
-hours but do not establish separate building hours, so those building schedules remain unverified.
-Mugar Library and the Clemente office-room demo also remain unverified for building hours.
+effective dates (and any date-specific `specialHours`), then run `python -m pytest`. Keep dining
+building windows synchronized with their first-to-last service periods unless that relationship
+changes. Do not extend a schedule beyond its published period. Mugar Library and the Clemente
+office-room demo remain unverified for building hours.
 
 ## Publish on GitHub Pages
 

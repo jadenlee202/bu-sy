@@ -155,8 +155,8 @@ export function todayBuildingHoursSummary(location, now = new Date()) {
 }
 
 export function selectedStatusLabel(status) {
-  if (status.status === "open") return "Open at selected time";
-  if (status.status === "closed") return "Closed at selected time";
+  if (status.status === "open") return "Open now";
+  if (status.status === "closed") return "Closed now";
   if (status.status === "unpublished") return "Building hours not published";
   return "Building hours unverified";
 }

@@ -91,14 +91,24 @@ def test_verified_periods_and_special_hours_are_unambiguous():
                     assert special["periods"], (facility_id, kind)
 
 
-def test_meal_periods_are_never_used_as_unverified_building_hours():
+def test_dining_building_windows_match_first_and_last_service_periods():
     hours = read_json(HOURS_FILE)
     for facility_id, entry in hours["locations"].items():
         service = entry["serviceHours"]
         building = entry["buildingHours"]
-        if service["status"] == "verified" and facility_id != "fitrec-synthetic":
-            assert building["status"] == "unverified", facility_id
-            assert building["weeklyHours"] is None, facility_id
+        if service["status"] != "verified" or facility_id == "fitrec-synthetic":
+            continue
+        assert building["status"] == "verified", facility_id
+        assert building["effectiveFrom"] == service["effectiveFrom"], facility_id
+        assert building["effectiveThrough"] == service["effectiveThrough"], facility_id
+        for weekday, meals in service["weeklyHours"].items():
+            building_periods = building["weeklyHours"][weekday]
+            if not meals:
+                assert building_periods == [], (facility_id, weekday)
+                continue
+            assert len(building_periods) == 1, (facility_id, weekday)
+            assert building_periods[0]["start"] == min(meal["start"] for meal in meals), (facility_id, weekday)
+            assert building_periods[0]["end"] == max(meal["end"] for meal in meals), (facility_id, weekday)
 
 
 @pytest.mark.parametrize("invalid", ["24:00", "12:60", "noon", "7:00"])

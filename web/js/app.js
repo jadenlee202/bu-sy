@@ -162,10 +162,11 @@ async function placesView() {
       const o = latestAt(h.observations, state.minute, h.coverage_end);
       const placeHours = hours.locations[f.facility_id];
       const now = new Date();
-      const todayStatus = openStatus(placeHours, now);
+      const { date } = campusDateTime(now);
+      const selectedStatus = selectedBuildingStatus(placeHours, date, state.minute);
       const summary = todayBuildingHoursSummary(placeHours, now);
-      const statusText = todayStatus.status === "unverified" || todayStatus.status === "unpublished"
-        ? "" : `<span class="row-hours-status" data-status="${esc(todayStatus.status)}">${esc(statusLabel(todayStatus))}</span>`;
+      const statusText = selectedStatus.status === "unverified" || selectedStatus.status === "unpublished"
+        ? "" : `<span class="row-hours-status" data-status="${esc(selectedStatus.status)}">${esc(selectedStatusLabel(selectedStatus))}</span>`;
       return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
         <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
           <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)}</span>
@@ -272,17 +273,21 @@ async function placeView(id) {
     $view.querySelector("#hours-week-label").textContent = `7 days · ${weekRangeLabel(start)}`;
     $view.querySelector("#hours-days").innerHTML = Array.from({ length: 7 }, (_, index) => {
       const currentDate = addDays(start, index);
-      const schedule = daySchedule(placeHours, currentDate);
-      let details;
-      if (schedule.status === "closed") details = `<span class="hours-closed">Closed${schedule.note ? ` · ${esc(schedule.note)}` : ""}</span>`;
-      else if (schedule.status === "unverified") details = `<span class="hours-unknown">${esc(schedule.reason || "Hours unverified.")}</span>`;
-      else if (schedule.status === "unpublished") details = `<span class="hours-unknown">No official schedule published for this date.</span>`;
-      else details = schedule.periods.map((period) =>
+      const building = daySchedule(placeHours, currentDate);
+      const buildingDetails = building.status === "closed"
+        ? `<span class="hours-closed">Building closed${building.note ? ` · ${esc(building.note)}` : ""}</span>`
+        : building.status === "unverified"
+          ? `<span class="hours-unknown">Building hours unverified</span>`
+          : building.status === "unpublished"
+            ? `<span class="hours-unknown">Building hours not published for this date.</span>`
+            : building.status === "scheduled"
+              ? building.periods.map((period) =>
         `<span class="hours-period"><strong>Building hours</strong> ${esc(formatPeriod(period))}</span>`,
-      ).join("");
+              ).join("")
+              : "";
       return `<li><button type="button" class="hours-day${currentDate === date ? " is-today" : ""}${currentDate === selectedDate ? " is-selected" : ""}" data-hours-date="${currentDate}"${currentDate === date ? ' aria-current="date"' : ""}>
         <span class="hours-day-name">${esc(dateLabel(currentDate))}${currentDate === date ? " · Today" : ""}</span>
-        <span class="hours-day-periods">${details}</span>
+        <span class="hours-day-periods">${buildingDetails}</span>
       </button></li>`;
     }).join("");
 
@@ -290,7 +295,7 @@ async function placeView(id) {
     const serviceSchedule = placeHours?.serviceHours;
     const freshness = buildingSchedule?.status === "verified"
       ? `${esc(buildingSchedule.scheduleNote)} Last verified ${esc(placeHours.lastVerified)}.`
-      : `${esc(buildingSchedule?.unverifiedReason || "Building hours have not been verified.")} Last checked ${esc(placeHours?.lastVerified || "unknown")}.`;
+      : `${esc(buildingSchedule?.unverifiedReason || "Building hours have not been verified.")} ${serviceSchedule?.status === "verified" ? `${esc(serviceSchedule.scheduleNote)} ` : ""}Last checked ${esc(placeHours?.lastVerified || "unknown")}.`;
     $view.querySelector("#hours-note").textContent = freshness;
     const sourceUrl = placeHours?.sourceUrl;
     $view.querySelector("#hours-source").innerHTML = sourceUrl

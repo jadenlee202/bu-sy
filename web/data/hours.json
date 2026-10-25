@@ -58,10 +58,21 @@
       "sourceLabel": "BU Dining · Warren Towers",
       "lastVerified": "2026-10-24",
       "buildingHours": {
-        "status": "unverified",
-        "unverifiedReason": "The official source publishes food-service periods but no separate building operating schedule; service hours are not assumed to be building hours.",
-        "weeklyHours": null,
-        "specialHours": []
+        "status": "verified",
+        "unverifiedReason": null,
+        "weeklyHours": {
+          "monday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "tuesday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "wednesday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "thursday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "friday": [ {"label": "Building hours", "start": "07:00", "end": "21:00"} ],
+          "saturday": [ {"label": "Building hours", "start": "09:00", "end": "21:00"} ],
+          "sunday": [ {"label": "Building hours", "start": "10:00", "end": "21:00"} ]
+        },
+        "specialHours": [],
+        "effectiveFrom": "2026-10-24",
+        "effectiveThrough": "2026-10-30",
+        "scheduleNote": "Building hours follow the published first-to-last dining service periods, per user confirmation. Meal periods are shown separately."
       },
       "serviceHours": {
         "status": "verified",
@@ -86,10 +97,21 @@
       "sourceLabel": "BU Dining · Marciano Commons",
       "lastVerified": "2026-10-24",
       "buildingHours": {
-        "status": "unverified",
-        "unverifiedReason": "The official source publishes food-service periods but no separate building operating schedule; service hours are not assumed to be building hours.",
-        "weeklyHours": null,
-        "specialHours": []
+        "status": "verified",
+        "unverifiedReason": null,
+        "weeklyHours": {
+          "monday": [ {"label": "Building hours", "start": "07:00", "end": "21:00"} ],
+          "tuesday": [ {"label": "Building hours", "start": "07:00", "end": "21:00"} ],
+          "wednesday": [ {"label": "Building hours", "start": "07:00", "end": "21:00"} ],
+          "thursday": [ {"label": "Building hours", "start": "07:00", "end": "21:00"} ],
+          "friday": [ {"label": "Building hours", "start": "07:00", "end": "21:00"} ],
+          "saturday": [ {"label": "Building hours", "start": "09:00", "end": "21:00"} ],
+          "sunday": [ {"label": "Building hours", "start": "10:00", "end": "21:00"} ]
+        },
+        "specialHours": [],
+        "effectiveFrom": "2026-10-24",
+        "effectiveThrough": "2026-10-30",
+        "scheduleNote": "Building hours follow the published first-to-last dining service periods, per user confirmation. Meal periods are shown separately."
       },
       "serviceHours": {
         "status": "verified",
@@ -114,10 +136,21 @@
       "sourceLabel": "BU Dining · West Campus",
       "lastVerified": "2026-10-24",
       "buildingHours": {
-        "status": "unverified",
-        "unverifiedReason": "The official source publishes food-service periods but no separate building operating schedule; service hours are not assumed to be building hours.",
-        "weeklyHours": null,
-        "specialHours": []
+        "status": "verified",
+        "unverifiedReason": null,
+        "weeklyHours": {
+          "monday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "tuesday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "wednesday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "thursday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "friday": [ {"label": "Building hours", "start": "07:00", "end": "21:00"} ],
+          "saturday": [ {"label": "Building hours", "start": "09:00", "end": "21:00"} ],
+          "sunday": [ {"label": "Building hours", "start": "10:00", "end": "21:00"} ]
+        },
+        "specialHours": [],
+        "effectiveFrom": "2026-10-24",
+        "effectiveThrough": "2026-10-30",
+        "scheduleNote": "Building hours follow the published first-to-last dining service periods, per user confirmation. Meal periods are shown separately."
       },
       "serviceHours": {
         "status": "verified",
@@ -142,10 +175,21 @@
       "sourceLabel": "Fenway Dining · Sodexo hours",
       "lastVerified": "2026-10-24",
       "buildingHours": {
-        "status": "unverified",
-        "unverifiedReason": "The official source publishes food-service periods but no separate building operating schedule; service hours are not assumed to be building hours.",
-        "weeklyHours": null,
-        "specialHours": []
+        "status": "verified",
+        "unverifiedReason": null,
+        "weeklyHours": {
+          "monday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "tuesday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "wednesday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "thursday": [ {"label": "Building hours", "start": "07:00", "end": "22:00"} ],
+          "friday": [ {"label": "Building hours", "start": "07:00", "end": "19:30"} ],
+          "saturday": [ {"label": "Building hours", "start": "10:00", "end": "19:30"} ],
+          "sunday": [ {"label": "Building hours", "start": "10:00", "end": "19:30"} ]
+        },
+        "specialHours": [],
+        "effectiveFrom": "2026-10-19",
+        "effectiveThrough": "2026-10-25",
+        "scheduleNote": "Building hours follow the published first-to-last dining service periods, per user confirmation. Meal periods are shown separately."
       },
       "serviceHours": {
         "status": "verified",
