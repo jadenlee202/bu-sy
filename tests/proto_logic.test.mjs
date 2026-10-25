@@ -60,12 +60,30 @@ test("the busyness icon fills one bar per level and none when closed or unknown"
   assert.equal(L.peakLevel([]), "unknown");
 });
 
-test("the engine request keeps defaults, then the sentence, then suggestion patches", () => {
-  const req = L.buildRequest({ activity: "study", minutes: 60, from: "mugar", to: "", access: { library: "yes" }, patch: { minActivity: 25 } },
-    { buffer: 10, minActivity: 30, preparation: 3 }, "15:00", "2026-10-19");
+test("walking time is estimated on the device from the straight line", () => {
+  const mugar = { lat: 42.351012, lon: -71.107992 }, warren = { lat: 42.349224, lon: -71.10312 };
+  const d = L.distanceM(mugar, warren);
+  assert.ok(d > 430 && d < 465, `Mugar to Warren is ~447 m, got ${d}`);
+  assert.equal(L.walkMinutes(d), Math.ceil((d * 1.2) / 84));
+  assert.equal(L.walkMinutes(0), 1);                          // never a zero-minute walk
+});
+
+test("the engine sees 'your location' with a walk to every building that has coordinates", () => {
+  const campus = { locations: [{ id: "mugar", name: "Mugar" }, { id: "fenway", name: "Fenway" }], travel: [{ from_id: "mugar", to_id: "fenway", minutes: 20 }] };
+  const c = L.campusFrom(campus, { lat: 42.351012, lon: -71.107992 }, { mugar: { lat: 42.351012, lon: -71.107992 } });
+  assert.ok(c.locations.some((l) => l.id === L.HERE));
+  assert.deepEqual(c.travel.filter((t) => t.from_id === L.HERE), [{ from_id: L.HERE, to_id: "mugar", minutes: 1 }]);   // Fenway: no coordinates, no walk
+  assert.equal(campus.locations.length, 2);                   // the published campus is not changed
+});
+
+test("the engine request is walk + activity: no next stop, buffer, setup or pack-up", () => {
+  const req = L.buildRequest({ activity: "study", minutes: 60, from: "mugar", access: { library: "yes" }, patch: { minActivity: 25 } },
+    { buffer: 10, minActivity: 30, preparation: 3, cleanup: 2 }, "15:00", "2026-10-19");
   assert.equal(req.to, null);
   assert.equal(req.minActivity, 25);
-  assert.equal(req.buffer, 10);
+  assert.equal(req.buffer, 0);
+  assert.equal(req.preparation, 0);
+  assert.equal(req.cleanup, 0);
   assert.equal(req.mode, "duration");
   assert.deepEqual(req.access, { library: "yes" });
 });

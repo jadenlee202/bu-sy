@@ -6,7 +6,11 @@ const NOW = new Date("2026-10-26T15:00:00-04:00");
 const ics = (events) => Buffer.from(`BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n${events.map(([uid, title, start, end]) =>
   `BEGIN:VEVENT\r\nUID:${uid}\r\nDTSTAMP:20261001T000000Z\r\nSUMMARY:${title}\r\nDTSTART;TZID=America/New_York:${start}\r\nDTEND;TZID=America/New_York:${end}\r\nEND:VEVENT\r\n`).join("")}END:VCALENDAR\r\n`);
 
-async function onboard(page) {
+const MUGAR = { latitude: 42.351012, longitude: -71.107992 };
+const HARVARD_SQ = { latitude: 42.3734, longitude: -71.1189 };     // ~2.3 km from West Campus: a long walk
+
+async function onboard(page, { at = MUGAR } = {}) {
+  if (at) { await page.context().grantPermissions(["geolocation"]); await page.context().setGeolocation(at); }
   await page.clock.setFixedTime(NOW);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/proto.html");
@@ -25,40 +29,49 @@ async function pick(page, word, option) {
   await expect(page.locator(".sheet")).toHaveCount(0);
 }
 
-test("one sentence plans the gap with the shared engine", async ({ page }) => {
+test("one sentence plans the gap: walk from where you are, then the activity, nothing else", async ({ page }) => {
   const errors = browserErrors(page);
   await onboard(page);
-  await expect(page.locator(".sentence").first()).toContainText("I have 1 hr to study");
+  await expect(page.locator(".sentence")).toHaveText("I have 1 hr to study.");
+  await expect(page.locator('[data-pick="from"], [data-pick="to"]')).toHaveCount(0);   // no start, no next stop
 
-  await page.locator('[data-pick="from"]').click();
+  await page.locator('[data-pick="time"]').click();
   await page.keyboard.press("Escape");                        // the sheet closes without changing anything
   await expect(page.locator(".sheet")).toHaveCount(0);
-  await pick(page, "from", "Mugar Library");
-  await pick(page, "to", "Warren Towers");
-  await expect(page.locator(".plan")).toContainText("starting from Mugar Library. Then I'm off to Warren Towers.");
 
   await page.getByRole("link", { name: "Find a spot" }).click();
-  await expect(page.locator(".place")).toHaveText("Marciano Commons");
-  await expect(page.locator(".what .busy-icon")).toHaveAttribute("data-level", "quiet");
-  await expect(page.locator(".what .busy-icon rect.on")).toHaveCount(1);
-  await expect(page.locator(".steps")).toContainText("3:08 PM");
-  await expect(page.locator(".steps")).toContainText("there by 3:50 PM");
+  await expect(page.locator(".place")).toBeVisible();
+  await expect(page.locator(".steps li")).toHaveCount(2);                     // walk there, then study
+  await expect(page.locator(".steps")).toContainText("from you (estimate)");
+  await expect(page.locator(".steps")).toContainText("Study until 4:00 PM");  // no buffer: the activity runs to the end
+  await expect(page.locator(".what .busy-icon")).toHaveAttribute("data-level", /quiet|moderate|busy/);
+  const bar = await page.locator(".answer .bar").getAttribute("aria-label");
+  expect(bar).not.toMatch(/buffer|preparation|cleanup|onward/);
 
-  await page.getByRole("link", { name: "See all 2 options" }).click();
+  await page.getByRole("link", { name: /See all \d+ options/ }).click();
+  await expect(page.locator(".legend")).toHaveText(/Walk\s*Study/);
   await page.locator(".opt-card").nth(1).getByRole("button", { name: "Choose" }).click();
-  await expect(page.locator(".place")).toHaveText("Mugar Library");
+  await expect(page.locator(".place")).toBeVisible();
   expect(errors).toEqual([]);
 });
 
+test("with location refused, it says why and offers a nearby building instead", async ({ page }) => {
+  await onboard(page, { at: null });
+  await page.getByRole("link", { name: "Find a spot" }).click();
+  await expect(page.getByRole("heading", { name: "Where are you?" })).toBeVisible();
+  await page.getByRole("button", { name: "I'm near a campus building" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Mugar Library" }).click();
+  await expect(page.locator(".place")).toBeVisible();
+  await expect(page.locator(".steps")).toContainText(/from Mugar Library|You're already there/);
+});
+
 test("nothing fits offers a fix the engine has checked", async ({ page }) => {
-  await onboard(page);
+  await onboard(page, { at: HARVARD_SQ });
   await pick(page, "activity", "Eat");
-  await pick(page, "from", "West Campus");
-  await pick(page, "to", "Warren Towers");
   await pick(page, "time", "30 min");
   await page.getByRole("link", { name: "Find a spot" }).click();
   await expect(page.getByRole("heading", { name: "Nothing fits this window" })).toBeVisible();
-  await page.getByRole("button", { name: /Extend to 55 minutes/ }).click();
+  await page.getByRole("button", { name: /Extend to \d+ minutes/ }).first().click();
   await expect(page.locator(".place")).toBeVisible();
 });
 
@@ -107,8 +120,6 @@ test("directions show the logo loader, then hand over to Google Maps", async ({ 
   await context.route("https://www.google.com/maps/**", (route) => route.fulfill({ contentType: "text/html", body: "<title>Maps stub</title>" }));
   await onboard(page);
   await expect(page.locator(".topbar .brand")).toContainText("BU-sy");
-  await pick(page, "from", "Mugar Library");
-  await pick(page, "to", "Warren Towers");
   await page.getByRole("link", { name: "Find a spot" }).click();
   await page.getByRole("link", { name: "Open directions" }).click();
   const loader = page.locator("#loader");

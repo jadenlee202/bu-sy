@@ -136,11 +136,16 @@ a visible default under **Preferences**. Or open **Try a sample** (80 free minut
 Mugar to a class at Warren Towers). The other samples show a best match chosen on evidence (*study, outlets needed*) and a
 window where nothing fits, with a one-tap fix the engine has checked.
 
-**Minimal prototype** (branch `proto/minimal-brownstone`): open `http://localhost:8000/proto.html`. The planner as
-one sentence ("I have **1 hr** to **study**, starting from **Mugar Library**"), in the Brownstone palette, with three
-tabs (Plan, Schedule, Explore), a first-run guide, press feedback and page transitions (off under reduced motion).
-It uses the same engine, data, verified hours, `.ics` import and saved club meetings as the main app, so both see
-the same schedule. Its own settings (onboarding, access, start and next stop) live under `busy.proto.v1` in this browser.
+**Minimal prototype**: open `http://localhost:8000/proto.html`. The planner as one sentence ("I have **1 hr** to
+**study**"), in the Brownstone palette, with three tabs (Plan, Schedule, Explore), a first-run guide, press feedback
+and page transitions (off under reduced motion). A plan is only the walk there plus the activity: no next stop,
+buffer, setup or pack-up. The walk is estimated **on the device** from your location (asked for on the first *Find a
+spot*, kept in memory, never stored or sent): straight-line distance to the building × 1.2 at 84 m/min, using
+building points geocoded once from the verified addresses (`web/proto/places-geo.json`, © OpenStreetMap contributors,
+ODbL). Fenway has no verified address, so its walk stays unknown. *Open directions* hands the real route to Google
+Maps. With location off, you can say which building you're near instead. It uses the same engine, data, verified
+hours, `.ics` import and saved club meetings as the main app, so both see the same schedule. Its own settings
+(onboarding, access) live under `busy.proto.v1` in this browser.
 
 **People counter** (camera, on-device): open `http://localhost:8000/counter/`. It counts people crossing a line
 and never uploads video. It's a prototype for producing real counts; nothing in the planner uses it yet.

@@ -58,10 +58,40 @@ export function busyIcon(level, label = level) {
   return `<svg class="busy-icon" data-level="${level}" viewBox="0 0 19 12" width="19" height="12" role="img" aria-label="Busyness: ${label}">${bars}</svg>`;
 }
 
-/** The request the shared engine evaluates, built from the sentence plus remembered defaults. */
-export function buildRequest({ activity, minutes, from, to, access, patch = {} }, defaults, start, date) {
+// ---------- walking time from where you are (estimated on the device) ----------
+export const HERE = "here";                 // the engine's location id for "your location"
+export const WALK_M_PER_MIN = 84;           // ~5 km/h, the pace Google Maps assumes for walking
+export const DETOUR = 1.2;                  // city streets: the walk is ~20 % longer than the straight line
+
+/** Great-circle distance in metres between two { lat, lon } points. */
+export function distanceM(a, b) {
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** Estimated walking minutes for a straight-line distance: never zero, always whole minutes. */
+export const walkMinutes = (metres) => Math.max(1, Math.ceil((metres * DETOUR) / WALK_M_PER_MIN));
+
+/**
+ * The campus as the engine sees it from your location: one extra location ("Your location") with an estimated
+ * walk to every building that has verified coordinates. A building without them keeps no walk (unknown, never zero).
+ */
+export function campusFrom(campus, here, geo) {
+  const travel = Object.entries(geo).map(([id, p]) => ({ from_id: HERE, to_id: id, minutes: walkMinutes(distanceM(here, p)) }));
+  return { ...campus, locations: [...campus.locations, { id: HERE, name: "Your location" }], travel: [...campus.travel, ...travel],
+    travel_basis: "Estimated walk", travel_note: "Straight-line distance from your location × 1.2 at 84 m/min; open directions for the real route." };
+}
+
+/**
+ * The request the shared engine evaluates: free time is walk there + the activity, nothing else.
+ * No next stop, no buffer, no setup or pack-up allowance.
+ */
+export function buildRequest({ activity, minutes, from, access, patch = {} }, defaults, start, date) {
   return {
-    ...defaults, activity, minutes, from: from || "", to: to || null, start, date,
+    ...defaults, activity, minutes, from: from || "", to: null, start, date,
+    buffer: 0, preparation: 0, cleanup: 0,
     mode: "duration", source: "manual", access: { ...access }, preferQuiet: true, ...patch,
   };
 }
