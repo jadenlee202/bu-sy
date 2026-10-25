@@ -105,7 +105,7 @@ test("directions show the logo loader, then hand over to Google Maps", async ({ 
   const loader = page.locator("#loader");
   await expect(loader).toHaveClass(/on/);
   await expect(loader).toContainText("Opening Google Maps");
-  await expect(loader.locator(".terrier")).toBeVisible();
+  await expect(loader.locator(".pin-clock")).toBeVisible();
   await page.waitForURL(/google\.com\/maps\/dir/);
   expect(new URL(page.url()).searchParams.get("travelmode")).toBe("walking");
 });

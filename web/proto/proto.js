@@ -5,7 +5,6 @@ import { daySegments, zonedInstant } from "../js/availability.js";
 import { fmtTime, toHHMM, toMin } from "../js/clock.js";
 import { clubBusy, clubEventItems, loadClubEvents } from "../js/clubevents.js";
 import { campusDateTime, nowStatus, nowText } from "../js/hours.js";
-import { terrier } from "../js/icons.js";
 import { directionsURL } from "../js/plan.js";
 import * as prefs from "../js/prefs.js";
 import * as engine from "../js/recommend.js";
@@ -94,29 +93,45 @@ const TABS = { plan: "plan", answer: "plan", options: "plan", schedule: "schedul
 let current = null;
 const routeOf = () => (location.hash.replace(/^#\/?/, "").split("/")[0] || "plan");
 
-// ---------- loader: the terrier, "Loading…", a thin progress line ----------
-const brand = `<span class="brand">${terrier({ size: 26 })}<span>BU-<em>sy</em></span></span>`;
-let loaderTimer = 0;
+// ---------- logo: the pin clock (where to go, and when) ----------
+const pinClock = ({ size = 24, label = "" } = {}) => `<svg class="pin-clock" width="${size}" height="${size}" viewBox="0 0 64 64" ${label ? `role="img" aria-label="${label}"` : `aria-hidden="true"`}>
+  <path class="pin-body" d="M32 61S11 41 11 26a21 21 0 0 1 42 0c0 15-21 35-21 35z"/>
+  <circle class="pin-face" cx="32" cy="26" r="12"/>
+  <path class="hand hand-h" d="M32 26l5 3"/><path class="hand hand-m" d="M32 26v-7"/></svg>`;
+const brand = `<span class="brand">${pinClock({ size: 24 })}<span>BU-<em>sy</em></span></span>`;
+
+// ---------- loader: the pin drops in, lands with a burst, then hovers while we wait ----------
+const SPARKS = 14;
+const MIN_SHOWN = 900;               // let the landing burst finish before the loader can leave
+let loaderTimer = 0, shownAt = 0;
 function showLoader(text) {
-  let $l = document.getElementById("loader");
-  if (!$l) {
-    document.body.insertAdjacentHTML("beforeend", `<div id="loader" class="loader" role="status" aria-live="polite">
-      <div class="loader-mark">${terrier({ size: 64 })}</div>
-      <p class="loader-text"><span></span><span class="dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></p>
-      <div class="loader-line" aria-hidden="true"><i></i></div></div>`);
-    $l = document.getElementById("loader");
-  }
-  $l.querySelector(".loader-text span").textContent = text;
+  document.getElementById("loader")?.remove();           // a fresh node replays the whole entrance
+  const sparks = Array.from({ length: SPARKS }, (_, i) =>
+    `<i class="spark s${i % 3}" style="--a:${Math.round((i * 360) / SPARKS)}deg;--d:${78 + (i % 3) * 20}px"></i>`).join("");
+  const letters = [...text].map((ch, i) => (ch === " " ? " " : `<span class="ch" style="--i:${i}">${esc(ch)}</span>`)).join("");
+  document.body.insertAdjacentHTML("beforeend", `<div id="loader" class="loader" role="status" aria-live="polite">
+    <div class="stage" aria-hidden="true">
+      <span class="flash"></span><span class="ring r1"></span><span class="ring r2"></span><span class="ring r3"></span>
+      <span class="sparks">${sparks}</span><span class="shadow"></span>
+      <span class="pin-wrap">${pinClock({ size: 92 })}</span>
+    </div>
+    <p class="loader-text"><span class="sr-only">${esc(text)}</span><span class="letters" aria-hidden="true">${letters}</span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></p>
+    <div class="loader-line" aria-hidden="true"><i></i></div></div>`);
+  const $l = document.getElementById("loader");
+  shownAt = performance.now();
   document.body.setAttribute("aria-busy", "true");
   requestAnimationFrame(() => $l.classList.add("on"));
 }
 function hideLoader() {
   clearTimeout(loaderTimer);
   const $l = document.getElementById("loader");
-  document.body.removeAttribute("aria-busy");
-  if (!$l) return;
-  $l.classList.remove("on");
-  setTimeout(() => { if (!$l.classList.contains("on")) $l.remove(); }, reduced() ? 0 : 300);
+  if (!$l) { document.body.removeAttribute("aria-busy"); return; }
+  const wait = reduced() ? 0 : Math.max(0, MIN_SHOWN - (performance.now() - shownAt));
+  setTimeout(() => {
+    document.body.removeAttribute("aria-busy");
+    $l.classList.add("out");
+    setTimeout(() => $l.remove(), reduced() ? 0 : 340);
+  }, wait);
 }
 // Returning to the page (back button, or the Maps app opened instead of a tab) clears the loader.
 window.addEventListener("pageshow", (e) => { if (e.persisted) hideLoader(); });
@@ -125,7 +140,7 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 /** Show the loader, let it settle for a beat, then hand over to Google Maps in this tab. */
 function openDirections(url) {
   showLoader("Opening Google Maps");
-  setTimeout(() => location.assign(url), reduced() ? 80 : 650);
+  setTimeout(() => location.assign(url), reduced() ? 80 : 1150);   // after the landing burst
   loaderTimer = setTimeout(hideLoader, 6000);      // the Maps app may open instead and leave this page up
 }
 
@@ -212,7 +227,7 @@ function pop(selector) {
 const SCREENS = {
   welcome() {
     $view.innerHTML = `<section class="welcome stagger">
-      <div class="logo">${terrier({ size: 56, label: "BU-sy" })}</div>
+      <div class="logo">${pinClock({ size: 34, label: "BU-sy" })}</div>
       <h1>Got a gap between classes?</h1>
       <p class="lede">Tell BU-sy how long you have. It finds a spot on campus that fits, and gets you to your next class on time.</p>
       <div class="btn-col">
