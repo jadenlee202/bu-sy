@@ -53,6 +53,60 @@ This runs from the repo root and doesn't need `activate`, which PowerShell often
 The site detects the API automatically. To use an API on another host, add `?api=https://host` to the URL.
 The API allows cross-origin requests (`BUSY_CORS_ORIGINS` restricts them).
 
+### Optional Google Calendar availability
+
+The Calendar page uses Google's OAuth authorization-code flow with PKCE and the single
+`calendar.freebusy` scope. It requests only the primary calendar's busy intervals; event names,
+descriptions, attendees, and locations are not read, returned to the browser, or logged. BU-sy
+does not send calendar data to an AI service. The API encrypts access and refresh tokens at rest,
+keeps them in a private SQLite session database, and exposes only the opaque session cookie to
+the browser. Disconnect removes the local session and asks Google to revoke its refresh token.
+Daily free-time windows are calculated in the timezone entered on the Calendar page (defaulting
+to the browser timezone), then intersected with the date-scoped building and meal-service data in
+`web/data/hours.json`. No travel time is estimated.
+
+This feature is **not active on GitHub Pages alone**. To enable it, deploy the FastAPI app over
+HTTPS and configure Google Cloud:
+
+1. Enable the Google Calendar API and configure the OAuth consent screen. During development,
+   add your account as a test user. Review Google's
+   [OAuth 2.0](https://developers.google.com/identity/protocols/oauth2) and
+   [Calendar FreeBusy](https://developers.google.com/workspace/calendar/api/v3/reference/freebusy/query)
+   documentation. Public use may require Google's OAuth verification for the requested scope.
+2. Create a Google OAuth **Web application** client. Add the exact backend callback URL as an
+   authorized redirect URI: `https://YOUR_API_HOST/api/calendar/callback`.
+3. Set these server environment variables (never put the client secret or encryption key in the
+   static frontend or repository):
+
+   ```text
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
+   GOOGLE_REDIRECT_URI=https://YOUR_API_HOST/api/calendar/callback
+   CALENDAR_FRONTEND_ORIGIN=https://YOUR_SITE_ORIGIN
+   CALENDAR_FRONTEND_URL=https://YOUR_SITE_ORIGIN/optional/site/path/
+   CALENDAR_TOKEN_ENCRYPTION_KEY=<Fernet key>
+   CALENDAR_SESSION_DB=<private persistent writable path>/calendar.sqlite3
+   BUSY_CORS_ORIGINS=https://YOUR_SITE_ORIGIN
+   ```
+
+   Generate a Fernet key with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+   Preserve that key and the SQLite database across restarts; losing the key invalidates stored
+   sessions. The database file is restricted to owner read/write access. SQLite storage assumes
+   one backend instance with a persistent disk. Configure reverse-proxy/access logs to redact
+   `/api/calendar/callback` query strings, which contain a short-lived OAuth authorization code;
+   the built-in Uvicorn access-log filter also redacts that callback path.
+4. On the GitHub Pages URL, open the site with the backend query parameter, for example
+   `https://YOUR_SITE/?api=https://YOUR_API_HOST#/calendar`. The callback preserves that API
+   parameter. Because browsers may block third-party cookies between GitHub Pages and a separate
+   API domain, production deployment should use a custom website domain and an API subdomain under
+   the same registrable domain (or serve the frontend and API from the same site). Both must use
+   HTTPS.
+
+When the API or OAuth configuration is missing, Calendar shows that connection is unavailable;
+all existing static Places and planning features continue to work. No OAuth credentials are
+included in this repository. The primary calendar is the only supported calendar in this
+implementation.
+
 The footer always names the data source (*built-in demo files* or *BU-sy API*). If a requested API can't be
 reached, a notice says so and the built-in demo files are used. Both modes give the same suggestions
 (see *Static and API modes* below).
@@ -65,7 +119,7 @@ window where nothing fits, with a one-tap fix the engine has checked.
 ## Checks
 
 ```bash
-python -m pytest                        # API, data loaders + gym import, analytics, events, CORS, static export == API
+python -m pytest                        # API, calendar OAuth/freebusy, data loaders + gym import, analytics, events
 node --test "tests/*.test.mjs"          # planner engine + static meetups (Node 22+, no packages; or: npm test)
 ```
 CI runs both (`.github/workflows/tests.yml`).

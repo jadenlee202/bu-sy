@@ -35,6 +35,7 @@ Try:    /api/facilities?at=17:30
         /api/facilities/COD_Bosch_Office_1_Clemente/history
         /docs
 """
+import logging
 import os
 from datetime import date, datetime, time
 from enum import Enum
@@ -52,6 +53,20 @@ from campus import Campus, load_campus
 from analytics import THRESHOLD_NOTE, latest_at
 from schedule_data import CLUB_SPORTS, INTRAMURALS, SCHEDULE
 from sources import Facility, load_all
+from google_calendar import router as calendar_router
+
+
+class CalendarCallbackLogFilter(logging.Filter):
+    def filter(self, record):
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                "/api/calendar/callback" if isinstance(value, str) and "/api/calendar/callback" in value else value
+                for value in record.args
+            )
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(CalendarCallbackLogFilter())
 
 app = FastAPI(title="BU-sy API (synthetic campus demo + COD historical playback)")
 LOCAL_TZ = ZoneInfo("America/New_York")  # demo clock for "now" when no `at` is given
@@ -64,9 +79,19 @@ CAMPUS = load_campus(FACILITIES)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.environ.get("BUSY_CORS_ORIGINS", "*").split(","),
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type", "X-BUsy-Device"],
+    allow_credentials=True,
 )
+
+
+@app.middleware("http")
+async def prevent_calendar_caching(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/calendar/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 # ---------- models ----------
@@ -459,4 +484,5 @@ def cancel_community_event(event_id: str, body: ce.TokenRequest):
 
 
 # The web app, served from the same origin so it finds /api automatically.
+app.include_router(calendar_router)
 app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

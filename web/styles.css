@@ -500,6 +500,25 @@ th { color: var(--muted); font-weight: 600; }
   .replay-row { flex-direction: row; align-items: flex-end; }
 }
 .place-week { grid-column: 1 / -1; }
+.calendar-connect, .calendar-results { display: flex; flex-direction: column; gap: 10px; }
+.calendar-connect h2, .calendar-results h2, .calendar-results h3 { margin: 0; }
+.calendar-controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.calendar-controls label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
+.calendar-date-controls { display: flex; align-items: center; gap: 4px; }
+.calendar-date-controls input { min-width: 0; flex: 1; }
+.calendar-controls :is(input, select) { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--subtle); }
+.calendar-controls .help { margin: 10px 0 0; }
+.calendar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.calendar-error { margin: 0; color: var(--red-text); font-weight: 600; }
+.calendar-total { margin: 0; }
+.calendar-timeline, .calendar-matches { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.calendar-interval, .calendar-matches li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); }
+.calendar-interval[data-kind="busy"] { background: var(--subtle); }
+.calendar-interval[data-kind="available"], .calendar-matches li { background: color-mix(in srgb, var(--red) 8%, var(--surface)); }
+.calendar-matches li { flex-direction: column; gap: 2px; }
+.calendar-matches li span { color: var(--muted); font-size: 13px; }
+.calendar-interval strong { min-width: 82px; }
+.calendar-results > .help { margin: 4px 0 0; }
 .heat { display: grid; grid-template-columns: 2.4em repeat(24, minmax(0, 1fr)); gap: 2px; margin-top: 12px; font-size: 11px; }
 .heat i { display: block; aspect-ratio: 1; min-height: 10px; border-radius: 3px; }
 .heat-hour { color: var(--muted); white-space: nowrap; overflow: visible; }

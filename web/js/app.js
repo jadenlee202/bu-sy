@@ -2,6 +2,7 @@ import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obs
 import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
 import { hoursText, openSegments } from "./recommend.js";
+import { calendarView } from "./calendar.js";
 import {
   addDays, buildingHoursSummary, campusDateTime, dateLabel, daySchedule, displaySchedule, formatPeriod,
   selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekRangeLabel, weekStart,
@@ -753,6 +754,7 @@ async function route() {
     section === "place" && id ? placeView(decodeURIComponent(id))
     : section === "events" && id === "new" ? newEventView()
     : section === "events" ? eventsView()
+    : section === "calendar" ? calendarView($view)
     : section === "about" ? aboutView()
     : section === "places" ? placesView()
     : planView($view, clock);

@@ -9,6 +9,7 @@
 /** The API asked for with ?api=https://host, or null for "same origin if present". */
 export const REQUESTED_API = new URLSearchParams(location.search).get("api")?.replace(/\/$/, "") || null;
 const API_BASE = REQUESTED_API ? `${REQUESTED_API}/api` : "api";
+const CALENDAR_API = `${API_BASE}/calendar`;
 
 export class SourceError extends Error {
   constructor(status, message) {
@@ -23,6 +24,15 @@ async function getJSON(url, options) {
     res = await fetch(url, options);
   } catch {
     throw new SourceError(0, "Can't reach the data source. Check your connection.");
+  }
+  if (res.status === 404) {
+    const path = new URL(url, location.href).pathname;
+    const dataPath = path.slice(path.lastIndexOf("/data/") + 1);
+    const isDataFile = dataPath !== path;
+    throw new SourceError(
+      404,
+      `${isDataFile ? "Required data file" : "Data endpoint"} not found: ${isDataFile ? dataPath : path}`,
+    );
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -88,6 +98,35 @@ export function getHours() {
     throw e;
   });
   return hoursPromise;
+}
+
+export async function calendarStatus() {
+  return getJSON(`${CALENDAR_API}/status`, { credentials: "include" });
+}
+
+export async function calendarConnect() {
+  return getJSON(`${CALENDAR_API}/connect`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ return_url: location.href }),
+  });
+}
+
+export async function calendarFreeBusy(date, timezone) {
+  return getJSON(`${CALENDAR_API}/freebusy`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date, timezone }),
+  });
+}
+
+export async function calendarDisconnect() {
+  return getJSON(`${CALENDAR_API}/disconnect`, {
+    method: "DELETE",
+    credentials: "include",
+  });
 }
 
 // ---------- per-device identity (anonymous) ----------
