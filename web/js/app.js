@@ -189,9 +189,6 @@ async function placesView() {
       const statusText = selectedStatus && ["open", "closed"].includes(selectedStatus.status)
         ? `<span class="row-hours-status" data-status="${selectedStatus.status}">${selectedStatusLabel(selectedStatus)}</span>`
         : "";
-      const sourceLink = locationHours?.sourceUrl
-        ? `<a class="row-hours-source" href="${esc(locationHours.sourceUrl)}" target="_blank" rel="noopener noreferrer">${summary === "Hours unverified" || summary === "Today's hours not published" ? "Source checked" : "Hours source"}: ${esc(locationHours.sourceLabel || "Official source")} · checked ${esc(locationHours.lastVerified || "date unknown")}</a>`
-        : "";
       return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
         <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
           <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(h.day_label)}</span>` : ""}</span>
@@ -199,7 +196,7 @@ async function placesView() {
         <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
         ${level(o?.busyness ?? (closed ? "closed" : "unknown"))}
         ${icon("chevron", 16)}
-      </a>${sourceLink}</li>`;
+      </a></li>`;
     };
     const places = rows.filter((f) => !isHistorical(f));
     const refs = rows.filter(isHistorical);
