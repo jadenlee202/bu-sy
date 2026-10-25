@@ -562,6 +562,18 @@ main > .hint, main > .form { max-width: 720px; }
 .club-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .club-hint .level { width: auto; }
 .club .row-side { font-size: 13px; }
+/* filters: a label column beside rows of chips that wrap (not scroll); labels go above the chips when narrow */
+.club-filters { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: start; gap: 12px 16px; }
+.filter-label { font-size: 13px; font-weight: 600; line-height: 20px; padding-top: 10px; color: var(--muted); }   /* centred on the first 40px chip line */
+.filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.club-filters .chips { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; gap: 8px; }
+.club-filters .filter-end { margin-left: auto; }
+@container (max-width: 34rem) {
+  .club-filters { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .club-filters .filter-label { padding-top: 0; }
+  .club-filters .filter-label:not(:first-child) { margin-top: 8px; }
+  .club-filters .filter-end { margin-left: 0; }
+}
 /* status: icon + word, and a different shape per state, so it never relies on color */
 .club-status { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1.5px solid var(--line-strong); white-space: nowrap; }
 .club-status[data-status="open"] { border-color: var(--red); color: var(--text); }
