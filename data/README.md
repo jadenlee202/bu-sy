@@ -95,6 +95,8 @@ If Kaggle asks you to sign in, download `data.csv` from the dataset page yoursel
 - **Playback days.** The app offers one week, chosen by a fixed rule: the most recent full Monday–Sunday
   in a semester with no holiday, no offset change and at least 18 hours covered each day (5–11 Dec 2016). Only
   those 7 days are exported for static mode; the API also accepts other recorded dates via `?date=`.
+  On the gym page the replay slider covers the selected day's recorded hours (12 AM–11:55 PM), so early
+  mornings and late nights can be replayed; screens that mix places keep 7 AM–11 PM.
 - **Not a destination.** It has no BU location, walking times, hours, amenities or equipment list, and is never a
   campus suggestion (`campus_eligible: false`).
 

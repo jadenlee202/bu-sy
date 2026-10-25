@@ -400,6 +400,7 @@ label.check { display: flex; flex-direction: row; align-items: center; gap: 12px
 .pb-time { font-weight: 650; font-size: 16px; }
 .pb-status { font-size: 13px; color: var(--muted); }
 .pb-range { width: 100%; margin: 4px 0 0; height: 24px; background: transparent; -webkit-appearance: none; appearance: none; }
+.pb-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: -2px; }
 .pb-range::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: var(--line-strong); }
 .pb-range::-moz-range-track { height: 4px; border-radius: 4px; background: var(--line-strong); }
 .pb-range::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -10px; border: 0; background: var(--thumb) center / contain no-repeat; }
