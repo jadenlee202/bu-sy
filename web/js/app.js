@@ -196,7 +196,7 @@ function playbackBar() {
   return `<div class="playback" role="group" aria-label="Historical playback">
     <button class="icon-btn pb-toggle" data-pb="toggle"></button>
     <div class="pb-main">
-      <div class="pb-row"><span class="pb-time num"></span><span class="pb-status"></span></div>
+      <div class="pb-row"><span><span class="pb-time num"></span><span class="pb-time-label">Replay time</span></span><span class="pb-status"></span></div>
       <input class="pb-range" type="range" min="${DAY_START}" max="${DAY_END}" step="1" aria-label="Playback time">
       <div class="pb-ends num" aria-hidden="true"><span>${fmtTime(DAY_START)}</span><span>${fmtTime(DAY_END)}</span></div>
     </div>
@@ -206,11 +206,18 @@ function playbackBar() {
 
 function syncPlayback() {
   const ended = state.minute >= DAY_END;
+  // Elapsed share of the day, for the filled part of the track (CSS custom property, no layout work).
+  const pct = `${((state.minute - DAY_START) / (DAY_END - DAY_START)) * 100}%`;
+  for (const el of document.querySelectorAll(".playback")) {
+    el.classList.toggle("is-playing", state.playing);
+    el.style.setProperty("--pct", pct);
+  }
   for (const el of document.querySelectorAll(".pb-time")) el.textContent = fmtTime(state.minute);
   for (const el of document.querySelectorAll(".pb-status")) {
     el.textContent = state.playing ? "Replay running" : ended ? "End of replay" : "Replay paused";
   }
   for (const el of document.querySelectorAll(".pb-range")) {
+    el.style.setProperty("--pct", pct);
     el.value = state.minute;
     el.setAttribute("aria-valuetext", fmtTime(state.minute));
   }
@@ -220,6 +227,20 @@ function syncPlayback() {
   }
   view?.update?.();
 }
+
+/**
+ * After a re-render driven by the replay clock, briefly mark counts whose value changed, so the
+ * eye can follow what moved. `before` maps a key to the old text. Values are never interpolated:
+ * the number shown is always the real one; only a short opacity/position cue is added (CSS).
+ */
+function markChanged(root, selector, keyOf, before) {
+  if (state.playing) return; // during playback every tick changes values; a cue each tick would flicker
+  for (const el of root.querySelectorAll(selector)) {
+    const old = before.get(keyOf(el));
+    if (old != null && old !== el.textContent) el.classList.add("is-changed");
+  }
+}
+const snapshot = (root, selector, keyOf) => new Map([...root.querySelectorAll(selector)].map((el) => [keyOf(el), el.textContent]));
 
 function setPlaying(on) {
   clearInterval(state.timer);
@@ -396,10 +417,13 @@ async function placesView() {
     };
     const places = rows.filter((f) => !isHistorical(f));
     const refs = rows.filter(isHistorical);
+    const countKey = (el) => el.closest("a.row")?.getAttribute("href");
+    const before = snapshot($list, ".row-count", countKey);
     $list.innerHTML = `${filtered.notice}${places.length ? `<ul class="list" aria-label="Places">${places.map(row).join("")}</ul>` : ""}${uncheckedNote}
       ${refs.length ? `<section class="refs"><h2 class="section-title">Historical references</h2>
         <p class="help">Real recordings from outside BU, replayed for comparison. Never suggested as places to go.</p>
         <ul class="list" aria-label="Historical references">${refs.map(row).join("")}</ul></section>` : ""}`;
+    markChanged($list, ".row-count", countKey, before);
   };
 
   $view.querySelector(".search input").addEventListener("input", (e) => { state.query = e.target.value; update(); });
@@ -588,12 +612,15 @@ async function placeView(id) {
       : why === "before" ? `No data yet: recording starts at ${fmtHHMM(hist.observations[0]?.observed_at.slice(11, 19) ?? hist.coverage_start)}`
       : why === "gap" ? `No data: nothing recorded in the ${hist.max_hold_minutes} min before ${fmtTime(state.minute)}`
       : "Recording has ended for this day";
+    const beforeCount = $hero.querySelector(".big")?.textContent;
     $hero.innerHTML = `
       <div class="hero-count">${closed ? `<span class="big">Closed</span>`
         : `<span class="big num">${fmtCount(o?.occupancy_count)}</span><span class="unit">${o ? "people" : ""}</span>`}</div>
       ${closed ? "" : level(o?.busyness ?? "unknown")}
       ${hist.busyness_label && o ? `<p class="meta">${esc(hist.busyness_label)}</p>` : ""}
       <p class="meta">${meta}</p>`;
+    const $big = $hero.querySelector(".big");
+    if (!state.playing && beforeCount != null && $big && beforeCount !== $big.textContent) $big.classList.add("is-changed");
 
     const q = quieterTime(hist, state.minute);
     const word = historical ? "Historically quieter" : q.usual ? "Usually quieter" : "Quieter later that day";
@@ -693,6 +720,7 @@ function barChart(el, hist) {
   const step = [1, 2, 2.5, 3, 4, 5, 10].map((k) => k * mag).find((s) => s * 3 >= rawMax);
   const yMax = step * 3;
 
+  let drawn = false;
   function draw() {
     const W = Math.max(280, el.clientWidth);
     const pw = W - M.l - M.r, ph = H - M.t - M.b;
@@ -716,12 +744,13 @@ function barChart(el, hist) {
     const labels = bars.map((b, i) => (b.hour % 3 === 0
       ? `<text class="axis" x="${x(i) + bw / 2}" y="${H - 6}" text-anchor="middle">${fmtHour(b.hour)}</text>` : "")).join("");
     const line = typical
-      ? `<polyline class="typical" points="${typical.filter((b) => b.occupancy != null)
+      ? `<polyline class="typical" pathLength="1" points="${typical.filter((b) => b.occupancy != null)
           .map((b) => `${x(b.hour - bars[0].hour) + bw / 2},${y(b.occupancy)}`).join(" ")}"/>`
       : "";
     const peak = bars.reduce((a, b) => ((b.occupancy ?? -1) > (a.occupancy ?? -1) ? b : a));
-    el.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Average people per hour on ${esc(hist.day_label)}. Busiest at ${fmtHour(peak.hour)} with about ${fmtCount(peak.occupancy)}.">${grid}${rects}${line}${labels}</svg>`;
+    el.innerHTML = `<svg class="${drawn ? "" : "is-entering"}" width="${W}" height="${H}" role="img" aria-label="Average people per hour on ${esc(hist.day_label)}. Busiest at ${fmtHour(peak.hour)} with about ${fmtCount(peak.occupancy)}.">${grid}${rects}${line}${labels}</svg>`;
     el.append(tip);
+    drawn = true;
 
     const svg = el.querySelector("svg");
     svg.addEventListener("pointermove", (e) => {
@@ -869,6 +898,7 @@ async function route() {
   view?.dispose?.();
   view = null;
   window.scrollTo(0, 0);
+  enterView();
   const next =
     section === "place" && id ? placeView(decodeURIComponent(id))
     : section === "clubs" && id === "new" ? clubFormView($view)
@@ -893,6 +923,15 @@ async function route() {
   const mounted = await next;
   if (location.hash.replace(/^#\/?/, "") === hash) view = mounted;
 }
+
+// Entrance cue for a new screen: restart a short CSS animation on <main>. It runs once per
+// navigation (never on replay ticks), uses only opacity/transform, and is off under reduced motion.
+function enterView() {
+  $view.classList.remove("view-enter");
+  void $view.offsetWidth; // restart the animation
+  $view.classList.add("view-enter");
+}
+$view.addEventListener("animationend", (e) => { if (e.target === $view) $view.classList.remove("view-enter"); });
 
 // ---------- theme ----------
 const root = document.documentElement;

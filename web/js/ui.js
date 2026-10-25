@@ -11,7 +11,7 @@ export const level = (l, text = LEVEL[l]) =>
   `<span class="level" data-level="${l}"><span class="meter" aria-hidden="true"><i></i><i></i><i></i></span>${esc(text)}</span>`;
 
 export function loading(text = "Fetching the latest…") {
-  return `<div class="state">${terrier({ size: 44 })}<p>${esc(text)}</p></div>`;
+  return `<div class="state is-loading" role="status">${terrier({ size: 44 })}<p>${esc(text)}</p></div>`;
 }
 
 export function failure(err, retry = "location.reload()") {
