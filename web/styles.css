@@ -120,6 +120,22 @@ button { cursor: pointer; }
   .demo-pill { padding: 0 8px; }
   .demo-pill::before { margin-right: 5px; }
 }
+/* Phones: Plan, Places and Calendar plus the Simulated pill and theme button don't fit beside the
+   wordmark, so it steps aside (the logo stays; the link keeps its "BU-sy home" label). */
+@media (max-width: 34.99rem) {
+  .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@media (max-width: 23.5rem) {
+  .nav a { padding: 8px 7px; font-size: 13px; }
+  .demo-pill { padding: 0 6px; font-size: 12px; }
+  .side { gap: 2px; }
+}
+/* The smallest phones: the tab row scrolls on its own instead of widening the page. */
+@media (max-width: 21rem) {
+  .nav { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { flex: none; }
+}
 
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 main {
@@ -367,6 +383,7 @@ label.check { display: flex; flex-direction: row; align-items: center; gap: 12px
 .vseg[data-level="unknown"] { background: repeating-linear-gradient(135deg, var(--bar) 0 3px, transparent 3px 6px); }
 .rec-reason { margin: 0; padding-left: 10px; border-left: 3px solid var(--red); font-size: 14px; }
 .why { margin: 2px -18px 0; padding: 0 18px; border-top: 1px solid var(--line); }
+main > .why { margin-inline: 0; padding-inline: 0; }   /* on a page, not in a card: no bleed past the edge */
 .why summary { display: flex; align-items: center; gap: 6px; min-height: 46px; cursor: pointer; list-style: none; font-size: 14px; font-weight: 600; }
 .why-body { display: flex; flex-direction: column; gap: 12px; padding-bottom: 16px; font-size: 14px; }
 .why-sum { margin: 0; font-weight: 500; }
