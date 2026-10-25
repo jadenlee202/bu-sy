@@ -230,20 +230,54 @@ test("the week strip shows seven days; a later day's gaps get suggestions you ca
   await expect(page.locator(".blk.is-busy").nth(0)).toContainText("PS 101 Lecture");
   await expect(page.locator(".now-line")).toHaveCount(0);                     // not today
   await expect(page.locator(".now-card")).toHaveCount(0);
-  // the gap over lunch suggests eating first; switching it to study re-plans just that gap
-  const lunch = page.locator(".blk.is-free").nth(1);                             // 10:45 AM – 2:00 PM
-  await expect(lunch).toContainText("Eat at");
-  await expect(lunch).toContainText(/\b45 min\b/);                            // one meal, not the whole gap
-  await lunch.getByRole("button", { name: "Study" }).click();
-  await expect(page.locator(".blk.is-free").nth(1)).toContainText("Study at");
-  await page.locator(".blk.is-free").nth(1).getByRole("button", { name: "Plan this" }).click();
+  // 10:45 AM – 2 PM: lunch from 11, then study, both inside the gap
+  const midday = page.locator(".blk.is-free").nth(1);
+  await expect(midday.locator(".fill")).toHaveCount(2);
+  await expect(midday.locator(".fill").nth(0)).toContainText("11:00 AM");
+  await expect(midday.locator(".fill").nth(0)).toContainText("Lunch at");
+  await expect(midday.locator(".fill").nth(0)).toContainText(/\b45 min\b/);   // one meal, not the whole gap
+  await expect(midday.locator(".fill").nth(1)).toContainText("Study at");
+  // 3 PM on: the run club meets 6–7 PM, so it's offered; adding it turns it into a busy block
+  const evening = page.locator(".blk.is-free").nth(2);
+  await expect(evening.locator(".fill.is-club")).toContainText("Charles River Run Club");
+  await expect(evening.locator(".fill.is-club")).toContainText("6:00 PM – 7:00 PM");
+  await expect(evening).toContainText("Dinner at");
+  await evening.getByRole("button", { name: "Add to calendar" }).click();
+  await expect(page.locator(".blk.is-busy")).toHaveCount(3);
+  await expect(page.locator(".blk.is-busy").nth(2)).toContainText("Charles River Run Club meeting");
+  await expect(page.locator(".fill.is-club")).toHaveCount(0);
+  await midday.locator(".fill").nth(1).getByRole("button", { name: "Plan this" }).click();
   await expect(page.locator(".place")).toBeVisible();
   await expect(page.locator(".steps")).toContainText("Study until");
-  await expect(page.locator(".what")).toContainText("120 min");             // a two-hour study block inside the gap
   await page.getByRole("link", { name: "Change" }).click();
   await expect(page.locator(".chip.free")).toContainText("Planning Tue, Oct 27");
   await page.getByRole("button", { name: "Use now" }).click();
   await expect(page.locator(".chip.free")).not.toContainText("Planning");
   await expect(page.locator(".chip.free")).toContainText("Free until 4:00 PM");   // back to now: Monday 3 PM is free until CS 111
+  expect(errors).toEqual([]);
+});
+
+test("every event on the calendar is busy, even one marked free; nothing is suggested over it", async ({ page }) => {
+  const errors = browserErrors(page);
+  await onboard(page);
+  await page.locator('.tabs a[data-tab="schedule"]').click();
+  const raw = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//test//EN",
+    "BEGIN:VEVENT", "UID:a", "DTSTAMP:20261001T000000Z", "SUMMARY:Office hours", "TRANSP:TRANSPARENT",
+    "DTSTART;TZID=America/New_York:20261027T120000", "DTEND;TZID=America/New_York:20261027T130000", "END:VEVENT",
+    "BEGIN:VEVENT", "UID:b", "DTSTAMP:20261001T000000Z", "SUMMARY:Early lab",
+    "DTSTART;TZID=America/New_York:20261027T070000", "DTEND;TZID=America/New_York:20261027T080000", "END:VEVENT",
+    "BEGIN:VEVENT", "UID:c", "DTSTAMP:20261001T000000Z", "SUMMARY:Midterm week",
+    "DTSTART;VALUE=DATE:20261027", "DTEND;VALUE=DATE:20261028", "END:VEVENT", "END:VCALENDAR", ""].join("\r\n");
+  await page.locator("#ics").setInputFiles({ name: "cal.ics", mimeType: "text/calendar", buffer: Buffer.from(raw) });
+  await page.locator('.week .day[data-day="2026-10-27"]').click();
+  await expect(page.locator(".allday")).toContainText("Midterm week");
+  await expect(page.locator(".blk.is-busy")).toHaveCount(2);
+  await expect(page.locator(".blk.is-busy").nth(0)).toContainText("Early lab");       // before 8 AM, still shown
+  await expect(page.locator(".blk.is-busy").nth(1)).toContainText("Office hours");    // marked free in the file, busy here
+  // no suggestion overlaps noon to 1 PM
+  for (const when of await page.locator(".fill .when").allTextContents()) {
+    const [a, b] = when.split(" – ").map((t) => { const [, h, m, ap] = t.match(/(\d+):(\d+) (AM|PM)/); return (Number(h) % 12 + (ap === "PM" ? 12 : 0)) * 60 + Number(m); });
+    expect(b <= 12 * 60 || a >= 13 * 60, when).toBe(true);
+  }
   expect(errors).toEqual([]);
 });

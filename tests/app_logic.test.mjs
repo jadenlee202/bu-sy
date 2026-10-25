@@ -31,13 +31,13 @@ test("free now is the usable segment containing the current time", () => {
   assert.equal(L.minutesBetween(0, 20 * H), L.MAX_MINUTES);
 });
 
-test("the next event skips free and all-day entries", () => {
+test("the next event skips all-day entries; one marked free still counts", () => {
   const events = [
     { start: 5, end: 9, title: "All day", allDay: true },
     { start: 6, end: 7, title: "Free", free: true },
     { start: 8, end: 9, title: "Class" },
   ];
-  assert.equal(L.nextEvent(events, 4).title, "Class");
+  assert.equal(L.nextEvent(events, 4).title, "Free");          // it's on the calendar, so it's busy
   assert.equal(L.nextEvent(events, 9), null);
 });
 
@@ -114,11 +114,23 @@ test("hours read in words, never guessed", () => {
   assert.equal(L.hoursText({ status: "unverified", periods: [] }, fmt), "Unverified");
 });
 
-test("a gap over lunch or dinner suggests a meal first; others suggest study, then a workout", () => {
-  assert.deepEqual(L.gapOrder(12 * 60, 13 * 60), ["eat", "study", "workout"]);
-  assert.deepEqual(L.gapOrder(10 * 60 + 15, 11 * 60 + 30), ["eat", "study", "workout"]);   // overlaps lunch
-  assert.deepEqual(L.gapOrder(15 * 60, 16 * 60), ["study", "workout", "eat"]);
-  assert.deepEqual(L.gapOrder(20 * 60, 22 * 60), ["study", "workout", "eat"]);             // after dinner
+test("a gap is filled around the calendar: clubs that fit, a meal at mealtimes, then study", () => {
+  const club = (h1, h2, name) => ({ start: h1 * 60, end: h2 * 60, meeting: { clubName: name } });
+  // 3 PM – 10 PM: a 6–7 PM club, dinner before it (from 5), study in the longest stretch left (after the club)
+  const evening = L.fillGap(15 * 60, 22 * 60, [club(18, 19, "Run Club")]);
+  assert.deepEqual(evening.map((s) => [s.kind, s.start / 60, s.end / 60]), [["eat", 17, 18], ["club", 18, 19], ["study", 19, 21.5]]);
+  assert.equal(evening[0].label, "Dinner");
+  // a club that runs past the gap's end would overlap the next event, so it isn't offered
+  assert.deepEqual(L.fillGap(15 * 60, 18.5 * 60, [club(18, 19, "Run Club")]).map((s) => s.kind), ["study", "eat"]);
+  // 10:45 AM – 2 PM: lunch from 11, study after it
+  const midday = L.fillGap(10.75 * 60, 14 * 60);
+  assert.deepEqual(midday.map((s) => [s.kind, s.start, s.end]), [["eat", 660, 735], ["study", 735, 840]]);
+  assert.equal(midday[0].label, "Lunch");
+  // nothing ever leaves the gap or overlaps another slot
+  for (const slots of [evening, midday, L.fillGap(8 * 60, 22 * 60, [club(12, 13, "A"), club(12.5, 13.5, "B")])]) {
+    slots.forEach((s, i) => { assert.ok(s.end > s.start); if (i) assert.ok(s.start >= slots[i - 1].end); });
+  }
+  assert.deepEqual(L.fillGap(15 * 60, 15.5 * 60), []);           // 30 minutes outside mealtimes: too short to study
 });
 
 test("the day map keeps events inside busy blocks and marks now", () => {
@@ -130,10 +142,10 @@ test("the day map keeps events inside busy blocks and marks now", () => {
     { start: 13 * H, end: 13 * H + 10 * M, kind: "short" },
   ];
   const events = [{ start: 9 * H, end: 10.25 * H, title: "WR 120" }, { start: 9.5 * H, end: 10 * H, title: "Club call", source: "club" },
-    { start: 9 * H, end: 10 * H, title: "Free hold", free: true }];
+    { start: 9 * H, end: 10 * H, title: "Free hold", free: true }, { start: 0, end: 24 * H, title: "Holiday", allDay: true }];
   const b = L.dayBlocks(segs, events, 11 * H);
   assert.deepEqual(b.map((x) => x.kind), ["past", "busy", "free", "short"]);
-  assert.deepEqual(b[1].titles, ["WR 120", "Club call"]);       // free events aren't busy
+  assert.deepEqual(b[1].titles, ["WR 120", "Club call", "Free hold"]);   // anything on the calendar is busy; all-day events sit above the day
   assert.equal(b[1].club, true);
   assert.equal(b[1].over, true);                                // already finished
   assert.equal(b[2].minutes, 165);

@@ -44,7 +44,8 @@ async function fetchData() {
   const ids = [...new Set(campus.places.map((p) => p.facility_id))];
   const histories = Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await src.getHistory(id)])));
   const geo = await fetch("app/places-geo.json").then((r) => (r.ok ? r.json() : { locations: {} })).catch(() => ({ locations: {} }));
-  return { campus, hours, histories, geo: geo.locations, planDate: engine.demoDate(campus, histories) };
+  const clubs = await src.clubs.list().catch(() => []);   // their weekly meetings fill gaps on the Schedule map
+  return { campus, hours, histories, geo: geo.locations, clubs, planDate: engine.demoDate(campus, histories) };
 }
 
 /** The campus the engine plans on: from your location when we have it, else as published. */
@@ -77,19 +78,29 @@ const icon = {
 };
 
 // ---------- today's schedule (shared with the main app's Calendar) ----------
-/** One campus day (8 AM–10 PM) from the imported calendar and saved club meetings. */
+/**
+ * One campus day (8 AM–10 PM, stretched to show any earlier or later event) from the imported calendar and
+ * saved club meetings. Every timed event blocks its time, even one the calendar marks "free"; all-day events
+ * are listed above the day instead of blocking all of it.
+ */
 function dayData(date) {
   const now = Date.now();
-  const start = zonedInstant(date, DAY[0], TZ), end = zonedInstant(date, DAY[1], TZ);
+  const midnight = zonedInstant(date, "00:00", TZ), nextMidnight = zonedInstant(addDays(date, 1), "00:00", TZ);
   const schedule = loadSchedule();
   const clubs = loadClubEvents();
-  const busy = [...(schedule ? busyOf(schedule) : []), ...clubBusy(clubs)];
+  const items = schedule ? eventsOf(schedule) : [];
+  const onDay = [...(items ?? []), ...clubEventItems(clubs)]
+    .filter((e) => e.end > midnight && e.start < nextMidnight).sort((a, b) => a.start - b.start);
+  const timed = onDay.filter((e) => !e.allDay);
+  const start = Math.max(midnight, Math.min(zonedInstant(date, DAY[0], TZ), ...timed.map((e) => e.start)));
+  const end = Math.min(nextMidnight, Math.max(zonedInstant(date, DAY[1], TZ), ...timed.map((e) => e.end)));
+  // a schedule saved before events were kept only has its busy ranges
+  const busy = items ? timed.map(({ start: s, end: e }) => ({ start: s, end: e })) : [...busyOf(schedule), ...clubBusy(clubs)];
   const segments = daySegments(busy, start, end, 15, now);
-  const events = [...(schedule ? eventsOf(schedule) ?? [] : []), ...clubEventItems(clubs)]
-    .filter((e) => e.end > start && e.start < end).sort((a, b) => a.start - b.start);
+  const events = timed.filter((e) => e.end > start && e.start < end);
   // a day the calendar file doesn't reach is unknown, not free
   const covered = !schedule || covers(schedule, start, end);
-  return { now, date, start, end, schedule, clubs, segments, events, covered, hasAny: Boolean(schedule || clubs.length) };
+  return { now, date, start, end, schedule, clubs, segments, events, allDay: onDay.filter((e) => e.allDay), covered, hasAny: Boolean(schedule || clubs.length) };
 }
 const today = () => dayData(campusDateTime().date);
 
@@ -115,32 +126,33 @@ function request() {
 // ---------- the day map: a suggestion for every free gap ----------
 const bostonFmt = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const bostonMin = (ms) => toMin(bostonFmt.format(new Date(ms)));
-const ui2 = { gapAct: {} };                           // activity picked per gap (keyed by its start), this visit only
+const ui2 = { meetings: {} };                         // club meetings offered on the map, by id, for "Add"
 
 /**
- * What to do in a free gap: the shared engine, from where you are, for the gap's activity order
- * (a meal over lunch or dinner, otherwise study, then a workout), or the one the student picked.
- * Returns the top place, or the best unchecked one when walks can't be timed, or null when nothing fits.
+ * What to do in a free gap: L.fillGap() lays out club meetings that fit inside it, a meal at mealtimes and
+ * a study block, none overlapping each other or anything on the calendar; the shared engine then picks the
+ * place for each meal and study slot, from where you are. A slot with no place that fits is left out.
  */
-function suggestGap(seg, date) {
-  const startMin = L.roundUp5(bostonMin(Math.max(seg.start, Date.now())));
-  const gapMinutes = Math.min(L.MAX_MINUTES, bostonMin(seg.end) - startMin);
-  if (gapMinutes < 15) return null;
-  const picked = ui2.gapAct[seg.start];
-  const order = picked ? [picked] : L.gapOrder(bostonMin(seg.start), bostonMin(seg.end));
-  for (const act of order) {
-    const minutes = L.gapPlanMinutes(gapMinutes, 30, act);   // one session plus up to a 30-minute walk
-    const d = prefs.defaults(data.campus, prefs.loadPrefs(data.campus), act);
-    const req = L.buildRequest({ activity: act, minutes, from: loc.here ? L.HERE : loc.near, access: settings.access }, d, toHHMM(startMin), date ?? data.planDate);
+function suggestGap(seg, dayIso, date) {
+  const startMin = L.roundUp5(bostonMin(seg.start));
+  const endMin = seg.end >= zonedInstant(addDays(dayIso, 1), "00:00", TZ) ? 24 * 60 : bostonMin(seg.end);
+  if (endMin - startMin < 15) return [];
+  const saved = new Set(loadClubEvents().map((e) => e.id));
+  const meetings = (data.clubs ?? []).flatMap((c) => clubMeetings(c).regular)
+    .filter((m) => m.date === dayIso && !saved.has(m.id))
+    .map((m) => ({ start: toMin(m.start), end: toMin(m.end), meeting: m }));
+  return L.fillGap(startMin, endMin, meetings).flatMap((slot) => {
+    if (slot.kind === "club") return [slot];
+    const minutes = slot.end - slot.start;
+    const d = prefs.defaults(data.campus, prefs.loadPrefs(data.campus), slot.kind);
+    const req = L.buildRequest({ activity: slot.kind, minutes, from: loc.here ? L.HERE : loc.near, access: settings.access }, d, toHHMM(slot.start), date ?? data.planDate);
     const r = engine.recommend(req, tripCampus(), data.histories, { hours: data.hours, suggest: false });
-    if (!r.ok) continue;
-    const o = r.options[0] ?? r.browse[0];
-    if (o) {
-      const planMinutes = L.gapPlanMinutes(gapMinutes, o.there, act);
-      return { act, o, checked: Boolean(r.options[0]), minutes: planMinutes, session: Math.min(o.activity, L.SESSION_CAP[act] ?? o.activity), start: toHHMM(startMin) };
-    }
-  }
-  return { act: order[0], o: null, minutes: gapMinutes, start: toHHMM(startMin) };
+    const o = r.ok ? r.options[0] ?? r.browse[0] : null;
+    if (!o) return [];
+    const planMinutes = L.gapPlanMinutes(minutes, o.there, slot.kind);
+    return [{ ...slot, end: slot.start + planMinutes, o, checked: Boolean(r.options[0]), minutes: planMinutes,
+      session: Math.min(o.activity, L.SESSION_CAP[slot.kind] ?? o.activity) }];
+  });
 }
 
 // ---------- router + transitions ----------
@@ -417,7 +429,7 @@ const SCREENS = {
     }
     const free = L.freeNow(t.segments, t.now);
     const later = L.laterFree(t.segments, t.now);
-    const busyNow = t.events.find((e) => !e.free && e.start <= t.now && t.now < e.end);
+    const busyNow = t.events.find((e) => e.start <= t.now && t.now < e.end);
     const next = L.nextEvent(t.events, free ? free.start : t.now);
     const nowCard = free
       ? `<div class="card now-card"><span class="when">${at(t.now)} – ${at(free.end)}</span>
@@ -439,6 +451,7 @@ const SCREENS = {
             <p class="label" style="margin:0">${isToday ? "Your day" : esc(dayFmt.format(new Date(`${ui.day}T12:00:00Z`)))}</p>
             ${loc.here || loc.near ? "" : `<button class="btn quiet" type="button" data-locate style="min-height:32px;padding:0;font-size:13px">Use my location for walks</button>`}</div>
           ${t.covered ? "" : `<p class="chip warn">Your calendar file doesn't cover this day, so its free time is unknown.</p>`}
+          ${t.covered && t.allDay.length ? `<ul class="allday">${t.allDay.map((e) => `<li><b>All day</b> ${esc(e.title || "Event")}</li>`).join("")}</ul>` : ""}
           <ol class="daymap">${(t.covered ? L.dayBlocks(t.segments, t.events, t.now) : []).map((blk) => {
             const time = `<time>${at(blk.start)}</time>`;
             const nowLine = blk.nowAt != null ? `<span class="now-line" style="top:${(blk.nowAt * 100).toFixed(1)}%"><b>now</b></span>` : "";
@@ -446,18 +459,23 @@ const SCREENS = {
               <div class="body"><span class="title">${esc(blk.titles.join(" · ") || "Busy")}</span><span class="sub">${at(blk.start)} – ${at(blk.end)}${blk.club ? " · club" : ""}</span></div>${nowLine}</li>`;
             if (blk.kind !== "free" || blk.over) return `<li class="blk is-${blk.kind} over" style="min-height:${blk.height}px">${time}
               <div class="body"><span class="sub">${blk.kind === "short" ? `${blk.minutes} min break` : `Free · ${esc(L.durationText(blk.minutes))}`}</span></div>${nowLine}</li>`;
-            const g = suggestGap(blk, isToday ? null : ui.day);
-            const acts = data.campus.activities.map((x) => `<button type="button" class="chip-btn" data-gap="${blk.start}" data-act="${x.id}" aria-pressed="${g?.act === x.id}">${esc(x.label)}</button>`).join("");
-            const what = !g ? "" : g.o
-              ? `<span class="title">${esc(actInfo(g.act).label)} at ${esc(g.o.place.name)}</span>
-                 <span class="sub">${g.session} min${g.checked ? ` · ${g.o.there ? `${g.o.there} min walk` : "you're there"}` : " · walk not timed"} · ${meter(L.visitWords(g.o).peak, true)}</span>`
-              : `<span class="sub">Nothing fits for ${esc(actInfo(g.act).verb)} in this gap.</span>`;
+            const fills = suggestGap(blk, ui.day, isToday ? null : ui.day).map((f) => {
+              const when = `<span class="when">${fmtTime(f.start)} – ${fmtTime(f.end)}</span>`;
+              if (f.kind === "club") {
+                ui2.meetings[f.meeting.id] = f.meeting;
+                return `<li class="fill is-club">${when}<span class="title">${esc(f.meeting.clubName)}</span>
+                  <span class="sub">Club meeting${f.meeting.location ? ` · ${esc(f.meeting.location)}` : ""}</span>
+                  <button class="btn" type="button" data-add-meeting="${esc(f.meeting.id)}">Add to calendar</button></li>`;
+              }
+              return `<li class="fill">${when}<span class="title">${esc(f.kind === "eat" ? f.label : "Study")} at ${esc(f.o.place.name)}</span>
+                <span class="sub">${f.session} min${f.checked ? ` · ${f.o.there ? `${f.o.there} min walk` : "you're there"}` : " · walk not timed"} · ${meter(L.visitWords(f.o).peak, true)}</span>
+                <button class="btn primary" type="button" data-plan-slot data-act="${f.kind}" data-minutes="${f.minutes}" data-start="${toHHMM(f.start)}" data-place="${esc(f.o.place.place_id)}">Plan this</button></li>`;
+            }).join("");
             return `<li class="blk is-free" style="min-height:${blk.height}px">${time}
-              <div class="body"><span class="free-len">Free · ${esc(L.durationText(blk.minutes))}</span>${what}
-                <div class="acts" role="group" aria-label="Suggest for">${acts}</div>
-                ${g?.o ? `<button class="btn primary" type="button" data-plan-gap="${blk.start}" data-act="${g.act}" data-minutes="${g.minutes}" data-start="${g.start}" data-place="${esc(g.o.place.place_id)}">Plan this</button>` : ""}</div>${nowLine}</li>`;
+              <div class="body"><span class="free-len">Free · ${esc(L.durationText(blk.minutes))}</span>
+                ${fills ? `<ul class="fills">${fills}</ul>` : `<span class="sub">Nothing to suggest here. Enjoy the break.</span>`}</div>${nowLine}</li>`;
           }).join("")}</ol>
-          <p class="fine">Suggestions use the same planner: the walk from where you are, then the activity. Busyness is simulated.</p></div>
+          <p class="fine">Anything on your calendar counts as busy. Suggestions fit between events: club meetings, meals at mealtimes, then study, each with the walk from where you are. Busyness is simulated.</p></div>
         <p class="fine">${t.schedule ? `From ${esc(t.schedule.fileName)} · ` : "Only club meetings so far · "}${input}<label for="ics" style="cursor:pointer;color:var(--accent);font-weight:600">${t.schedule ? "Replace" : "Add your class calendar"}</label>${t.schedule ? ` · <button type="button" data-clear style="border:none;background:none;padding:0;color:var(--accent);font-weight:600;cursor:pointer">Clear</button>` : ""}</p>
         ${ui.scheduleMsg ? `<p class="chip warn" role="alert">${esc(ui.scheduleMsg)}</p>` : ""}
       </section>`;
@@ -466,13 +484,15 @@ const SCREENS = {
       Object.assign(sentence, { start: null, date: null, picked: false, chosen: null });
       go("#/");
     });
-    for (const b of $view.querySelectorAll("[data-act][data-gap]")) b.addEventListener("click", () => {
-      ui2.gapAct[b.dataset.gap] = b.dataset.act; SCREENS.schedule();
-      $view.querySelector(`[data-gap="${b.dataset.gap}"][data-act="${b.dataset.act}"]`)?.focus();
-    });
-    for (const b of $view.querySelectorAll("[data-plan-gap]")) b.addEventListener("click", () => {
+    for (const b of $view.querySelectorAll("[data-plan-slot]")) b.addEventListener("click", () => {
       Object.assign(sentence, { start: b.dataset.start, date: isToday ? null : ui.day, minutes: Number(b.dataset.minutes), activity: b.dataset.act, picked: true, patch: {}, chosen: b.dataset.place });
       go("#/answer");
+    });
+    for (const b of $view.querySelectorAll("[data-add-meeting]")) b.addEventListener("click", () => {
+      const m = ui2.meetings[b.dataset.addMeeting];
+      try { addClubEvent(m); } catch (e) { ui.scheduleMsg = e.message || "This meeting couldn't be saved in this browser."; SCREENS.schedule(); return; }
+      SCREENS.schedule();
+      $announce.textContent = `${m.clubName} meeting added to your calendar.`;
     });
     for (const b of $view.querySelectorAll("[data-day]")) b.addEventListener("click", () => {
       ui.day = b.dataset.day; SCREENS.schedule(); $view.querySelector(`[data-day="${ui.day}"]`)?.focus();

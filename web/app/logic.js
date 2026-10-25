@@ -28,7 +28,7 @@ export const minutesBetween = (from, to) => Math.min(MAX_MINUTES, Math.floor((to
 
 /** The next event starting at or after `t`, from a list of { start, end, title }. */
 export function nextEvent(events, t) {
-  return events.filter((e) => !e.free && !e.allDay && e.start >= t).sort((a, b) => a.start - b.start)[0] ?? null;
+  return events.filter((e) => !e.allDay && e.start >= t).sort((a, b) => a.start - b.start)[0] ?? null;
 }
 
 /**
@@ -142,10 +142,38 @@ export function hoursText(day, formatPeriod) {
 export const SESSION_CAP = { eat: 45, workout: 75, study: 120 };
 /** Minutes to plan for a gap: the walk there plus at most one session, never more than the gap. */
 export const gapPlanMinutes = (gapMinutes, walk, activity) => Math.min(gapMinutes, (walk ?? 0) + (SESSION_CAP[activity] ?? gapMinutes));
-export const MEALS = [[11 * 60, 14 * 60], [17 * 60, 20 * 60]];   // lunch and dinner, campus minutes of the day
-/** What to suggest first for a gap: a meal when it overlaps lunch or dinner, otherwise study, then a workout. */
-export function gapOrder(startMin, endMin) {
-  return MEALS.some(([a, b]) => startMin < b && endMin > a) ? ["eat", "study", "workout"] : ["study", "workout", "eat"];
+export const MEALS = [
+  { label: "Breakfast", from: 8 * 60, to: 10 * 60 }, { label: "Lunch", from: 11 * 60, to: 14 * 60 }, { label: "Dinner", from: 17 * 60, to: 20 * 60 },
+];   // campus minutes of the day
+const WALK_ALLOWANCE = 30;                             // a slot holds the session plus up to a 30-minute walk
+const MIN_SLOT = { eat: 30, study: 45 };              // shorter than this isn't worth suggesting
+const MAX_CLUBS = 2;
+
+/**
+ * What fits in one free gap, in campus minutes of the day, without touching anything on the calendar:
+ * club meetings (`meetings`: { start, end, meeting }) that start and end inside the gap, a meal where the gap
+ * overlaps breakfast, lunch or dinner, then a study block in the longest time left. Each slot has its own
+ * start and end inside the gap, and no two overlap. The engine then picks a place for each meal and study slot.
+ */
+export function fillGap(start, end, meetings = []) {
+  let free = [[start, end]];
+  const take = (a, b) => { free = free.flatMap(([x, y]) => (b <= x || a >= y ? [[x, y]] : [[x, a], [b, y]].filter(([p, q]) => q > p))); };
+  const slots = [];
+  for (const m of [...meetings].sort((a, b) => a.start - b.start)) {
+    if (slots.length >= MAX_CLUBS) break;
+    if (free.some(([x, y]) => m.start >= x && m.end <= y)) { slots.push({ kind: "club", start: m.start, end: m.end, meeting: m.meeting }); take(m.start, m.end); }
+  }
+  for (const meal of MEALS) {
+    const piece = free.find(([x, y]) => Math.min(y, meal.to) - Math.max(x, meal.from) >= MIN_SLOT.eat);
+    if (!piece) continue;
+    const from = Math.max(piece[0], meal.from), to = Math.min(piece[1], from + WALK_ALLOWANCE + SESSION_CAP.eat);
+    slots.push({ kind: "eat", label: meal.label, start: from, end: to }); take(from, to);
+  }
+  const longest = free.reduce((a, p) => (!a || p[1] - p[0] > a[1] - a[0] ? p : a), null);
+  if (longest && longest[1] - longest[0] >= MIN_SLOT.study) {
+    slots.push({ kind: "study", start: longest[0], end: Math.min(longest[1], longest[0] + WALK_ALLOWANCE + SESSION_CAP.study) });
+  }
+  return slots.sort((a, b) => a.start - b.start);
 }
 
 /**
@@ -159,7 +187,7 @@ export function dayBlocks(segments, events, now, { pxPerMin = 1, floor = { busy:
     const minutes = Math.round((s.end - s.start) / 60000);
     const over = s.end <= now;
     const kind = s.kind === "busy" ? "busy" : s.kind === "available" ? "free" : s.kind === "short" ? "short" : "past";
-    const inside = kind === "busy" ? events.filter((e) => !e.free && e.start < s.end && e.end > s.start) : [];
+    const inside = kind === "busy" ? events.filter((e) => !e.allDay && e.start < s.end && e.end > s.start) : [];
     return {
       kind, start: s.start, end: s.end, minutes, over: over || kind === "past",
       titles: [...new Set(inside.map((e) => e.title))], club: inside.some((e) => e.source === "club"),

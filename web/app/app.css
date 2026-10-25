@@ -151,9 +151,7 @@ button.row { width: calc(100% + 16px); border: none; background: none; text-alig
 .blk.is-free .free-len { font-size: 12px; font-weight: 700; color: var(--free); letter-spacing: 0.02em; text-transform: uppercase; }
 .blk.is-short .body, .blk.is-past .body { padding: 6px 12px; background: transparent; border: 1px dashed var(--line); }
 .blk.over { opacity: 0.55; }
-.blk .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .chip-btn { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--ground); font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; }
-.chip-btn[aria-pressed="true"] { background: var(--free-soft); border-color: #BFD3CA; color: var(--free); }
 .blk .btn.primary { min-height: 44px; font-size: 15px; margin-top: 4px; }
 .now-line { position: absolute; left: 54px; right: 0; height: 0; border-top: 2px solid var(--accent); pointer-events: none; z-index: 1; }
 .now-line b { position: absolute; left: -54px; top: -9px; font-size: 11px; font-weight: 700; color: var(--accent); background: var(--ground); padding-right: 4px; text-transform: uppercase; }
@@ -414,3 +412,11 @@ html[data-dir="tab"]::view-transition-new(view) { animation: in-fade var(--med) 
   .flash, .ring, .sparks { display: none; }
   .loader-line i { width: 100%; }
 }
+.fills { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.fill { display: flex; flex-direction: column; gap: 3px; padding: 10px; border-radius: 12px; background: var(--ground); }
+.fill .when { font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fill.is-club { background: var(--accent-soft); }
+.fill .btn { min-height: 40px; font-size: 14px; margin-top: 6px; }
+.allday { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.allday li { font-size: 13px; padding: 6px 10px; border-radius: 999px; background: var(--busy); overflow-wrap: anywhere; }
+.allday b { font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted); margin-right: 4px; }
