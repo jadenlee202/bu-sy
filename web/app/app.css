@@ -272,6 +272,44 @@ button.row { width: calc(100% + 16px); border: none; background: none; text-alig
 body.no-tabs .tabs { transform: translate(-50%, 110%); }
 .tabs { transition: transform var(--med) var(--ease); }
 
+/* ---------- version note: a quiet label above the tab bar, opening the release history ---------- */
+/* --tabs-h is the tab bar's measured height (app.js); the screen's bottom padding keeps the last row clear of both. */
+#view { padding-bottom: max(120px, calc(var(--tabs-h, 80px) + 44px)); }
+.version { position: fixed; left: 50%; bottom: calc(var(--tabs-h, 80px) + 6px); transform: translateX(-50%); z-index: 20;
+  transition: bottom var(--med) var(--ease); }
+body.no-tabs .version { bottom: max(12px, env(safe-area-inset-bottom)); }
+.version-btn {
+  display: block; min-height: 28px; max-width: calc(100vw - 32px); padding: 4px 12px; border: none; border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--ground) 86%, transparent); backdrop-filter: blur(8px);
+  font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background-color var(--fast) ease, color var(--fast) ease;
+}
+.version-btn .u { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
+.version-btn:hover, .version-btn[aria-expanded="true"] { background: var(--busy); color: var(--ink); }
+.version-panel {
+  position: absolute; left: 50%; bottom: calc(100% + 8px); width: min(408px, calc(100vw - 32px));
+  max-height: calc(100dvh - var(--tabs-h, 80px) - 60px - env(safe-area-inset-top)); overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px 18px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
+  box-shadow: 0 12px 30px rgba(42, 36, 32, 0.18);
+  opacity: 0; transform: translate(-50%, 8px); transition: opacity var(--fast) ease, transform var(--med) var(--ease);
+}
+.version-panel.open { opacity: 1; transform: translate(-50%, 0); }
+.version-panel:focus-visible { outline-offset: 2px; border-radius: 20px; }
+.version-top { display: flex; align-items: center; justify-content: space-between; margin-right: -10px; }
+.version-top h2 { margin: 0; font-size: 18px; letter-spacing: -0.01em; }
+.version-now { margin: 0 0 4px; font-size: 13px; }
+.version-now b { color: var(--ink); }
+.version-panel .row { min-height: 56px; padding: 10px 8px; }
+.version-panel .row:hover { background: var(--ground); }
+.version-panel .row .title { font-size: 15px; }
+.version-panel .tag-mini { background: var(--accent-soft); color: var(--accent); }
+.version-detail { display: flex; flex-direction: column; padding: 0 0 12px; }
+.version-detail .label { margin: 8px 0 4px; font-size: 11px; }
+.version-changes { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.45; }
+.version-changes li + li { margin-top: 2px; }
+.version-detail .fine { margin-top: 8px; }
+.version-build { margin-top: 12px; }
+
 /* ---------- sheet (pickers) ---------- */
 .scrim { position: fixed; inset: 0; background: rgba(42, 36, 32, 0.45); z-index: 40; opacity: 0; transition: opacity var(--med) ease; }
 .sheet {

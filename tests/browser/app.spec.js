@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { browserErrors } from "./diagnostics.js";
+import { CURRENT, RELEASES } from "../../web/app/releases.js";
 
 // The BU-sy app (web/index.html) on a fixed Monday 3 PM, Boston time.
 const NOW = new Date("2026-10-26T15:00:00-04:00");
@@ -186,6 +187,81 @@ test("about the data lists the datasets, their licences and how location is used
   await expect(page.locator("#view")).not.toContainText("Chapel Hill");                 // evaluated, not used
   await expect(page.locator("#view")).toContainText("never stored or sent");
   await expect(page.getByRole("link", { name: "OpenStreetMap" })).toBeVisible();
+});
+
+test("the version note sits bottom center above the tab bar on every tab and opens the release history", async ({ page }) => {
+  const errors = browserErrors(page);
+  await onboard(page);
+  const note = page.getByRole("button", { name: `BU-sy · v${CURRENT.version} · Version history` });
+  for (const tab of ["plan", "schedule", "explore"]) {
+    await page.locator(`.tabs a[data-tab="${tab}"]`).click();
+    await expect(note).toBeVisible();
+    const box = await note.boundingBox(), tabs = await page.locator(".tabs").boundingBox();
+    expect(Math.abs(box.x + box.width / 2 - 390 / 2), tab).toBeLessThanOrEqual(1);       // centered
+    expect(box.y + box.height, tab).toBeLessThanOrEqual(tabs.y);                          // above the tab bar, not on it
+  }
+
+  await note.click();
+  const panel = page.getByRole("dialog", { name: "Version history" });
+  await expect(panel).toBeVisible();
+  await expect(note).toHaveAttribute("aria-expanded", "true");
+  await expect(panel).toContainText(`You're using v${CURRENT.version}`);
+  const rows = panel.locator(".row");
+  await expect(rows).toHaveCount(RELEASES.length);
+  for (const [i, r] of RELEASES.entries()) await expect(rows.nth(i)).toContainText(`v${r.version} · ${r.title}`);   // newest first
+  await expect(rows.first()).toHaveAttribute("aria-expanded", "true");                    // the current release is open
+  await expect(panel.locator("#release-0")).toContainText(Object.values(CURRENT.changes)[0][0]);
+
+  const older = rows.nth(1), detail = panel.locator("#release-1");
+  await expect(detail).toHaveAttribute("inert", "");
+  await older.click();
+  await expect(older).toHaveAttribute("aria-expanded", "true");
+  await expect(detail).not.toHaveAttribute("inert", "");
+  await expect(detail).toContainText(Object.values(RELEASES[1].changes)[0][0]);
+  await older.click();
+  await expect(older).toHaveAttribute("aria-expanded", "false");
+  await expect(panel).toBeVisible();                                                     // a click inside keeps it open
+
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await expect(note).toBeFocused();
+  await note.click();
+  await note.click();                                                                    // clicking it again closes it
+  await expect(panel).toBeHidden();
+  await note.click();
+  const p = await panel.boundingBox();
+  await page.mouse.click(195, p.y - 20);                                                 // so does a click elsewhere
+  await expect(panel).toBeHidden();
+  await expect(page).toHaveURL(/#\/explore$/);                                           // and nothing navigated away
+  expect(errors).toEqual([]);
+});
+
+test("the version history fits a small phone, and the note never covers the end of a screen", async ({ page }) => {
+  await onboard(page);
+  await page.setViewportSize({ width: 320, height: 568 });
+  for (const hash of ["#/", "#/schedule", "#/explore", "#/about"]) {
+    await page.goto(`/${hash}`);
+    await page.waitForTimeout(250);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const note = await page.locator(".version-btn").boundingBox();
+    const last = await page.locator("#view > :last-child").evaluate((el) => el.getBoundingClientRect().bottom);
+    expect(last, hash).toBeLessThanOrEqual(note.y);                                      // the screen's last line ends above the note
+  }
+  await page.locator(".version-btn").click();
+  const panel = await page.getByRole("dialog", { name: "Version history" }).boundingBox();
+  expect(panel.x).toBeGreaterThanOrEqual(0);
+  expect(panel.y).toBeGreaterThanOrEqual(0);
+  expect(panel.x + panel.width).toBeLessThanOrEqual(320);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test("a deploy's version.json adds the live build to the history", async ({ page, context }) => {
+  await context.route("**/version.json", (route) => route.fulfill({ contentType: "application/json",
+    body: JSON.stringify({ version: 9, commit: "abc1234", history: [{ commit: "abc1234", url: "https://github.com/jadenlee202/bu-sy/commit/abc1234" }] }) }));
+  await onboard(page);
+  await page.locator(".version-btn").click();
+  await expect(page.getByRole("link", { name: "abc1234" })).toHaveAttribute("href", /commit\/abc1234$/);
+  await expect(page.locator(".version-btn")).toHaveText(`BU-sy · v${CURRENT.version} · Version history`);   // never the build count
 });
 
 test("no screen scrolls sideways, from a small phone to a laptop", async ({ page }) => {

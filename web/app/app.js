@@ -12,6 +12,7 @@ import { busyOf, clearSchedule, covers, eventsOf, importCalendarFile, loadSchedu
 import * as src from "../js/source.js";
 import { esc } from "../js/ui.js";
 import * as L from "./logic.js";
+import { CURRENT, RELEASES } from "./releases.js";
 
 const TZ = "America/New_York";
 const DAY = ["08:00", "22:00"];          // the preferred window the main Calendar uses by default
@@ -76,6 +77,7 @@ const icon = {
   clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
   search: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>`,
   cal: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>`,
+  close: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`,
 };
 
 // ---------- today's schedule (shared with the main app's Calendar) ----------
@@ -905,4 +907,66 @@ function wireImport() {
   });
 }
 
+// ---------- version note: BU-sy · v1.1.0 · Version history, above the tab bar on every screen ----------
+// The releases come from releases.js. A deploy's version.json (server/write_version.py) adds which commit is live.
+const releaseFmt = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" });
+const releaseDate = (d) => releaseFmt.format(new Date(`${d}T12:00:00Z`));
+function versionNote() {
+  const $root = document.getElementById("version");
+  const changes = (r) => Object.entries(r.changes ?? {}).map(([kind, list]) => `<p class="label">${esc(kind)}</p>
+    <ul class="version-changes">${list.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>`).join("");
+  $root.innerHTML = `<button class="version-btn" type="button" aria-expanded="false" aria-controls="version-panel">BU-sy · v${esc(CURRENT.version)} · <span class="u">Version history</span></button>
+    <div class="version-panel" id="version-panel" role="dialog" aria-labelledby="version-title" tabindex="-1" hidden>
+      <div class="version-top"><h2 id="version-title">Version history</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close version history">${icon.close}</button></div>
+      <p class="fine version-now">You're using <b>v${esc(CURRENT.version)}</b>, released ${esc(releaseDate(CURRENT.date))}.</p>
+      <ol class="list">${RELEASES.map((r, i) => `<li>
+        <button class="row" type="button" aria-expanded="${i === 0}" aria-controls="release-${i}">
+          <span class="main"><span class="title">v${esc(r.version)} · ${esc(r.title)}${i === 0 ? `<span class="tag-mini">Current</span>` : ""}</span>
+            <span class="sub">${esc(releaseDate(r.date))} · ${esc(r.summary)}</span></span>${icon.chev}</button>
+        <div class="collapse${i === 0 ? " open" : ""}" id="release-${i}"${i === 0 ? "" : " inert"}><div class="version-detail">${changes(r)}
+          ${r.commits ? `<p class="fine">Reconstructed from the project's history (commits ${esc(r.commits)}).</p>` : ""}</div></div></li>`).join("")}</ol>
+      <p class="fine version-build" hidden></p>
+    </div>`;
+  const $btn = $root.querySelector(".version-btn"), $panel = $root.querySelector(".version-panel");
+  const open = () => {
+    $panel.hidden = false;
+    $btn.setAttribute("aria-expanded", "true");
+    requestAnimationFrame(() => $panel.classList.add("open"));
+    $panel.focus({ preventScroll: true });
+  };
+  const close = (refocus) => {
+    if ($panel.hidden) return;
+    $panel.classList.remove("open");
+    $btn.setAttribute("aria-expanded", "false");
+    $panel.hidden = true;
+    if (refocus) $btn.focus();
+  };
+  $btn.addEventListener("click", () => ($panel.hidden ? open() : close(false)));
+  $panel.querySelector("[data-close]").addEventListener("click", () => close(true));
+  for (const b of $panel.querySelectorAll(".row[aria-controls]")) b.addEventListener("click", () => {
+    const shown = b.getAttribute("aria-expanded") !== "true";
+    const $c = document.getElementById(b.getAttribute("aria-controls"));
+    b.setAttribute("aria-expanded", shown);
+    $c.classList.toggle("open", shown);
+    $c.toggleAttribute("inert", !shown);
+  });
+  document.addEventListener("click", (e) => { if (!$root.contains(e.target)) close(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$panel.hidden) close(true); });
+  // Tabbing out closes it; a click that focuses nothing (relatedTarget null) is left to the click handler.
+  $root.addEventListener("focusout", (e) => { if (e.relatedTarget && !$root.contains(e.relatedTarget)) close(false); });
+  window.addEventListener("hashchange", () => close(false));
+  // Sit just above the tab bar, whatever its height (labels, safe area).
+  const $tabs = document.querySelector(".tabs");
+  new ResizeObserver(() => document.documentElement.style.setProperty("--tabs-h", `${$tabs.offsetHeight}px`)).observe($tabs);
+  fetch("version.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((v) => {
+    if (typeof v?.commit !== "string") return;
+    const url = v.history?.[0]?.url;
+    const $build = $panel.querySelector(".version-build");
+    $build.innerHTML = `Deployed build ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(v.commit)}</a>` : esc(v.commit)}`;
+    $build.hidden = false;
+  }).catch(() => {});
+}
+
+versionNote();
 route();

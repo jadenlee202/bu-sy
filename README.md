@@ -112,9 +112,9 @@ prototype for producing real counts; nothing in the planner uses it yet. Setup, 
 python -m pytest                        # API, clubs, hours, calendar OAuth/freebusy, data loaders + gym import, analytics
 npm ci                                  # dev tools only (PostCSS, Playwright); Node 22+
 npm run check:css                       # strict CSS parse + merge-conflict markers
-npm test                                # engine, hours, .ics, free time, clubs, app logic, people counter
+npm test                                # engine, hours, .ics, free time, clubs, app logic, releases, people counter
 npx playwright install chromium
-npm run test:browser                    # the app's flows, layout at 320–1280 px, the service worker
+npm run test:browser                    # the app's flows, version history, layout at 320–1280 px, the service worker
 ```
 CI runs all of them (`.github/workflows/tests.yml`), and the Pages deploy waits for them.
 
@@ -229,11 +229,29 @@ If the data can't load, the planner shows an error with a retry. It never falls 
 2. Push to `main`.
 3. Every push to `main` deploys `web/` (`.github/workflows/pages.yml`) once the checks in `tests.yml` pass.
 4. Each deploy also writes `web/version.json` from `main`'s history (`server/write_version.py`): which commit is
-   live, and the history. Every merge or direct commit on `main` is one version. The file is generated, not
-   committed; run `python server/write_version.py` to preview it locally.
+   live, shown as "Deployed build" in Version history. The file is generated, not committed; run
+   `python server/write_version.py` to preview it locally. It does not set the app's version (see below).
 5. Each deploy versions `app/app.css`, `app/app.js` and every local module import (`./` and `../js/`) with the same
    commit key, so a fresh page never mixes old cached scripts with new ones; the service worker (`web/sw.js`) loads
    the page network-first and keeps a copy for offline use.
+
+### Releasing a version
+
+The app's version and release notes live in one file, `web/app/releases.js`, newest first. The first entry is
+the current version: it appears as **BU-sy · vX.Y.Z · Version history** at the bottom of every screen, and the
+label opens the full history. Nothing else states the version (a test checks this).
+
+1. Pick the number (semantic versioning): **major** for a change that breaks how people used the app (a new
+   interface, removed pages), **minor** for new features or substantial improvements, **patch** for fixes and
+   small refinements. Not every merge needs a release.
+2. Add an entry at the top of `RELEASES`, dated the day it reaches `main`:
+   ```js
+   { version: "1.2.0", date: "2026-11-02", title: "Short name", summary: "One sentence for students.",
+     changes: { Features: ["…"], Improvements: ["…"], Fixes: ["…"], "UI Updates": ["…"] } },   // any of the four
+   ```
+3. `npm test` checks the entry (semver, newest first, real dates, known categories), then merge to `main`.
+
+Releases 0.1.0–1.0.0 were reconstructed from `main`'s history; each names the commit range it covers.
 
 ## What's inside
 

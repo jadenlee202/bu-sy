@@ -25,6 +25,7 @@ const SHELL = [
   "./app/app.css",
   "./app/app.js",
   "./app/logic.js",
+  "./app/releases.js",
   "./app/pin-clock.svg",
   "./app/icon-maskable.svg",
   "./app/places-geo.json",
