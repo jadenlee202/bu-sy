@@ -1,5 +1,6 @@
 import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obsOffset } from "./clock.js";
 import { icon, paw, terrier } from "./icons.js";
+import { campusImage, getImages } from "./image.js";
 import { planView } from "./plan.js";
 import { hoursText, openSegments, periodAt } from "./recommend.js";
 import * as src from "./source.js";
@@ -204,9 +205,10 @@ async function placesView() {
 // ---------- screen: one place ----------
 async function placeView(id) {
   $view.innerHTML = `${backToPlaces}${loading()}`;
-  let f, hist, hours;
+  let f, hist, hours, campus, images;
   try {
-    const [facilities, campus] = await Promise.all([src.listFacilities(), src.getCampus()]);
+    let facilities;
+    [facilities, campus, images] = await Promise.all([src.listFacilities(), src.getCampus(), getImages()]);
     hours = openingHours(campus, id);
     f = facilities.find((x) => x.facility_id === id);
     if (!f) throw new Error("We couldn't find that place.");
@@ -216,12 +218,18 @@ async function placeView(id) {
     return {};
   }
   const historical = isHistorical(f);
+  // A campus photo for real BU places only. Historical references are NOT BU,
+  // so they never get a BU building photo. Keyed by the place's location_id.
+  const locId = campus.places.find((p) => p.facility_id === id)?.location_id;
+  const photo = !historical && locId ? (images?.images?.[locId] ?? null) : null;
+  const showPhoto = !historical && locId;
   const office = f.category === "office";
   const days = hist.playback_days ?? [];
   const dayName = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
   $view.innerHTML = `
     ${backToPlaces}
+    ${showPhoto ? `<div class="place-photo">${campusImage(photo, f.facility_name, "21 / 9")}</div>` : ""}
     <div class="page-head"><h1 class="title">${esc(f.facility_name)}</h1>
       <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${historical ? `<span class="muted">${office ? "Office room, not BU" : "Not BU"} · never suggested</span>`
         : f.simulation ? `<span class="muted">${esc(f.simulation.label)}</span> <a class="sub-link" href="#/sources/${encodeURIComponent(f.simulation.id)}">How it's simulated</a>` : ""}</p></div>

@@ -4,6 +4,7 @@
 // (recommend.js) and renders the engine's result.
 import { fmtHHMM, fmtShort, fmtTime, toHHMM, toMin } from "./clock.js";
 import { icon, terrier } from "./icons.js";
+import { campusImage, getImages } from "./image.js";
 import * as prefs from "./prefs.js";
 import * as engine from "./recommend.js";
 import * as src from "./source.js";
@@ -17,21 +18,41 @@ const TYPED = new Set(["custom", "start", "minActivity", "buffer"]);
 // Kept for the session, so going to a place and back keeps the inputs.
 const draft = { req: null, startEdited: false, lastSelected: false };
 
-const header = () => `
+// A welcoming campus hero over the planner. `images` is the campus-image
+// manifest (or null before it loads); the photo falls back to an illustration.
+const hero = (images) => {
+  const featured = images?.images?.fitrec ?? null;
+  return `<section class="hero-banner">
+    ${campusImage(featured, "Boston University campus")}
+    <div class="hero-body">
+      <span class="hero-eyebrow">${icon("clock", 13)} Campus time, well spent</span>
+      <h1 class="hero-title">Find a spot for your free time</h1>
+      <p class="hero-lede">Tell BU-sy your activity and how long you're free. It suggests campus places that fit the walk and your schedule, on a simulated demo day.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="#/places">Browse places</a>
+        <a class="btn" href="#/events">Student meetups</a>
+      </div>
+      <p class="hero-note">Student prototype · busyness is simulated, not live BU data · not affiliated with Boston University</p>
+    </div>
+  </section>`;
+};
+
+const header = (images) => `
+  ${hero(images)}
   <div class="page-head">
     <h1 class="title">What fits now?</h1>
     <p class="tagline">Find a spot for your free time.</p>
   </div>`;
 
 export async function planView($view, clock) {
-  $view.innerHTML = header() + loading("Loading campus data…");
-  let campus, histories;
+  $view.innerHTML = header(null) + loading("Loading campus data…");
+  let campus, histories, images;
   try {
-    campus = await src.getCampus();
+    [campus, images] = await Promise.all([src.getCampus(), getImages()]);
     const ids = [...new Set(campus.places.map((p) => p.facility_id))];
     histories = Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await src.getHistory(id)])));
   } catch (err) {
-    $view.innerHTML = header() + failure(err);
+    $view.innerHTML = header(null) + failure(err);
     return {};
   }
 
@@ -42,7 +63,7 @@ export async function planView($view, clock) {
   }
   if (!draft.startEdited) draft.req.start = toHHMM(clock.minute);
 
-  $view.innerHTML = `${header()}
+  $view.innerHTML = `${header(images)}
     <div class="plan-layout">
       ${formHTML(campus)}
       <section id="results" class="results" tabindex="-1" aria-label="Options"></section>
