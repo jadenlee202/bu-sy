@@ -182,51 +182,122 @@ async function placesView() {
       (!q || `${f.facility_name} ${CATEGORY[f.category] ?? ""}`.toLowerCase().includes(q)));
   };
 
-  const update = () => {
+  // Dashboard: dining halls on the left and middle, FitRec top right, Mugar bottom right,
+  // historical references below. Same numbers as before (count + level at the replay
+  // time); each card adds the day's hourly averages as a line, with a marker at the
+  // replay time. build() runs when the search or filter changes; update() on every tick.
+  const zoneOf = (f) => (isHistorical(f) ? "refs" : f.category === "dining" ? "dining"
+    : f.category === "fitness" ? "fitness" : f.category === "library" ? "library" : "other");
+  const ZONES = [["dining", "Dining halls"], ["fitness", "Fitness"], ["library", "Library"], ["other", "Other places"]];
+
+  const build = () => {
     const rows = visible();
     if (!rows.length) {
       $list.innerHTML = `<div class="state">${terrier({ size: 44, sleepy: true })}<p>No places match.</p></div>`;
       return;
     }
-    const row = (f) => {
-      const h = histories[f.facility_id];
+    const by = (z) => rows.filter((f) => zoneOf(f) === z);
+    const zones = ZONES.filter(([z]) => by(z).length);
+    const full = ["dining", "fitness", "library"].every((z) => zones.some(([id]) => id === z));
+    const refs = by("refs");
+    const card = (f) => dashCard(f, histories[f.facility_id]);
+    $list.innerHTML = `${zones.length ? `<div class="dash${full ? " dash-full" : ""}">
+        ${zones.map(([z, title]) => `<section class="dash-zone dash-${z}" aria-label="${title}">
+          <h2 class="dash-title">${title}</h2><div class="dash-cards">${by(z).map(card).join("")}</div></section>`).join("")}
+      </div>` : ""}
+      ${refs.length ? `<section class="refs"><h2 class="section-title">Historical references</h2>
+        <p class="help">Real recordings from outside BU, replayed for comparison. Never suggested as places to go.</p>
+        <div class="dash-cards dash-refs">${refs.map(card).join("")}</div></section>` : ""}`;
+    update();
+  };
+
+  const update = () => {
+    for (const el of $list.querySelectorAll(".dash-card")) {
+      const id = el.dataset.id;
+      const h = histories[id];
       const { o } = observationAt(h, state.minute);
-      const vh = isHistorical(f) ? null : replayHours(hours.locations[f.facility_id], h.day, state.minute);
+      const f = facilities.find((x) => x.facility_id === id);
+      const vh = isHistorical(f) ? null : replayHours(hours.locations[id], h.day, state.minute);
       // Verified hours for the replayed day win over a simulated count; without them, sample hours
       // may still say closed when there is no count. Historical references are never called closed.
       const closed = vh?.status === "closed"
-        || (!o && !["open", "closed"].includes(vh?.status) && !!closedAt(openingHours(campus, f.facility_id), state.minute));
-      const hoursSummary = vh ? `<span class="row-hours">${esc(vh.text)}</span>` : "";
-      const statusText = vh && ["open", "closed"].includes(vh.status)
-        ? `<span class="row-hours-status" data-status="${vh.status}">${vh.status === "open" ? "Open" : "Closed"} at ${esc(fmtTime(state.minute))}</span>`
-        : "";
-      return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
-        <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
-          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(h.day_label)}</span>` : ""}</span>
-          ${hoursSummary}${statusText}</span>
-        <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
-        ${level(closed ? "closed" : o?.busyness ?? "unknown")}
-        ${icon("chevron", 16)}
-      </a></li>`;
-    };
-    const places = rows.filter((f) => !isHistorical(f));
-    const refs = rows.filter(isHistorical);
-    $list.innerHTML = `${places.length ? `<ul class="list list-card">${places.map(row).join("")}</ul>` : ""}
-      ${refs.length ? `<section class="refs"><h2 class="section-title">Historical references</h2>
-        <p class="help">Real recordings from outside BU, replayed for comparison. Never suggested as places to go.</p>
-        <ul class="list list-card">${refs.map(row).join("")}</ul></section>` : ""}`;
+        || (!o && !["open", "closed"].includes(vh?.status) && !!closedAt(openingHours(campus, id), state.minute));
+      el.querySelector(".dash-hours").innerHTML = vh ? `<span class="row-hours">${esc(vh.text)}</span>${
+        ["open", "closed"].includes(vh.status)
+          ? ` <span class="row-hours-status" data-status="${vh.status}">${vh.status === "open" ? "Open" : "Closed"} at ${esc(fmtTime(state.minute))}</span>` : ""}` : "";
+      el.querySelector(".dash-count").textContent = closed ? "Closed" : fmtCount(o?.occupancy_count);
+      el.querySelector(".dash-count").classList.toggle("is-closed", !!closed);
+      el.querySelector(".dash-unit").textContent = o && !closed ? "people" : "";
+      el.querySelector(".dash-level").innerHTML = closed ? "" : level(o?.busyness ?? "unknown");
+      el.querySelector(".dash-marker").style.left = `${(state.minute / (24 * 60)) * 100}%`;
+    }
   };
 
-  $view.querySelector(".search input").addEventListener("input", (e) => { state.query = e.target.value; update(); });
+  $view.querySelector(".search input").addEventListener("input", (e) => { state.query = e.target.value; build(); });
   $view.querySelector(".chips").addEventListener("click", (e) => {
     const chip = e.target.closest("[data-filter]");
     if (!chip) return;
     state.filter = chip.dataset.filter;
     for (const c of $view.querySelectorAll(".chip")) c.setAttribute("aria-pressed", c === chip);
-    update();
+    build();
   });
-  update();
+  build();
   return { update };
+}
+
+/**
+ * One dashboard card: name, count and level (filled in by update()), and a line of the
+ * day's hourly averages over the full 24 hours, so every card shares one time axis.
+ * Hours without data break the line rather than drawing it at zero.
+ */
+function dashCard(f, hist) {
+  const W = 240, H = 100, PAD = 6;
+  const pts = hist.hourly.map((b) => ({ x: ((b.hour + 0.5) / 24) * W, v: b.occupancy }));
+  const peakV = Math.max(1, ...hist.hourly.map((b) => b.occupancy ?? 0),
+    ...hist.observations.map((o) => o.occupancy_count ?? 0));
+  const mag = 10 ** Math.floor(Math.log10(peakV));
+  const yMax = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].map((k) => k * mag).find((s) => s >= peakV);
+  const y = (v) => H - PAD - (v / yMax) * (H - 2 * PAD);
+
+  // Split into runs of known values; draw each run as a smooth curve that never overshoots.
+  const runs = [];
+  for (const p of pts) {
+    if (p.v == null) { runs.push([]); continue; }
+    if (!runs.length) runs.push([]);
+    runs[runs.length - 1].push({ x: p.x, y: y(p.v) });
+  }
+  const curve = (r) => r.map((p, i) => (i === 0 ? `M${p.x},${p.y}`
+    : `C${(r[i - 1].x + p.x) / 2},${r[i - 1].y} ${(r[i - 1].x + p.x) / 2},${p.y} ${p.x},${p.y}`)).join("");
+  const live = runs.filter((r) => r.length);
+  const lines = live.map((r) => `<path class="dash-line" d="${curve(r)}" vector-effect="non-scaling-stroke"/>`).join("");
+  const areas = live.map((r) => `<path class="dash-area" d="${curve(r)}L${r[r.length - 1].x},${H}L${r[0].x},${H}Z" fill="url(#g-${esc(f.facility_id)})"/>`).join("");
+  const grid = [0.5, 1].map((k) => `<line class="dash-grid" x1="0" x2="${W}" y1="${y(yMax * k)}" y2="${y(yMax * k)}" vector-effect="non-scaling-stroke"/>`).join("");
+
+  const known = hist.hourly.filter((b) => b.occupancy != null);
+  const peak = known.length ? known.reduce((a, b) => (b.occupancy > a.occupancy ? b : a)) : null;
+  const label = peak
+    ? `Average people per hour on ${hist.day_label}. Busiest around ${fmtHour(peak.hour)} with about ${fmtCount(peak.occupancy)}.`
+    : `No hourly data for ${hist.day_label}.`;
+
+  return `<a class="dash-card" href="#/place/${encodeURIComponent(f.facility_id)}" data-id="${esc(f.facility_id)}">
+    <div class="dash-head">
+      <span class="dash-name">${esc(f.facility_name)}</span>
+      <span class="dash-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(hist.day_label)}</span>` : ""}</span>
+    </div>
+    <div class="dash-hours"></div>
+    <div class="dash-now"><span class="dash-count num"></span><span class="dash-unit"></span><span class="dash-level"></span></div>
+    <div class="dash-chart">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">
+        <defs><linearGradient id="g-${esc(f.facility_id)}" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" class="dash-stop-top"/><stop offset="1" class="dash-stop-bottom"/></linearGradient></defs>
+        ${grid}${areas}${lines}
+      </svg>
+      <span class="dash-ymax num" style="top:${(y(yMax) / H) * 100}%">${fmtCount(yMax)}</span>
+      <span class="dash-marker" aria-hidden="true"></span>
+    </div>
+    <div class="dash-ticks num" aria-hidden="true"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div>
+    ${peak ? `<p class="dash-peak">Busiest around ${fmtHour(peak.hour)} · ~${fmtCount(peak.occupancy)} people</p>` : ""}
+  </a>`;
 }
 
 // ---------- screen: one place ----------
