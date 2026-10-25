@@ -434,9 +434,11 @@ aren't real BU organizations. What it does **not** protect:
   values (grouped into purchases, turned into diners with an assumed meal length and rescaled).
 - Simulation models, illustrative capacities and planner samples made by the team.
   Details: [`data/README.md`](data/README.md#simulated-campus-places) and the app's Sources & Simulation page.
-- Interface font: Plus Jakarta Sans (Tokotype), bundled in `web/assets/fonts/` under the SIL Open Font
-  License 1.1 ([`OFL.txt`](web/assets/fonts/OFL.txt)). It is served with the site, so nothing loads from
-  another server; until it arrives, text shows in the system font.
+- Fonts: IBM Plex Sans (IBM) for the interface and Source Serif 4 (Adobe) for headings and large numbers,
+  bundled in `web/assets/fonts/` under the SIL Open Font License 1.1
+  ([`OFL-IBMPlexSans.txt`](web/assets/fonts/OFL-IBMPlexSans.txt),
+  [`OFL-SourceSerif4.txt`](web/assets/fonts/OFL-SourceSerif4.txt)). They are served with the site, so nothing
+  loads from another server; until they arrive, text shows in the system font.
 
 BU's own [Peak & Quiet Hours](https://www.bu.edu/fitrec/peak-quiet-hours/) page already reports FitRec
 traffic. BU-sy explores planning around free time, not a replacement for it.
