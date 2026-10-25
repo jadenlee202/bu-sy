@@ -200,3 +200,14 @@ test("no screen scrolls sideways, from a small phone to a laptop", async ({ page
     }
   }
 });
+
+test("navigating faster than the page transitions raises no errors", async ({ page }) => {
+  const errors = browserErrors(page);
+  await onboard(page);
+  for (const hash of ["#/explore", "#/place/mugar-synthetic", "#/club/example-1", "#/about", "#/schedule", "#/"]) {
+    await page.evaluate((h) => { location.hash = h; }, hash);          // no waiting between them
+  }
+  await expect(page.locator(".sentence")).toBeVisible();
+  await page.waitForTimeout(600);
+  expect(errors).toEqual([]);
+});

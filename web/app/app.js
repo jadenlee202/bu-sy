@@ -197,7 +197,9 @@ async function route() {
     window.scrollTo(0, 0);
   };
   if (previous && document.startViewTransition && !reduced()) {
-    await document.startViewTransition(draw).updateCallbackDone;
+    const vt = document.startViewTransition(draw);
+    vt.ready.catch(() => {}); vt.finished.catch(() => {});   // a newer navigation may skip this one: that's fine
+    await vt.updateCallbackDone;
   } else {
     draw();
     if (previous) { $view.classList.remove("enter"); void $view.offsetWidth; $view.classList.add("enter"); }
