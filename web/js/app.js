@@ -26,7 +26,7 @@ const isHistorical = (f) => f.data_mode === "historical_playback";
 const tag = (f) => (isHistorical(f)
   ? `<span class="tag tag-real" title="Real recorded data from elsewhere, replayed. Not live, not BU.">Historical</span>`
   : `<span class="tag tag-sim" title="${esc(f.simulation?.label ?? "Simulated")}. Not a BU measurement.">Simulated</span>`);
-const backToPlaces = `<a class="back" href="#/places">${icon("back", 16)} All places</a>`;
+const backToPlaces = `<a class="back" href="#/">${icon("back", 16)} All places</a>`;
 const offsetText = (o) => (obsOffset(o) ? `UTC${obsOffset(o).replace("-", "−")}` : "timezone unverified");
 
 /**
@@ -722,7 +722,7 @@ const clock = {
 async function route() {
   const hash = location.hash.replace(/^#\/?/, "");
   const [section, id] = hash.split("/");
-  const current = section === "" ? "plan" : section === "place" ? "places" : section;
+  const current = section === "" || section === "place" ? "places" : section;
   for (const a of document.querySelectorAll("[data-section]")) a.toggleAttribute("aria-current", a.dataset.section === current);
   view = null;
   window.scrollTo(0, 0);
@@ -732,8 +732,8 @@ async function route() {
     : section === "events" ? eventsView()
     : section === "about" ? aboutView()
     : section === "sources" ? sourcesView(id ? decodeURIComponent(id) : null)
-    : section === "places" ? placesView()
-    : planView($view, clock);
+    : section === "plan" ? planView($view, clock)
+    : placesView();
   const mounted = await next;
   if (location.hash.replace(/^#\/?/, "") === hash) view = mounted;
 }
