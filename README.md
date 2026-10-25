@@ -65,8 +65,9 @@ Apple Calendar, Outlook or any iCalendar app). There is no sign-in and no calend
 connection. The file is parsed **in the browser** with [ical.js](https://github.com/kewisch/ical.js)
 2.2.1 (MPL-2.0, vendored unmodified in `web/vendor/`), and never sent to a server or AI service.
 
-- **What's kept:** only merged busy intervals (start/end instants), the file name, import counts
-  and the date range covered. Never the file, event titles, descriptions, locations or attendees.
+- **What's kept:** merged busy intervals (start/end instants) for free time; each event
+  occurrence's title, start, end and all-day/free flags for the calendar view; the file name,
+  import counts and the date range covered. Never the file, descriptions, locations or attendees.
   By default this lives in `sessionStorage` (cleared when the tab closes); *Remember my schedule
   on this device* moves it to `localStorage`. *Remove schedule* deletes it from both.
 - **Validation:** `.ics` name (or `text/calendar` type), at most 2 MB, and contents must start
@@ -80,9 +81,20 @@ connection. The file is parsed **in the browser** with [ical.js](https://github.
   and cancellations are honoured; events marked free (`TRANSP:TRANSPARENT`, Outlook *Free*) and
   cancelled events aren't busy. Occurrences are expanded from 31 days before the import to 366 days
   after it; dates outside that range are shown as unknown, never as free.
+- **No upload = empty schedule:** without an uploaded file, the Calendar page, the place cards and
+  the Places free-time filters treat the student as free for the whole preferred window (8 AM–10 PM
+  by default), and each of them says so. Dates outside an uploaded file's range stay unknown.
 - **Free time** is the gap between merged busy blocks inside your preferred hours, at least your
   minimum length, intersected with the date-scoped building and meal-service hours in
   `web/data/hours.json`. No travel time is estimated.
+
+- **Calendar view:** the Calendar tab always shows a Monday–Sunday month grid (empty until a file
+  is imported) with previous/next month and *Today*. Imported events appear on every date they
+  cover, in the display timezone (all-day events on their calendar dates); free events are shown
+  dashed and aren't busy. Clicking a date (or an event) selects that day: its events are listed
+  below the grid, and the date control and free-time results switch to the same day. On narrow
+  screens cells show an event count and the day's list holds the details. Replacing the file
+  replaces the events (no merging); *Remove schedule* deletes events and busy times together.
 
 Each place's detail page has a *Find a time to eat* (dining) or *Find free time here* card that
 searches 7 days from a chosen date. On Places, *Open now* uses published hours; with a schedule
