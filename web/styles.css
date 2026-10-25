@@ -1236,6 +1236,15 @@ main {
 }
 .notice { margin: 12px 12px 0 !important; }
 
+/* Planner: force a single stacked column in the phone frame. The desktop
+   two-column grid and the sticky/scrolling form (triggered by viewport media
+   queries at >=64rem) would otherwise overlap the form and the results panel. */
+.plan-layout { display: flex !important; flex-direction: column !important; gap: 16px !important; }
+.plan {
+  position: static !important; top: auto !important;
+  max-height: none !important; overflow: visible !important;
+}
+
 /* Bottom tab bar: always shown, pinned to the frame (not the viewport) on wide. */
 .tabbar {
   display: flex !important;
