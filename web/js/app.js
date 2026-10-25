@@ -1033,7 +1033,7 @@ const fmtStamp = (iso, withTime = false) => new Date(iso).toLocaleString("en-US"
 fetch("version.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((v) => {
   if (!v?.history?.length) return;
   const $v = document.getElementById("version");
-  $v.innerHTML = `<summary title="Version history">v${v.version} · Updated ${esc(fmtStamp(v.date))}</summary>
+  $v.innerHTML = `<summary title="Version history">${icon("clock", 14)}<span class="sr-only">Version history: </span>v${v.version} · Updated ${esc(fmtStamp(v.date))}</summary>
     <div class="version-panel"><p class="version-head">Version history</p>
       <ol class="version-list">${v.history.map((h) => `<li><span class="version-num num">v${h.version}</span>
         <span><span class="version-title">${esc(h.title)}</span>

@@ -172,7 +172,7 @@ main:focus { outline: none; }
 /* ---------- version note: in the footer on small screens, the corner on wide ones ---------- */
 .version { margin-top: 8px; font-size: 12px; }
 .version > summary {
-  display: inline-flex; align-items: center; min-height: 28px; padding: 3px 11px; cursor: pointer; list-style: none;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 11px; cursor: pointer; list-style: none;
   color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-xs);
 }
 .version > summary::-webkit-details-marker { display: none; }
@@ -358,6 +358,32 @@ label.check { display: flex; flex-direction: row; align-items: center; gap: 12px
 .callout { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 14px 16px; border-radius: var(--radius-sm); background: var(--surface); border: 1.5px dashed var(--line-strong); }
 .callout > .icon { color: var(--red); }
 .callout p { margin: 0; flex: 1 1 220px; font-size: 14px; }
+
+/* ---------- recommendation cards: the first option is the dark hero card ---------- */
+.recs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.rec {
+  min-width: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px 18px 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.rec-name { font-size: 18px; line-height: 1.25; font-weight: 650; margin: 0; }
+.rec-top .rec-link { margin-left: auto; }
+.rec > .btn { align-self: flex-start; }
+.rec-hero { background: var(--hero); color: var(--hero-text); border-color: var(--hero); }
+.rec-hero .rec-name { font-family: var(--font-display); font-size: 23px; font-weight: 600; }
+.rec-hero .stat-num { font-size: 38px; }
+.rec-hero :is(.stat-unit, .stat-cap, .rec-link, .why-list, .facts dt, .timeline span, .help) { color: var(--hero-muted); }
+.rec-hero .chip-mode { background: var(--hero-line); color: var(--hero-text); }
+.rec-hero .why { border-color: var(--hero-line); }
+.rec-hero :is(.meter i, .seg, .vseg) { background: var(--hero-bar); }
+.rec-hero :is(.level[data-level="quiet"] i:nth-child(-n+1), .level[data-level="moderate"] i:nth-child(-n+2), .level[data-level="busy"] i, .seg-activity, .vseg[data-level="busy"]) { background: var(--red); }
+.rec-hero .vseg[data-level="moderate"] { background: color-mix(in srgb, var(--red) 55%, var(--hero-bar)); }
+.rec-hero :is(.seg-buffer, .seg-free, .seg-spare, .vseg[data-level="unknown"]) { background: repeating-linear-gradient(135deg, var(--hero-bar) 0 3px, transparent 3px 6px); }
+.rec-hero .level[data-level="unknown"] { color: var(--hero-muted); }
+.rec-hero a { color: var(--hero-text); }
+.rec-hero :focus-visible { outline-color: var(--hero-text); }
+.rec-hero .btn:not(.btn-primary) { background: transparent; color: var(--hero-text); border-color: var(--hero-line); }
+/* One primary action per screen: only the top option's "Choose" is solid red; the rest are outlined. */
+.rec:not(.rec-hero) [data-choose].btn-primary { background: var(--surface); color: var(--text); border: 1px solid var(--line-strong); box-shadow: var(--depth-small); }
 
 .rec-top { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .rec-link { display: inline-flex; align-items: center; gap: 2px; min-height: 40px; margin-block: -6px; padding: 0 2px; font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; }
@@ -1310,10 +1336,15 @@ main {
 .tabbar a:active { background: var(--subtle); }
 .tabbar a:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
-/* The fixed version note would overlap the tab bar on wide screens: keep it inline. */
+/* Version note: on wide screens it sits in the backdrop corner beside the phone frame,
+   always in view; the panel opens upward and is sized to the space beside the frame. */
 @media (min-width: 64rem) {
-  .version { position: static !important; right: auto; bottom: auto; }
-  .version-panel { position: static !important; width: auto; }
+  .version { position: fixed; right: 20px; bottom: 16px; z-index: 40; margin: 0; }
+  .version > summary { min-height: 36px; padding: 6px 14px; font-size: 13px; font-weight: 600; box-shadow: var(--depth-small); }
+  .version-panel {
+    position: absolute; right: 0; bottom: calc(100% + 8px); margin: 0;
+    width: min(360px, calc((100vw - var(--app-frame)) / 2 - 40px)); max-height: calc(100dvh - 96px);
+  }
 }
 
 /* ---------- Boston-blue accent touches (palette carried app-wide) ---------- */
