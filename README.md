@@ -14,7 +14,10 @@ Independent student project, **not affiliated with Boston University**.
 > recorded day at a real campus gym elsewhere; Mugar follows people counts in one small library room in
 > Singapore (ROBOD); dining halls follow canteen purchases in Switzerland at lunch (NOVANIMAL), turned into
 > diners with an assumed 30-minute meal, while breakfast and dinner stay modeled. All of it is rescaled to
-> illustrative sizes. Capacities, hours, amenities and walking times are illustrative. The
+> illustrative sizes. Capacities, amenities and walking times are illustrative. Places cards and place
+> pages show date-bounded building and meal-service hours from official BU pages where available
+> (`web/data/hours.json`); unavailable or unpublished hours are called out explicitly, and planner fit
+> calculations still use the illustrative schedules in the demo campus data. The
 > **Sources & Simulation** page (`#/sources`) maps every place to its source. Two real datasets appear as **historical
 > references** under Places: the *Clemente Room*, an office conference room from the public COD dataset, and
 > the *Campus Gym — Historical Reference*, 2015–2017 head counts from a non-BU university gym (Kaggle, ODbL).
@@ -33,6 +36,20 @@ python -m http.server 8000 -d web       # macOS/Linux: python3
 # open http://localhost:8000
 ```
 It reads the pre-built JSON in `web/data/`; meetups are saved in your browser.
+
+**Operating hours.** Location identity and categories come from `web/data/facilities.json`;
+`web/data/campus.json` contains illustrative planner hours, not the displayed verified schedules.
+The detail page uses date-scoped building and meal-service schedules from `web/data/hours.json`,
+keyed by facility ID. It displays a Monday–Sunday week, lets users select dates and navigate weeks,
+and displays named meal-service periods for dining locations while retaining building hours for
+other locations. The weekly card's building and meal-service status updates with the selected slider
+time for the date selected in the card. Next to a busyness value (Places cards and the place page's count),
+open/closed uses the verified hours for the **replayed day** (the sample Monday, Oct 19, 2026), not today,
+so the count and the status describe the same day; when those hours say closed, the place shows Closed
+instead of a simulated count. Without verified hours for that date, the illustrative sample hours decide
+Closed only when there is no count. Dates outside a published schedule are marked unavailable; unverified
+locations remain explicit. Source and verification metadata remain in the hours data file and are not
+linked in the UI.
 
 **With the API** (meetups shared between everyone using the server):
 ```bash

@@ -2,6 +2,10 @@ import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obs
 import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
 import { hoursText, openSegments, periodAt } from "./recommend.js";
+import {
+  addDays, campusDateTime, dateLabel, daySchedule, displaySchedule, formatPeriod,
+  selectedBuildingStatus, serviceAtTime, serviceStatusLabel, weekRangeLabel, weekStart,
+} from "./hours.js";
 import * as src from "./source.js";
 import { LEVEL, esc, failure, fmtCount, level, loading } from "./ui.js";
 
@@ -55,6 +59,20 @@ function quieterTime(hist, minute) {
 function openingHours(campus, facilityId) {
   const p = campus.places.find((x) => x.facility_id === facilityId && x.hours);
   return p ? { segs: openSegments(p), text: hoursText(p), basis: p.hours_basis } : null;
+}
+
+/**
+ * Verified BU building hours (web/data/hours.json) for the replayed day, not today: the busyness
+ * values are a sample Monday, so open/closed must describe that same date. null = no entry.
+ */
+function replayHours(location, date, minute) {
+  if (!location) return null;
+  const day = new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  const s = daySchedule(location, date);
+  const text = s.status === "scheduled" ? `${day}: ${s.periods.map(formatPeriod).join(" · ")}`
+    : s.status === "closed" ? `Closed ${day}`
+    : s.status === "unpublished" ? `${day} hours not published` : "Hours unverified";
+  return { text, status: selectedBuildingStatus(location, date, minute).status };
 }
 
 /** Closed at `minute` by those hours: { opens } (null = not again today); null when open or unknown. */
@@ -145,9 +163,9 @@ async function placesView() {
   syncPlayback();
 
   const $list = $view.querySelector("#places");
-  let facilities, histories, campus;
+  let facilities, histories, campus, hours;
   try {
-    [facilities, campus] = await Promise.all([src.listFacilities(), src.getCampus()]);
+    [facilities, campus, hours] = await Promise.all([src.listFacilities(), src.getCampus(), src.getHours()]);
     histories = Object.fromEntries(
       await Promise.all(facilities.map(async (f) => [f.facility_id, await src.getHistory(f.facility_id)])),
     );
@@ -172,12 +190,21 @@ async function placesView() {
     const row = (f) => {
       const h = histories[f.facility_id];
       const { o } = observationAt(h, state.minute);
-      const closed = !o && closedAt(openingHours(campus, f.facility_id), state.minute);
+      const vh = isHistorical(f) ? null : replayHours(hours.locations[f.facility_id], h.day, state.minute);
+      // Verified hours for the replayed day win over a simulated count; without them, sample hours
+      // may still say closed when there is no count. Historical references are never called closed.
+      const closed = vh?.status === "closed"
+        || (!o && !["open", "closed"].includes(vh?.status) && !!closedAt(openingHours(campus, f.facility_id), state.minute));
+      const hoursSummary = vh ? `<span class="row-hours">${esc(vh.text)}</span>` : "";
+      const statusText = vh && ["open", "closed"].includes(vh.status)
+        ? `<span class="row-hours-status" data-status="${vh.status}">${vh.status === "open" ? "Open" : "Closed"} at ${esc(fmtTime(state.minute))}</span>`
+        : "";
       return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
         <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
-          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(h.day_label)}</span>` : ""}</span></span>
+          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(h.day_label)}</span>` : ""}</span>
+          ${hoursSummary}${statusText}</span>
         <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
-        ${level(o?.busyness ?? (closed ? "closed" : "unknown"))}
+        ${level(closed ? "closed" : o?.busyness ?? "unknown")}
         ${icon("chevron", 16)}
       </a></li>`;
     };
@@ -204,10 +231,11 @@ async function placesView() {
 // ---------- screen: one place ----------
 async function placeView(id) {
   $view.innerHTML = `${backToPlaces}${loading()}`;
-  let f, hist, hours;
+  let f, hist, hours, scheduleLocation;
   try {
-    const [facilities, campus] = await Promise.all([src.listFacilities(), src.getCampus()]);
+    const [facilities, campus, allHours] = await Promise.all([src.listFacilities(), src.getCampus(), src.getHours()]);
     hours = openingHours(campus, id);
+    scheduleLocation = allHours.locations[id] ?? null;
     f = facilities.find((x) => x.facility_id === id);
     if (!f) throw new Error("We couldn't find that place.");
     hist = await src.getHistory(id);
@@ -218,6 +246,7 @@ async function placeView(id) {
   const historical = isHistorical(f);
   const office = f.category === "office";
   const days = hist.playback_days ?? [];
+  let selectedScheduleDate = campusDateTime().date;
   const dayName = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
   $view.innerHTML = `
@@ -231,6 +260,19 @@ async function placeView(id) {
         <select id="day">${days.map((d) => `<option value="${esc(d)}"${d === hist.day ? " selected" : ""}>${esc(dayName(d))}</option>`).join("")}</select></label>` : ""}
       ${playbackBar()}
     </div>
+    <section class="card schedule-card" id="location-hours" aria-label="Weekly operating hours">
+      <div class="card-head">
+        <h2>Weekly operating hours</h2>
+        <div class="schedule-nav" role="group" aria-label="Navigate operating-hours weeks">
+          <button class="icon-btn schedule-nav-btn" type="button" data-week="-7" aria-label="Previous week">‹</button>
+          <span id="schedule-week" aria-live="polite"></span>
+          <button class="icon-btn schedule-nav-btn" type="button" data-week="7" aria-label="Next week">›</button>
+        </div>
+      </div>
+      <p class="schedule-note" id="schedule-note"></p>
+      <ul class="schedule-days" id="schedule-days"></ul>
+      <div class="selected-hours" id="selected-hours" aria-live="polite"></div>
+    </section>
     <div class="place-grid">
       <div class="place-now">
         <section class="hero" id="hero" aria-live="polite"></section>
@@ -245,7 +287,65 @@ async function placeView(id) {
   const $hero = $view.querySelector("#hero");
   const $suggest = $view.querySelector("#suggest");
   const $dayCard = $view.querySelector("#day-card");
+  const $scheduleDays = $view.querySelector("#schedule-days");
   let chart;
+
+  const renderSchedule = () => {
+    const today = campusDateTime().date;
+    const start = weekStart(selectedScheduleDate);
+    $view.querySelector("#schedule-week").textContent = weekRangeLabel(start);
+    $scheduleDays.innerHTML = Array.from({ length: 7 }, (_, index) => {
+      const date = addDays(start, index);
+      const schedule = displaySchedule(scheduleLocation, date, f.category);
+      let details;
+      if (schedule.status === "closed") {
+        details = `<span class="hours-closed">Closed${schedule.note ? ` · ${esc(schedule.note)}` : ""}</span>`;
+      } else if (schedule.status === "unverified") {
+        details = `<span class="hours-unknown">Hours unverified${schedule.reason ? ` · ${esc(schedule.reason)}` : ""}</span>`;
+      } else if (schedule.status === "unpublished") {
+        details = `<span class="hours-unknown">Schedule not published for this date.</span>`;
+      } else if (schedule.status === "not_applicable") {
+        details = `<span class="hours-unknown">Hours unavailable in the provided schedule data.</span>`;
+      } else {
+        details = schedule.periods.map((period) =>
+          `<span class="hours-period"><strong>${esc(f.category === "dining" ? period.label : "Building hours")}:</strong> ${esc(formatPeriod(period))}</span>`,
+        ).join("");
+        if (schedule.note) details += `<span class="hours-note">${esc(schedule.note)}</span>`;
+      }
+      return `<li><button type="button" class="schedule-day${date === today ? " is-today" : ""}${date === selectedScheduleDate ? " is-selected" : ""}" data-schedule-date="${date}"${date === today ? ' aria-current="date"' : ""} aria-pressed="${date === selectedScheduleDate}">
+        <span class="schedule-day-name">${esc(dateLabel(date))}${date === today ? " · Today" : ""}</span>
+        <span class="schedule-periods${f.category === "dining" ? " schedule-meals" : ""}">${details}</span>
+      </button></li>`;
+    }).join("");
+
+    const buildingStatus = selectedBuildingStatus(scheduleLocation, selectedScheduleDate, state.minute);
+    let statusText = buildingStatus.status === "open" ? "Open at selected time"
+      : buildingStatus.status === "closed" ? "Closed at selected time"
+      : buildingStatus.status === "unpublished" ? "Building hours not published"
+      : "Building hours unverified";
+    let mealStatus = "";
+    if (!historical && f.category === "dining") {
+      const service = serviceAtTime(scheduleLocation, selectedScheduleDate, state.minute);
+      mealStatus = `<p><strong>${esc(serviceStatusLabel(service, buildingStatus))}</strong></p>`;
+    }
+    $view.querySelector("#selected-hours").innerHTML = `<p><strong>${esc(dateLabel(selectedScheduleDate))} · ${esc(fmtTime(state.minute))}</strong></p>
+      <p>Building status: <strong>${esc(statusText)}</strong></p>${mealStatus}`;
+    $view.querySelector("#schedule-note").textContent =
+      "Schedules are date-specific; dates without a published schedule are shown as unavailable.";
+  };
+
+  $view.querySelector(".schedule-nav").addEventListener("click", (e) => {
+    const button = e.target.closest("[data-week]");
+    if (!button) return;
+    selectedScheduleDate = addDays(selectedScheduleDate, Number(button.dataset.week));
+    update();
+  });
+  $scheduleDays.addEventListener("click", (e) => {
+    const button = e.target.closest("[data-schedule-date]");
+    if (!button) return;
+    selectedScheduleDate = button.dataset.scheduleDate;
+    update();
+  });
 
   // Parts that depend on the selected recorded day.
   const renderDay = () => {
@@ -261,9 +361,15 @@ async function placeView(id) {
 
   const update = () => {
     const { o, why } = observationAt(hist, state.minute);
-    const closed = !o && closedAt(hours, state.minute);
+    // Open/closed for the replayed day (the sample Monday), like the Places list. The weekly card
+    // below keeps its own selected date.
+    const replay = historical ? null : selectedBuildingStatus(scheduleLocation, hist.day, state.minute);
+    const closedBySchedule = replay?.status === "closed";
+    const closedByDemoHours = !o && !closedBySchedule && replay?.status !== "open" && closedAt(hours, state.minute);
+    const closed = closedBySchedule || !!closedByDemoHours;
     const period = periodAt(f.simulation, state.minute);   // dataset-derived, modeled or not simulated
-    const meta = closed ? closedText(closed, hours)
+    const meta = closedBySchedule ? `Closed at ${fmtTime(state.minute)} · BU hours for ${dateLabel(hist.day)}`
+      : closedByDemoHours ? closedText(closedAt(hours, state.minute), hours)
       : o
       ? historical
         ? `Replay ${fmtTime(state.minute)} · observed ${fmtTime(obsMinute(o))} (${offsetText(o)})`
@@ -291,6 +397,7 @@ async function placeView(id) {
     }</div>`;
 
     chart.mark(Math.floor(state.minute / 60));
+    renderSchedule();
   };
 
   $view.querySelector("#day")?.addEventListener("change", async (e) => {

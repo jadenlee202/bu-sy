@@ -93,6 +93,15 @@ export function getCampus() {
   return campusPromise;
 }
 
+let hoursPromise;
+export function getHours() {
+  hoursPromise ??= getJSON("data/hours.json").catch((e) => {
+    hoursPromise = null;
+    throw e;
+  });
+  return hoursPromise;
+}
+
 // ---------- per-device identity (anonymous) ----------
 // crypto.randomUUID only exists on https or localhost; a phone opening the demo
 // at http://<laptop-ip> still needs an ID, so fall back to getRandomValues.
