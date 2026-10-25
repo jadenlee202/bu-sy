@@ -383,6 +383,26 @@ label.check { display: flex; flex-direction: row; align-items: center; gap: 12px
 .row-hours-status[data-status="closed"] { color: var(--muted); }
 .row-count { font-weight: 600; font-size: 17px; min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
 
+.schedule-card { display: flex; flex-direction: column; gap: 12px; }
+.schedule-card .card-head { align-items: center; }
+.schedule-card h2 { margin: 0; font-size: 18px; }
+.schedule-nav { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.schedule-nav-btn { width: 36px; height: 36px; min-height: 36px; font-size: 22px; line-height: 1; }
+.schedule-note { margin: 0; color: var(--muted); font-size: 13px; }
+.schedule-days { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.schedule-day { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); text-align: left; }
+.schedule-day:hover { border-color: var(--line-strong); }
+.schedule-day.is-today { border-color: var(--red); }
+.schedule-day.is-selected { background: var(--subtle); }
+.schedule-day-name { font-weight: 650; }
+.schedule-periods { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 13px; }
+.hours-period strong { color: var(--text); }
+.hours-closed { color: var(--muted); font-weight: 600; }
+.hours-unknown, .hours-note { color: var(--muted); }
+.selected-hours { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--subtle); }
+.selected-hours p { margin: 0; }
+.selected-hours p + p { margin-top: 4px; }
+
 /* busyness: 3 steps + word */
 .level { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; width: 96px; flex: none; }
 .meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 13px; }

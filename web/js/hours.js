@@ -29,6 +29,11 @@ export function addDays(isoDate, days) {
   return date.toISOString().slice(0, 10);
 }
 
+export function weekStart(isoDate) {
+  const weekday = new Date(`${isoDate}T12:00:00Z`).getUTCDay();
+  return addDays(isoDate, -((weekday + 6) % 7));
+}
+
 export function dateLabel(isoDate) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: "UTC",

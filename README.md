@@ -11,9 +11,9 @@ unofficial student meetups are still there as secondary screens.
 Independent student project, **not affiliated with Boston University**.
 
 > **Data honesty:** every campus place, count, capacity, amenity and walking time is **demo data**
-> (labelled *Demo · Synthetic campus data*). Places cards show source-linked, date-bounded building
-> hours where verified; unavailable or unpublished hours are called out explicitly. Planner fit
-> calculations still use the illustrative schedules in the demo campus data. Two real datasets appear as **historical
+> (labelled *Demo · Synthetic campus data*). Places cards show date-bounded building hours where
+> available; unavailable or unpublished hours are called out explicitly. Planner fit calculations
+> still use the illustrative schedules in the demo campus data. Two real datasets appear as **historical
 > references** under Places: the *Clemente Room*, an office conference room from the public COD dataset, and
 > the *Campus Gym — Historical Reference*, 2015–2017 head counts from a non-BU university gym (Kaggle, ODbL).
 > They show the pipeline on real recordings, are never presented as live, and are **never** suggested as
@@ -31,6 +31,14 @@ python -m http.server 8000 -d web       # macOS/Linux: python3
 # open http://localhost:8000
 ```
 It reads the pre-built JSON in `web/data/`; meetups are saved in your browser.
+
+**Operating hours.** Location identity and categories come from `web/data/facilities.json`;
+`web/data/campus.json` contains illustrative planner hours, not the displayed verified schedules.
+The detail page uses date-scoped building and meal-service schedules from `web/data/hours.json`,
+keyed by facility ID. It displays a Monday–Sunday week, lets users select dates and navigate weeks,
+and updates building and meal-service status with the slider. Dates outside a published schedule
+are marked unavailable; unverified locations remain explicit. Source and verification metadata
+remain in the hours data file and are not linked in the UI.
 
 **With the API** (meetups shared between everyone using the server):
 ```bash
