@@ -43,8 +43,9 @@ The footer always names the data source (*built-in demo files* or *BU-sy API*). 
 reached, a notice says so and the built-in demo files are used. Both modes give the same suggestions
 (see *Static and API modes* below).
 
-**Try it:** press **Try a sample scenario** (70 free minutes at 3 PM, work out, from Mugar to a class at
-Warren Towers). The other samples show a best match chosen on evidence (*study, outlets needed*) and a
+**Try it:** choose an activity and how long you're free; options appear right away. Everything else has
+a visible default under **Preferences**. Or open **Try a sample** (70 free minutes at 3 PM, work out, from
+Mugar to a class at Warren Towers). The other samples show a best match chosen on evidence (*study, outlets needed*) and a
 window where nothing fits, with a one-tap fix the engine has checked.
 
 ## Checks
@@ -78,7 +79,20 @@ isn't counted, and the app says so.
   opening; if it closes early, the unused minutes are shown.
 
 **Unknown hours.** A place that fits on time but has no hours is never shown as confirmed. It appears under
-**Check hours before going**.
+**Hours unknown**.
+
+**No starting point.** The starting point is optional. Without it the walk there can't be counted, so the
+engine only rules places out (too little time even before walking, closed, missing a need) and lists the rest
+as *could work, travel not checked*. It never calls them a fit, shows no leave/arrive times, offers no "would
+fit" fixes, and doesn't compare walks when ranking.
+
+**Quick start and remembered settings.** Only the activity and free time are required. The rest has visible
+defaults under **Preferences**: start time (the demo clock), next stop (none), minimum (per activity), buffer,
+ranking and study needs. Values you change by hand, and your last chosen starting point, are kept in this
+browser (`localStorage`, see [`web/js/prefs.js`](web/js/prefs.js)) and shown as *Last selected*, never as your
+current location. The next stop isn't kept, so a stale one can't silently add an onward walk. **Reset
+preferences** restores every default. Sample scenarios never change what's remembered. Results update after
+each choice; typed numbers update after a short pause, and errors appear only once you leave the field.
 
 **Ranking.** Comparisons are lexicographic and documented in the code:
 1. Your preference: busyness level if you chose *quieter*; total sample walking if you chose *shorter walks*;
@@ -92,8 +106,8 @@ because capacities are illustrative. A place with no count is never treated as q
 **Best match.** This label appears only when something other than the alphabetical tie-break separates
 #1 from #2, and never when #1's busyness is unavailable. Otherwise the app says the options are equal.
 
-**Busyness wording.** Labels are tied to the count's time: *"Quiet at the selected demo time"* or
-*"Busyness unavailable"*. There's no forecasting for your arrival time, and campus places have no
+**Busyness wording.** Labels are tied to the count's time: *"Quiet at 3:00 PM"* (next to a *Demo* data
+chip) or *"No busyness data"*. There's no forecasting for your arrival time, and campus places have no
 multi-day history that could support "historically quieter".
 
 **Nothing fits.** The app says why (grouped reasons, plus a per-place list) and offers changes such as a
@@ -167,11 +181,11 @@ server/    FastAPI app (main.py), data adapter (sources.py), planner data loader
            analytics.py (busyness, time-weighted averages, playback), meetups, static export
 web/       the site: index.html, styles.css, js/
              recommend.js  planner engine (single source of truth)
-             plan.js       "What fits now?" screen
+             plan.js       "What fits now?" screen     prefs.js  remembered planner settings
              app.js        router, Places, playback, meetups, About
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
-tests/     test_api.py (pytest), recommend.test.mjs + meetups_static.test.mjs (node --test)
+tests/     test_api.py (pytest), recommend / plan_prefs / meetups_static .test.mjs (node --test)
 DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 ```
 
@@ -228,6 +242,9 @@ does **not** protect:
 - Liu et al., *COD: A Dataset of Commercial Building Occupancy Traces*, Zenodo 2017,
   [doi:10.5281/zenodo.996587](https://doi.org/10.5281/zenodo.996587), CC BY-SA 4.0.
 - Synthetic campus data and planner samples made by the team. Details: [`data/README.md`](data/README.md).
+- Interface font: Plus Jakarta Sans (Tokotype), bundled in `web/assets/fonts/` under the SIL Open Font
+  License 1.1 ([`OFL.txt`](web/assets/fonts/OFL.txt)). It is served with the site, so nothing loads from
+  another server; until it arrives, text shows in the system font.
 
 BU's own [Peak & Quiet Hours](https://www.bu.edu/fitrec/peak-quiet-hours/) page already reports FitRec
 traffic. BU-sy explores planning around free time, not a replacement for it.

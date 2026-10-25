@@ -85,7 +85,7 @@ const uuid = () => crypto.randomUUID?.()
   ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("")
     .replace(/^(.{8})(.{4})(.{4})(.{4})/, "$1-$2-$3-$4-");
 
-const store = {
+export const store = {
   get(key) {
     try { return localStorage.getItem(key); } catch { return null; }
   },

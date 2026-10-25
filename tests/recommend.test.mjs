@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  budgetSentence, busynessText, recommend, requestFromScenario, whyItFits,
+  budgetSentence, busynessText, rankReason, recommend, requestFromScenario, whyItFits,
 } from "../web/js/recommend.js";
 
 // ---------- tiny fixtures ----------
@@ -143,13 +143,13 @@ test("zero occupancy is quiet; missing occupancy is unavailable", () => {
   const zero = one({}, {}, hist(0, "quiet")).options[0];
   assert.equal(zero.busy.level, "quiet");
   assert.equal(zero.busy.count, 0);
-  assert.equal(busynessText(zero, req()).label, "Quiet at the selected demo time");
+  assert.equal(busynessText(zero, req()).label, "Quiet at 3:00 PM");
   assert.match(busynessText(zero, req()).basis, /Sample count 0 of 100 \(illustrative capacity\) at 3:00 PM\. Not a forecast/);
 
   const missing = one({}, {}, hist(null)).options[0];
   assert.equal(missing.busy.level, "unknown");
   assert.equal(missing.busy.count, null);
-  assert.equal(busynessText(missing, req()).label, "Busyness unavailable");
+  assert.equal(busynessText(missing, req()).label, "No busyness data");
 });
 
 test("busyness before the first observation is unavailable, not zero", () => {
@@ -219,11 +219,53 @@ test("COD-style historical places are never campus suggestions", () => {
 test("invalid input is reported, not guessed", () => {
   const campus = makeCampus([place("gym")]);
   const fields = (over) => recommend(req(over), campus, { gym: hist(1) }).errors?.map((e) => e.field);
-  assert.deepEqual(fields({ from: "" }), ["from"]);
+  assert.deepEqual(fields({ from: "nowhere" }), ["from"]);
+  assert.equal(fields({ from: "" }), undefined); // no start is allowed: see the browse tests
   assert.deepEqual(fields({ start: "23:30", minutes: 60 }), ["minutes"]); // past midnight
   assert.deepEqual(fields({ minutes: Number.NaN }), ["minutes"]);
   assert.deepEqual(fields({ buffer: -1 }), ["buffer"]);
   assert.deepEqual(fields({ activity: "nap" }), ["activity"]);
+});
+
+// ---------- no starting point: browse, never "fits" ----------
+test("unknown start: places are browsed, never called a fit or given trip times", () => {
+  const r = one({ from: "" });
+  assert.equal(r.travelKnown, false);
+  assert.equal(r.options.length + r.more.length, 0);
+  assert.equal(r.featured, null);
+  const [o] = r.browse;
+  assert.equal(o.status, "unchecked");
+  assert.equal(o.there, null);                       // unknown, not zero
+  assert.equal(o.activity, 70 - 15 - 10);            // an upper bound: onward and buffer only
+  assert.ok(o.upTo && o.depart === undefined && o.arrive === undefined);
+  assert.match(budgetSentence(o, req(), makeCampus([])), /^Up to 45 min .* Travel not checked/);
+});
+
+test("unknown start still rules out places that can't fit even before walking", () => {
+  const r = one({ from: "", minutes: 50 });          // 50 - 15 onward - 10 buffer = 25 < 35
+  assert.equal(r.browse.length, 0);
+  assert.equal(r.excluded[0].code, "time");
+  assert.match(r.excluded[0].reason, /before the walk there/);
+  assert.equal(r.suggestions.length, 0);              // "would fit" can't be claimed without a start
+  const closed = one({ from: "" }, { hours: [["18:00", "22:00"]] });
+  assert.equal(closed.excluded[0].code, "closed");
+  const unknownHours = one({ from: "" }, { hours: null });
+  assert.equal(unknownHours.checkHours[0].upTo, true);
+});
+
+test("unknown start ignores walking in ranking, so 'shorter walk' can't decide", () => {
+  const places = [place("far", { location_id: "c" }), place("near", { location_id: "a" })];
+  const r = recommend(req({ from: "", to: null, preferQuiet: false, preferShortTravel: true }), makeCampus(places), { far: hist(5), near: hist(5) });
+  assert.deepEqual(r.browse.map((o) => o.place.name), ["far", "near"]); // equal evidence: by name
+});
+
+test("rankReason names the first factor that puts an option below the top one", () => {
+  const places = [place("quiet"), place("busy"), place("quiet2")];
+  const r = recommend(req(), makeCampus(places), { quiet: hist(5), busy: hist(90, "busy"), quiet2: hist(5) });
+  const [top, tie, busy] = r.options;
+  assert.equal(rankReason(top, top), null);
+  assert.equal(rankReason(tie, top), "Tied with the top option; listed by name");
+  assert.equal(rankReason(busy, top), "Busier than the top option");
 });
 
 // ---------- the real exported sample data (what static mode serves) ----------

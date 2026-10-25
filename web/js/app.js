@@ -88,15 +88,14 @@ document.addEventListener("input", (e) => {
 // ---------- screen: places ----------
 async function placesView() {
   $view.innerHTML = `
-    <h1 class="title">How busy is it?</h1>
+    <div class="page-head"><h1 class="title">How busy is it?</h1>
+      <p class="tagline">A replay of one recorded Monday. Tags show each place's data.</p></div>
     ${playbackBar()}
-    <p class="hint">Replaying one recorded Monday. Places marked <em>Sample</em> use made-up data.
-      <em>Real data</em> is an office room from the COD dataset, shown as a data demo and never suggested as a campus place.</p>
     <label class="search">${icon("search")}<input type="search" placeholder="Search places" aria-label="Search places" value="${esc(state.query)}"></label>
     <div class="chips" role="group" aria-label="Filter places">
       ${FILTERS.map(([id, label]) => `<button class="chip" data-filter="${id}" aria-pressed="${state.filter === id}">${label}</button>`).join("")}
     </div>
-    <ul class="list" id="places" aria-live="polite">${loading()}</ul>`;
+    <ul class="list list-card" id="places" aria-live="polite">${loading()}</ul>`;
   syncPlayback();
 
   const $list = $view.querySelector("#places");
@@ -166,18 +165,22 @@ async function placeView(id) {
 
   $view.innerHTML = `
     ${backToPlaces}
-    <h1 class="title">${esc(f.facility_name)}</h1>
-    <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${real ? `<span class="muted">Office room, not BU · never a campus suggestion</span>` : ""}</p>
+    <div class="page-head"><h1 class="title">${esc(f.facility_name)}</h1>
+      <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${real ? `<span class="muted">Office room, not BU · never suggested</span>` : ""}</p></div>
     ${playbackBar()}
-    <section class="hero" id="hero" aria-live="polite"></section>
-    <section class="suggest" id="suggest"></section>
-    <section class="card">
+    <div class="place-grid">
+    <div class="place-now">
+      <section class="hero" id="hero" aria-live="polite"></section>
+      <section class="suggest" id="suggest"></section>
+    </div>
+    <section class="card place-chart">
       <div class="card-head"><h2>${esc(hist.day_label)}</h2>
         ${hist.typical ? `<span class="legend"><span class="key-bar"></span>This day <span class="key-line"></span>Typical</span>` : ""}</div>
       <div class="chart" id="chart"></div>
       <details class="table-view"><summary>Show as table</summary>${hourTable(hist)}</details>
     </section>
-    ${hist.areas.length ? `<section><h2 class="section-title">Areas</h2><ul class="list" id="areas"></ul></section>` : ""}
+    ${hist.areas.length ? `<section class="card place-areas"><h2>Areas</h2><ul class="list" id="areas"></ul></section>` : ""}
+    </div>
     <details class="about">
       <summary>How this works</summary>
       <dl>
@@ -317,9 +320,9 @@ const dayLabel = (iso) => {
 async function eventsView() {
   const mode = await src.getMode();
   $view.innerHTML = `
-    <div class="title-row"><h1 class="title">Events</h1>
+    <div class="title-row"><h1 class="title">Meetups</h1>
       <a class="btn btn-primary" href="#/events/new">${icon("plus", 16)} New</a></div>
-    <p class="hint">Unofficial and student-run. Not FitRec programming. ${mode === "static"
+    <p class="hint">Unofficial and student-run, not FitRec programming. ${mode === "static"
       ? "<strong>Demo mode:</strong> events are saved in this browser only. Nobody else can see or join them."
       : "Shared with everyone using this server: anyone can see each event's time and place."}</p>
     <div id="events" aria-live="polite">${loading()}</div>`;
@@ -404,7 +407,7 @@ async function eventsView() {
 }
 
 async function newEventView() {
-  $view.innerHTML = `<a class="back" href="#/events">${icon("back", 16)} Events</a>${loading()}`;
+  $view.innerHTML = `<a class="back" href="#/events">${icon("back", 16)} Meetups</a>${loading()}`;
   let places;
   try {
     const facilities = await src.listFacilities();
@@ -413,7 +416,7 @@ async function newEventView() {
     const others = facilities.filter((f) => !isReal(f) && f !== fitrec).map((f) => f.facility_name);
     places = { FitRec: areas, "Elsewhere on campus": [...others, "Somewhere else on campus"] };
   } catch (err) {
-    $view.innerHTML = `<a class="back" href="#/events">${icon("back", 16)} Events</a>${failure(err)}`;
+    $view.innerHTML = `<a class="back" href="#/events">${icon("back", 16)} Meetups</a>${failure(err)}`;
     return {};
   }
   const mode = await src.getMode();
@@ -424,12 +427,12 @@ async function newEventView() {
   const L = src.LIMITS;
 
   $view.innerHTML = `
-    <a class="back" href="#/events">${icon("back", 16)} Events</a>
-    <h1 class="title">New event</h1>
-    <p class="hint">Unofficial. You're the host; nothing is booked with FitRec. ${mode === "static"
+    <a class="back" href="#/events">${icon("back", 16)} Meetups</a>
+    <h1 class="title">New meetup</h1>
+    <p class="hint">Unofficial: you host it and nothing is booked with FitRec. ${mode === "static"
       ? "<strong>Demo mode:</strong> this event is saved in this browser only. Nobody else will see it."
       : "Everyone using this server will see it."}</p>
-    <form class="form" id="new-event" novalidate>
+    <form class="form panel" id="new-event" novalidate>
       <label>What<input name="title" required maxlength="${L.title}" placeholder="Basketball run"></label>
       <label>Where<select name="place" required>
         ${Object.entries(places).map(([group, list]) => `<optgroup label="${esc(group)}">${list.map((p) => `<option>${esc(p)}</option>`).join("")}</optgroup>`).join("")}
@@ -485,19 +488,22 @@ async function newEventView() {
 
 // ---------- screen: about ----------
 function aboutView() {
+  const doi = `<a href="https://doi.org/10.5281/zenodo.996587" target="_blank" rel="noopener">doi:10.5281/zenodo.996587</a>`;
+  const item = (title, body) => `<section class="about-item"><h2>${title}</h2>${body}</section>`;
   $view.innerHTML = `
-    <a class="back" href="#/">${icon("back", 16)} What fits now?</a>
-    <h1 class="title">About the data</h1>
-    <div class="prose">
-      <p><strong>What fits now?</strong> checks each campus place against your free window: walking there, at least your minimum activity time, walking on, and your buffer all have to fit, and the place has to be open. Walking times, opening hours and amenities are <em>illustrative samples</em>, not routed or verified. Places with unknown hours are listed separately, never as confirmed.</p>
-      <p><strong>Sample places</strong> (FitRec, dining, Mugar) use synthetic counts from one made-up Monday. They are not BU measurements, and capacities are illustrative. Busyness in suggestions is the demo count at the selected time, not a forecast for when you arrive.</p>
-      <p><strong>Clemente Room</strong> is real: an office conference room from the public COD dataset (Liu et al., 2017, <a href="https://doi.org/10.5281/zenodo.996587" target="_blank" rel="noopener">doi:10.5281/zenodo.996587</a>). It shows the app working on real sensor data. It is not a BU space, so it is never suggested as a place to go, and its timestamps stay in their unverified source timezone.</p>
-      <p><strong>Busyness</strong> compares a count with capacity (sample places) or with the room's usual high (Clemente). Under 40% is quiet, under 75% moderate, above that busy. These are demo thresholds.</p>
-      <p><strong>Hourly averages</strong> are time-weighted: each count holds until the next one, and never past the end of the recorded day.</p>
-      <p><strong>Events</strong> are created by students and are unofficial. We store only a nickname and a random device ID.</p>
-      <p><strong>Your inputs</strong> stay in this browser. BU-sy never detects your location; you choose where you start and where you're heading.</p>
-      <p>BU-sy is an independent student prototype and is not affiliated with Boston University. A real deployment would need verified hours, real walking routes and an authorized, aggregate campus count.</p>
-    </div>`;
+    <div class="page-head"><h1 class="title">About this data</h1>
+      <p class="tagline">What's sample, what's real, and how suggestions are worked out.</p></div>
+    <div class="about-grid prose">
+      ${item("Sample places", `<p>FitRec, dining and Mugar use synthetic counts from one made-up Monday. They are not BU measurements, and capacities are illustrative.</p>`)}
+      ${item("One real room", `<p>The Clemente Room is an office conference room from the public COD dataset (Liu et al., 2017, ${doi}). It shows the app on real sensor data, is never suggested as a place to go, and keeps its unverified source timezone.</p>`)}
+      ${item("How a place fits", `<p>The walk there, at least your minimum time, the walk to your next stop and your buffer must all fit your free time, and the place must be open. With no starting point, BU-sy only lists places that could work and says travel isn't checked.</p>`)}
+      ${item("Walks, hours, amenities", `<p>Illustrative samples, not routed or verified. A missing walking time is unknown, never zero. Places with unknown hours are listed separately, never as confirmed.</p>`)}
+      ${item("Busyness", `<p>A count compared with capacity (sample places) or the room's usual high (Clemente): under 40% quiet, under 75% moderate, above that busy. These are demo thresholds. Suggestions use the count at the selected demo time, which is not a forecast for when you arrive, and a building count doesn't show free seats or equipment.</p>`)}
+      ${item("Hourly averages", `<p>Time-weighted: each count holds until the next one, and never past the end of the recorded day.</p>`)}
+      ${item("Your settings", `<p>Preferences and your last chosen starting point stay in this browser. Reset them under Preferences. BU-sy never detects your location.</p>`)}
+      ${item("Meetups", `<p>Created by students and unofficial. We store only a nickname and a random device ID.</p>`)}
+    </div>
+    <p class="fineprint">BU-sy is an independent student prototype, not affiliated with Boston University. A real version would need verified hours, real walking routes and an authorized, aggregate campus count.</p>`;
   return {};
 }
 
@@ -512,7 +518,7 @@ async function route() {
   const hash = location.hash.replace(/^#\/?/, "");
   const [section, id] = hash.split("/");
   const current = section === "" ? "plan" : section === "place" ? "places" : section;
-  for (const a of document.querySelectorAll(".nav a")) a.toggleAttribute("aria-current", a.dataset.section === current);
+  for (const a of document.querySelectorAll("[data-section]")) a.toggleAttribute("aria-current", a.dataset.section === current);
   view = null;
   window.scrollTo(0, 0);
   const next =
@@ -550,7 +556,7 @@ document.querySelector(".brand-mark").innerHTML = terrier({ size: 30 });
 src.getMode().then((mode) => {
   document.getElementById("source-mode").textContent = mode === "api"
     ? `Data source: BU-sy API${src.REQUESTED_API ? ` at ${src.REQUESTED_API}` : ""}`
-    : "Data source: built-in demo files (no server) · meetups stay on this device";
+    : "Data source: built-in demo files, no server";
   if (mode === "static" && src.REQUESTED_API) {
     const $notice = document.getElementById("notice");
     $notice.textContent = `Couldn't reach the API at ${src.REQUESTED_API}. Showing the built-in demo files instead: `
