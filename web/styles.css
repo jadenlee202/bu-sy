@@ -377,6 +377,10 @@ label.check { display: flex; flex-direction: row; align-items: center; gap: 12px
 .row-name { font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
 .row-static .row-name { font-weight: 500; font-size: 15px; }
 .row-sub { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.row-hours, .row-hours-status { font-size: 13px; }
+.row-hours { color: var(--muted); font-variant-numeric: tabular-nums; }
+.row-hours-status { color: var(--text); font-weight: 600; }
+.row-hours-status[data-status="closed"] { color: var(--muted); }
 .row-count { font-weight: 600; font-size: 17px; min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* busyness: 3 steps + word */

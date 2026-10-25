@@ -10,8 +10,10 @@ unofficial student meetups are still there as secondary screens.
 
 Independent student project, **not affiliated with Boston University**.
 
-> **Data honesty:** every campus place, count, capacity, opening hour, amenity and walking time is
-> **demo data** (labelled *Demo · Synthetic campus data*). Two real datasets appear as **historical
+> **Data honesty:** every campus place, count, capacity, amenity and walking time is **demo data**
+> (labelled *Demo · Synthetic campus data*). Places cards show source-linked, date-bounded building
+> hours where verified; unavailable or unpublished hours are called out explicitly. Planner fit
+> calculations still use the illustrative schedules in the demo campus data. Two real datasets appear as **historical
 > references** under Places: the *Clemente Room*, an office conference room from the public COD dataset, and
 > the *Campus Gym — Historical Reference*, 2015–2017 head counts from a non-BU university gym (Kaggle, ODbL).
 > They show the pipeline on real recordings, are never presented as live, and are **never** suggested as

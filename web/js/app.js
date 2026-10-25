@@ -2,6 +2,9 @@ import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obs
 import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
 import { hoursText, openSegments } from "./recommend.js";
+import {
+  buildingHoursSummary, campusDateTime, selectedBuildingStatus, selectedStatusLabel,
+} from "./hours.js";
 import * as src from "./source.js";
 import { LEVEL, esc, failure, fmtCount, level, loading } from "./ui.js";
 
@@ -145,9 +148,9 @@ async function placesView() {
   syncPlayback();
 
   const $list = $view.querySelector("#places");
-  let facilities, histories, campus;
+  let facilities, histories, campus, hours;
   try {
-    [facilities, campus] = await Promise.all([src.listFacilities(), src.getCampus()]);
+    [facilities, campus, hours] = await Promise.all([src.listFacilities(), src.getCampus(), src.getHours()]);
     histories = Object.fromEntries(
       await Promise.all(facilities.map(async (f) => [f.facility_id, await src.getHistory(f.facility_id)])),
     );
@@ -169,13 +172,27 @@ async function placesView() {
       $list.innerHTML = `<div class="state">${terrier({ size: 44, sleepy: true })}<p>No places match.</p></div>`;
       return;
     }
+    const currentDate = campusDateTime().date;
     const row = (f) => {
       const h = histories[f.facility_id];
       const { o } = observationAt(h, state.minute);
       const closed = !o && closedAt(openingHours(campus, f.facility_id), state.minute);
+      const locationHours = isHistorical(f) ? null : hours.locations[f.facility_id];
+      const summary = isHistorical(f)
+        ? null
+        : locationHours ? buildingHoursSummary(locationHours, currentDate) : "Hours unverified";
+      const selectedStatus = locationHours ? selectedBuildingStatus(locationHours, currentDate, state.minute) : null;
+      const hoursSummary = summary
+        ? `<span class="row-hours">${summary === "Hours unverified" || summary === "Today's hours not published" || summary === "Closed today"
+          ? esc(summary) : `Today: ${esc(summary)}`}</span>`
+        : "";
+      const statusText = selectedStatus && ["open", "closed"].includes(selectedStatus.status)
+        ? `<span class="row-hours-status" data-status="${selectedStatus.status}">${selectedStatusLabel(selectedStatus)}</span>`
+        : "";
       return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
         <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
-          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(h.day_label)}</span>` : ""}</span></span>
+          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(h.day_label)}</span>` : ""}</span>
+          ${hoursSummary}${statusText}</span>
         <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
         ${level(o?.busyness ?? (closed ? "closed" : "unknown"))}
         ${icon("chevron", 16)}
