@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  daySegments, findOpportunities, freeWindows, matchFreeWindows, normalizeBusy, usableWindows, zonedInstant,
+  daySegments, findOpportunities, freeWindows, matchFreeWindows, normalizeBusy, placeAvailability, usableWindows,
+  zonedInstant,
 } from "../web/js/availability.js";
 
 const hours = JSON.parse(readFileSync(new URL("../web/data/hours.json", import.meta.url), "utf8"));
@@ -190,4 +191,33 @@ test("an empty calendar is matched only within the location's verified hours", (
   assert.deepEqual(matches.map(({ start, end }) => [start, end]), [[
     Date.parse("2026-10-24T08:00:00-04:00"), Date.parse("2026-10-24T22:00:00-04:00"),
   ]]);
+});
+
+const mugar = hours.locations["mugar-synthetic"];
+const filterContext = { ...searchOptions, date: "2026-10-24", busy: weekBusy };
+
+test("open-now filter uses verified hours and flags unverified places instead of hiding them", () => {
+  const noon = Date.parse("2026-10-24T12:00:00-04:00");
+  const late = Date.parse("2026-10-24T21:30:00-04:00");
+
+  assert.equal(placeAvailability(marciano, "dining", "open_now", { now: noon }).result, "match");
+  assert.equal(placeAvailability(marciano, "dining", "open_now", { now: late }).result, "no");
+  assert.equal(placeAvailability(mugar, "library", "open_now", { now: noon }).result, "unchecked");
+});
+
+test("free-time filters match building hours, meals, and only dining for meals", () => {
+  const fitrec = hours.locations["fitrec-synthetic"];
+  const open = placeAvailability(fitrec, "fitness", "free", filterContext);
+  assert.equal(open.result, "match");
+  assert.equal(open.match.start, Date.parse("2026-10-24T12:15:00-04:00"));
+
+  assert.equal(placeAvailability(marciano, "dining", "lunch", filterContext).result, "match");
+  assert.equal(placeAvailability(marciano, "dining", "dinner", filterContext).result, "no");
+  assert.equal(placeAvailability(fitrec, "fitness", "lunch", filterContext).result, "no");
+  assert.equal(placeAvailability(marciano, "dining", "free", { ...filterContext, minimum: 45 }).result, "no");
+});
+
+test("free-time filters report unverified or unpublished hours as unchecked", () => {
+  assert.equal(placeAvailability(mugar, "library", "free", filterContext).result, "unchecked");
+  assert.equal(placeAvailability(marciano, "dining", "lunch", { ...filterContext, date: "2026-10-31", busy: [] }).result, "unchecked");
 });

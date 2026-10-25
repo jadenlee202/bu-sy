@@ -70,6 +70,10 @@ building is open and, for dining, the chosen meal is being served. Without a con
 Calendar page shows an empty day with no events (it never assumes you're free) alongside the
 selected location's published hours. Calendar settings (window, minimum, timezone, location) are
 saved in the browser; busy times never are.
+On Places, *Open now* filters by each place's published hours. With Google Calendar connected,
+*Open during my free time* and *Serving lunch/dinner during my free time* filter by a chosen date
+and minimum length. Places whose hours aren't verified for that date are listed as unchecked
+rather than hidden, and historical references are never suggested.
 
 This feature is **not active on GitHub Pages alone**. To enable it, deploy the FastAPI app over
 HTTPS and configure Google Cloud:

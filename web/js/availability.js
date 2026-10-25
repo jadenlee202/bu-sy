@@ -1,4 +1,4 @@
-import { daySchedule } from "./hours.js";
+import { daySchedule, openStatus } from "./hours.js";
 
 const plusDays = (isoDate, amount) => {
   const day = new Date(`${isoDate}T12:00:00Z`);
@@ -161,6 +161,29 @@ export function findOpportunities(busy, location, startDate, days, options) {
     matches.push(...found.map((match) => ({ ...match, date })));
   }
   return { matches, outcomes };
+}
+
+const UNCHECKABLE = new Set(["unverified", "unpublished", "not_applicable", "invalid_window"]);
+
+/**
+ * Does one place pass a Places availability filter? `mode` is "open_now", "free" (building open
+ * during a free window) or a meal ("lunch", "dinner") served during a free window.
+ * Returns "match" (with the first matching window), "no", or "unchecked" when the place's hours
+ * can't be verified, so callers can say why a place is missing instead of hiding it silently.
+ */
+export function placeAvailability(location, category, mode, context) {
+  if (mode === "open_now") {
+    const { status } = openStatus(location, context.now ? new Date(context.now) : new Date());
+    if (status === "open") return { result: "match" };
+    return status === "opens" || status === "closed" ? { result: "no" } : { result: "unchecked" };
+  }
+  const meal = mode === "free" ? null : mode;
+  if (meal && category !== "dining") return { result: "no" };
+  // Open during free time means the building is open, so dining halls use building hours here.
+  const schedule = { ...location, category: meal ? "dining" : "building" };
+  const { matches, outcomes } = findOpportunities(context.busy, schedule, context.date, 1, { ...context, meal });
+  if (matches.length) return { result: "match", match: matches[0] };
+  return UNCHECKABLE.has(outcomes[0]?.reason) ? { result: "unchecked" } : { result: "no" };
 }
 
 function intersect(free, service, minimum) {

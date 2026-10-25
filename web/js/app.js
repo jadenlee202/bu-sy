@@ -2,7 +2,8 @@ import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obs
 import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
 import { hoursText, openSegments } from "./recommend.js";
-import { calendarView } from "./calendar.js";
+import { placeAvailability } from "./availability.js";
+import { calendarView, formatInstant, loadCalendarPrefs, MIN_OPTIONS, TZ } from "./calendar.js";
 import { findTimeCard } from "./findtime.js";
 import {
   addDays, buildingHoursSummary, campusDateTime, dateLabel, daySchedule, displaySchedule, formatPeriod,
@@ -22,8 +23,12 @@ const TICK_MS = 300;
 
 const CATEGORY = { fitness: "Fitness", dining: "Dining", library: "Library", office: "Office" };
 const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], ["library", "Library"], ["historical", "Historical"]];
+// Availability filters combine with the category chips. Only "open_now" works without Google Calendar.
+const AVAIL_FILTERS = [["any", "Any time"], ["open_now", "Open now"], ["free", "Open during my free time"],
+  ["lunch", "Serving lunch during my free time"], ["dinner", "Serving dinner during my free time"]];
+const CALENDAR_FILTERS = new Set(["free", "lunch", "dinner"]);
 
-const state = { minute: FIRST_VIEW, playing: false, timer: null, filter: "all", query: "" };
+const state = { minute: FIRST_VIEW, playing: false, timer: null, filter: "all", query: "", avail: "any" };
 const $view = document.getElementById("view");
 let view = null; // the mounted screen: { update?(), resize?() }
 
@@ -147,6 +152,8 @@ async function placesView() {
     <div class="chips" role="group" aria-label="Filter places">
       ${FILTERS.map(([id, label]) => `<button class="chip" data-filter="${id}" aria-pressed="${state.filter === id}">${label}</button>`).join("")}
     </div>
+    <div class="chips" id="avail-chips" role="group" aria-label="Filter by availability"></div>
+    <div class="avail-panel" id="avail-panel" aria-live="polite"></div>
     <div id="places" class="places" aria-live="polite">${loading()}</div>`;
   syncPlayback();
 
@@ -162,6 +169,67 @@ async function placesView() {
     return {};
   }
 
+  // Free-time filters: busy times stay in this screen's memory only and are refetched on each visit.
+  const prefs = loadCalendarPrefs();
+  const zone = prefs.timezone ?? TZ;
+  const todayLocal = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const freeFilter = { date: todayLocal, minimum: prefs.minimum ?? 30, from: prefs.from ?? "08:00", until: prefs.until ?? "22:00" };
+  let calendar = null;      // calendar status, or null when there's no calendar API
+  let calendarKnown = false;
+  let busy = null;          // { key, busy } for the selected date, or { key, error }
+  let busyRequest = 0;
+  const $availChips = $view.querySelector("#avail-chips");
+  const $availPanel = $view.querySelector("#avail-panel");
+
+  const renderAvailControls = () => {
+    if (calendarKnown && CALENDAR_FILTERS.has(state.avail) && !calendar?.connected) state.avail = "any";
+    const offered = AVAIL_FILTERS.filter(([id]) => !CALENDAR_FILTERS.has(id) || calendar?.connected);
+    $availChips.innerHTML = offered.map(([id, label]) =>
+      `<button class="chip" data-avail="${id}" aria-pressed="${state.avail === id}">${label}</button>`).join("");
+    if (CALENDAR_FILTERS.has(state.avail)) {
+      $availPanel.innerHTML = `<div class="calendar-controls calendar-controls-grid">
+          <label>Date<input type="date" data-free="date" value="${freeFilter.date}"></label>
+          <label>Free for at least<select data-free="minimum">${MIN_OPTIONS.map((minutes) =>
+            `<option value="${minutes}"${minutes === freeFilter.minimum ? " selected" : ""}>${minutes} minutes</option>`).join("")}</select></label>
+        </div>
+        <p class="help">Using your Google Calendar free/busy times within ${esc(freeFilter.from)}–${esc(freeFilter.until)} (${esc(zone)}). <a href="#/calendar">Change on the Calendar page</a>. Travel time isn't included.</p>`;
+    } else if (state.avail === "open_now") {
+      $availPanel.innerHTML = `<p class="help">Open right now by each place's published hours (campus time), not the replay slider.</p>`;
+    } else {
+      $availPanel.innerHTML = calendar?.connected ? ""
+        : calendar?.configured ? `<p class="help"><a href="#/calendar">Connect Google Calendar</a> to filter places by your free time.</p>` : "";
+    }
+  };
+
+  const loadBusy = async () => {
+    const key = `${freeFilter.date}|${zone}`;
+    if (!CALENDAR_FILTERS.has(state.avail) || busy?.key === key) return;
+    const id = ++busyRequest;
+    busy = { key, loading: true };
+    update();
+    try {
+      const result = await src.calendarFreeBusy(freeFilter.date, zone);
+      if (id === busyRequest) busy = { key, busy: result.busy };
+    } catch (error) {
+      if (id !== busyRequest) return;
+      busy = { key, error };
+      if (error.status === 401) {
+        calendar = { ...calendar, connected: false };
+        renderAvailControls();
+      }
+    }
+    if (id === busyRequest) update();
+  };
+
+  src.calendarStatus().then((status) => { calendar = status; }).catch(() => { calendar = null; })
+    .finally(() => {
+      calendarKnown = true;
+      renderAvailControls();
+      update();
+      void loadBusy();
+    });
+  renderAvailControls();
+
   const visible = () => {
     const q = state.query.trim().toLowerCase();
     return facilities.filter((f) =>
@@ -169,10 +237,46 @@ async function placesView() {
       (!q || `${f.facility_name} ${CATEGORY[f.category] ?? ""}`.toLowerCase().includes(q)));
   };
 
+  // Applies the availability filter. Returns the kept places with their first matching window,
+  // the places whose hours can't be checked, and a notice when the calendar couldn't be read.
+  const applyAvailability = (rows) => {
+    if (state.avail === "any") return { rows, windows: {}, unchecked: [], notice: "" };
+    const calendarMode = CALENDAR_FILTERS.has(state.avail);
+    if (calendarMode && (!busy || busy.loading)) return { rows: [], windows: {}, unchecked: [], notice: loading("Checking your free time…") };
+    if (calendarMode && busy.error) {
+      return {
+        rows, windows: {}, unchecked: [],
+        notice: `<p class="calendar-error">${esc(busy.error.message || "Your calendar couldn't be read.")} Showing all places.</p>
+          <button class="btn" type="button" data-free-retry>Retry</button>`,
+      };
+    }
+    const context = calendarMode
+      ? { busy: busy.busy, date: freeFilter.date, timezone: zone, from: freeFilter.from, until: freeFilter.until, minimum: freeFilter.minimum, now: Date.now() }
+      : { now: Date.now() };
+    const kept = [];
+    const windows = {};
+    const unchecked = [];
+    for (const f of rows) {
+      if (isHistorical(f)) continue; // never suggested
+      const location = hours.locations[f.facility_id];
+      const outcome = location ? placeAvailability(location, f.category, state.avail, context) : { result: "unchecked" };
+      if (outcome.result === "match") {
+        kept.push(f);
+        if (outcome.match) windows[f.facility_id] = outcome.match;
+      } else if (outcome.result === "unchecked") unchecked.push(f);
+    }
+    return { rows: kept, windows, unchecked, notice: "" };
+  };
+
   const update = () => {
-    const rows = visible();
+    const filtered = applyAvailability(visible());
+    const { rows, windows, unchecked } = filtered;
+    const uncheckedNote = unchecked.length
+      ? `<p class="help">Not shown because their hours aren't verified or published for this date: ${unchecked.map((f) => esc(f.facility_name)).join(", ")}.</p>`
+      : "";
     if (!rows.length) {
-      $list.innerHTML = `<div class="state">${terrier({ size: 44, sleepy: true })}<p>No places match.</p></div>`;
+      $list.innerHTML = filtered.notice || `<div class="state">${terrier({ size: 44, sleepy: true })}<p>${state.avail === "any" ? "No places match."
+        : CALENDAR_FILTERS.has(state.avail) ? `No places match your free time on this date. Try a shorter minimum or another date.` : "No places are open right now."}</p></div>${uncheckedNote}`;
       return;
     }
     const currentDate = campusDateTime().date;
@@ -195,7 +299,7 @@ async function placesView() {
       return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
         <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
           <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(h.day_label)}</span>` : ""}</span>
-          ${hoursSummary}${statusText}</span>
+          ${hoursSummary}${statusText}${windows[f.facility_id] ? `<span class="row-hours">Fits your free time: ${formatInstant(windows[f.facility_id].start, zone)}–${formatInstant(windows[f.facility_id].end, zone)}</span>` : ""}</span>
         <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
         ${level(o?.busyness ?? (closed ? "closed" : "unknown"))}
         ${icon("chevron", 16)}
@@ -203,7 +307,7 @@ async function placesView() {
     };
     const places = rows.filter((f) => !isHistorical(f));
     const refs = rows.filter(isHistorical);
-    $list.innerHTML = `${places.length ? `<ul class="list list-card">${places.map(row).join("")}</ul>` : ""}
+    $list.innerHTML = `${filtered.notice}${places.length ? `<ul class="list list-card">${places.map(row).join("")}</ul>` : ""}${uncheckedNote}
       ${refs.length ? `<section class="refs"><h2 class="section-title">Historical references</h2>
         <p class="help">Real recordings from outside BU, replayed for comparison. Never suggested as places to go.</p>
         <ul class="list list-card">${refs.map(row).join("")}</ul></section>` : ""}`;
@@ -214,8 +318,29 @@ async function placesView() {
     const chip = e.target.closest("[data-filter]");
     if (!chip) return;
     state.filter = chip.dataset.filter;
-    for (const c of $view.querySelectorAll(".chip")) c.setAttribute("aria-pressed", c === chip);
+    for (const c of chip.parentElement.querySelectorAll(".chip")) c.setAttribute("aria-pressed", c === chip);
     update();
+  });
+  $availChips.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-avail]");
+    if (!chip) return;
+    state.avail = chip.dataset.avail;
+    renderAvailControls();
+    update();
+    void loadBusy();
+  });
+  $availPanel.addEventListener("change", (e) => {
+    const field = e.target.dataset.free;
+    if (field === "date" && e.target.value) freeFilter.date = e.target.value;
+    else if (field === "minimum") freeFilter.minimum = Number(e.target.value);
+    else return;
+    update();
+    void loadBusy();
+  });
+  $list.addEventListener("click", (e) => {
+    if (!e.target.closest("[data-free-retry]")) return;
+    busy = null;
+    void loadBusy();
   });
   update();
   return { update };
