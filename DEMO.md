@@ -16,8 +16,8 @@ git clone https://github.com/jadenlee202/bu-sy.git
 cd bu-sy
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
-.venv\Scripts\python -m pytest -q                           # expect 55 passed
-node --test "tests/*.test.mjs"                              # expect 41 passed (or: npm test)
+.venv\Scripts\python -m pytest -q                           # expect 71 passed
+node --test "tests/*.test.mjs"                              # expect 46 passed (or: npm test)
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 
@@ -65,8 +65,11 @@ API mode gives exactly the same text as static mode (verified).
    - Expect **"Nothing fits this window"**, with reasons and a per-place list.
    - Tap **Extend to 48 minutes**: the form updates and 2 options fit.
 5. **View place** on any card. The chart and playback open at the same demo time (3:00 PM). Press play.
-6. **Places → "Real data": Clemente Room.** Real office data from the COD dataset, "never a campus
-   suggestion", timestamps "timezone unverified".
+6. **Places → Historical references → Campus Gym — Historical Reference.** Point out the notice
+   ("Historical gym data — not live and not BU FitRec."), pick another **Recorded day** (5–11 Dec 2016), press
+   play, and show "Replay 5:30 PM · observed 5:24 PM (UTC−08:00)", the busyness line "Relative to this gym's
+   historical traffic", the typical weekday × hour grid and **How this works** (capacity unknown, 30-minute gap
+   rule, source and license). The Clemente Room (COD) is the other reference: an office room, timezone unverified.
 7. *(Optional)* **Meetups** (sidebar, or the footer on a phone): join an example, or create an invite-only one.
 
 ## 3. After changing data or server code
@@ -79,6 +82,16 @@ Commit `web/data/` together with the change. GitHub Pages serves those files as 
 the export.
 
 ## 4. Checks and results (2026-10-24)
+
+Campus gym historical reference (`feature/historical-gym-data`):
+
+| Check | Result |
+|---|---|
+| `pytest`: everything below plus gym import (bad rows, zero vs missing, offsets, duplicates, reruns), gap rule, loader, API, exclusion from suggestions, static days == API | **71 passed** |
+| `node --test`: everything below plus the playback gap rule and offsets in the browser | **46 passed** |
+| Import of the real file, run twice | identical outputs (62,184 rows kept, 0 rejected) |
+| Browser: gym page in static and API mode (notice, day picker, playback, labels, grid, provenance), static == API, never in planner results or meetup places | 41/41 passed |
+| Browser: planner 66/66 and meetups 22/22 again; Places, both references and About at 375–1440 px in light and dark, no overflow or page errors | passed |
 
 Interface redesign (`feature/ui-refresh`):
 

@@ -1,4 +1,4 @@
-"""BU-sy API: campus busyness (synthetic) + one real historical room (COD).
+"""BU-sy API: campus busyness (synthetic) + historical references (COD office room, a non-BU campus gym).
 
 Endpoint shapes follow the shared brief:
     GET  /api/facilities
@@ -12,12 +12,15 @@ Endpoint shapes follow the shared brief:
 How it works
     1. sources.py loads data/bu_campus_synthetic_occupancy.csv (SYNTHETIC: one
        sample Monday, hourly, FitRec by area + dining + Mugar) and
-       data/clean_cod_occupancy.csv (REAL office events from COD).
+       data/clean_cod_occupancy.csv (REAL office events from COD) and, when
+       imported, data/clean_campus_gym_occupancy.csv (REAL counts from a non-BU
+       campus gym, about every 10 minutes). Historical references are never
+       campus suggestions (`campus_eligible: false`).
     2. Playback: `at` is a time of day replayed on each facility's recorded day.
        The latest observation at or before it is shown; before the first one,
        or after the recorded window, occupancy is unavailable (None), never zero.
     3. Busyness = count / illustrative capacity (synthetic) or count / the
-       room's typical high (COD: 95th time-weighted percentile). FitRec weight
+       place's typical high (COD, gym: 95th time-weighted percentile). FitRec weight
        rooms and basketball courts divide by a crowd tolerance of 1.25.
        Demo thresholds: quiet < 40%, moderate < 75%, busy >= 75%.
     4. Planner ("What fits now?"): /api/campus returns normalized, validated
@@ -114,10 +117,11 @@ class FacilitySummary(BaseModel):
     capacity_is_illustrative: bool
     busyness: Busyness
     busyness_basis: str
-    measurement_method: Literal["estimated", "measured", "synthetic"]
+    measurement_method: Literal["estimated", "measured", "synthetic", "unspecified"]
     data_mode: Literal["historical_playback", "synthetic", "live"]
+    campus_eligible: bool             # false: never a planner suggestion
     source: str
-    observed_at: Optional[datetime]   # naive, in `timezone` (None = unverified)
+    observed_at: Optional[datetime]   # source local time; keeps a supplied UTC offset, else naive
     timezone: Optional[str]
     time_note: str
     playback_at: Optional[datetime]
@@ -139,6 +143,20 @@ class HourBucket(BaseModel):
     hour: int                    # clock hour, 13 = 1-2 PM
     occupancy: Optional[float]   # time-weighted mean; None = no coverage
     busyness: Busyness
+
+
+class TypicalHour(BaseModel):
+    hour: int
+    occupancy: Optional[float]   # None = too little recorded time for this weekday-hour
+    recorded_hours: float        # how much recorded time the value is based on
+    busyness: Busyness
+
+
+class WeekdayProfile(BaseModel):
+    weekday: int                 # 0 = Monday, source local clock
+    label: str
+    days: int
+    hours: list[TypicalHour]
 
 
 class AreaHistory(BaseModel):
@@ -163,9 +181,18 @@ class DayHistory(BaseModel):
     busyness_basis: str
     observations: list[Observation]
     hourly: list[HourBucket]
-    typical: Optional[list[HourBucket]]   # same-weekday historical average (COD)
+    typical: Optional[list[HourBucket]]   # same-weekday historical average (COD, gym)
     typical_label: Optional[str]
     areas: list[AreaHistory]
+    # Historical references (empty/None for synthetic places)
+    notice: Optional[str] = None
+    busyness_label: Optional[str] = None
+    source: str = ""
+    measurement_note: str = ""
+    max_hold_minutes: Optional[int] = None     # a count stands for at most this long (gap policy)
+    playback_days: list[date] = []             # recorded days offered for playback (same in static mode)
+    typical_week: Optional[list[WeekdayProfile]] = None
+    insight_hours: Optional[list[int]] = None  # [start, end) hours the quieter-time insight may use
 
 
 # ---------- helpers ----------
@@ -198,9 +225,14 @@ def day_label(f: Facility, day: date) -> str:
 
 def basis_text(f: Facility, count: Optional[int]) -> str:
     if count is None:
+        if f.max_hold:
+            return (f"No data for this time: no recording in the previous "
+                    f"{f.max_hold.total_seconds() / 60:.0f} minutes on this day")
         start, end = f.window
         return f"No data for this time (recorded {start}:00-{end}:00 only)"
     pct = f.ratio(count)
+    if not f.show_percent:
+        return f"{count:,} people; {f.reference_note}; {THRESHOLD_NOTE}"
     if f.capacity:
         return (f"{count:,} of illustrative capacity {f.capacity:,} ({pct:.0%}); "
                 f"{f.reference_note}; {THRESHOLD_NOTE}")
@@ -220,8 +252,8 @@ def active_event(area_id: str, when: datetime) -> Optional[Event]:
 
 def facility_fields(f: Facility, tod: time) -> dict:
     day = f.default_day
-    playback_at = datetime.combine(day, tod)
-    obs = latest_at(f.days[day], playback_at, f.coverage_end(day))
+    playback_at = f.at(day, tod)
+    obs = latest_at(f.days[day], playback_at, f.coverage_end(day), f.max_hold)
     count = obs[1] if obs else None
     return dict(
         facility_id=f.facility_id,
@@ -234,6 +266,7 @@ def facility_fields(f: Facility, tod: time) -> dict:
         busyness_basis=basis_text(f, count),
         measurement_method=f.measurement_method,
         data_mode=f.data_mode,
+        campus_eligible=f.campus_eligible,
         source=f.source,
         observed_at=obs[0] if obs else None,
         timezone=f.timezone,
@@ -280,6 +313,30 @@ def buckets(f: Facility, values: list[Optional[float]]) -> list[HourBucket]:
     ]
 
 
+WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def typical_label(f: Facility, weekday: int) -> str:
+    name = WEEKDAYS[weekday]
+    label = f"Typical {name}: mean of {f.typical_days[weekday]} recorded {name}s"
+    return f"{label} ({f.typical_basis})" if f.typical_basis else label
+
+
+def typical_week(f: Facility) -> Optional[list[WeekdayProfile]]:
+    if not f.typical_hours:
+        return None
+    return [
+        WeekdayProfile(
+            weekday=wd, label=WEEKDAYS[wd], days=f.typical_days[wd],
+            hours=[
+                TypicalHour(hour=f.window[0] + i, occupancy=v, recorded_hours=f.typical_hours[wd][i], busyness=f.level(v))
+                for i, v in enumerate(f.typical_by_weekday[wd])
+            ],
+        )
+        for wd in sorted(f.typical_by_weekday)
+    ]
+
+
 # ---------- endpoints ----------
 @app.get("/api/facilities", response_model=list[FacilitySummary])
 def list_facilities(at: Optional[str] = Query(None, description="HH:MM or ISO datetime")):
@@ -299,7 +356,8 @@ def get_facility(facility_id: str, at: Optional[str] = Query(None, description="
 def get_history(facility_id: str, on: Optional[date] = Query(None, alias="date")):
     """One recorded day: every observation, plus time-weighted hourly means.
 
-    Defaults to the facility's playback day. COD supports any recorded weekday.
+    Defaults to the facility's playback day. COD and the campus gym accept any
+    recorded day here; the app offers `playback_days`, which static mode exports too.
     """
     f = get_facility_or_404(facility_id)
     day = on or f.default_day
@@ -312,8 +370,8 @@ def get_history(facility_id: str, on: Optional[date] = Query(None, alias="date")
         day_label=day_label(f, day),
         timezone=f.timezone,
         time_note=f.time_note,
-        coverage_start=time(f.window[0]),
-        coverage_end=time(f.window[1] % 24),
+        coverage_start=f.coverage_start(day),
+        coverage_end=f.coverage_end(day).time(),
         capacity=f.capacity,
         busyness_reference=f.reference,
         busyness_basis=f"{f.reference_note}; {THRESHOLD_NOTE}",
@@ -323,10 +381,7 @@ def get_history(facility_id: str, on: Optional[date] = Query(None, alias="date")
         ],
         hourly=buckets(f, f.hourly(day)),
         typical=buckets(f, typical) if typical else None,
-        typical_label=(
-            f"Typical {day:%A}: mean of {f.typical_days[day.weekday()]} recorded {day:%A}s"
-            if typical else None
-        ),
+        typical_label=typical_label(f, day.weekday()) if typical else None,
         areas=[
             AreaHistory(
                 area_id=a.area_id, name=a.name, category=a.category,
@@ -338,6 +393,14 @@ def get_history(facility_id: str, on: Optional[date] = Query(None, alias="date")
             )
             for a in f.areas
         ],
+        notice=f.notice,
+        busyness_label=f.busyness_label,
+        source=f.source,
+        measurement_note=f.measurement_note,
+        max_hold_minutes=int(f.max_hold.total_seconds() // 60) if f.max_hold else None,
+        playback_days=f.playback_days,
+        typical_week=typical_week(f),
+        insight_hours=list(f.insight_hours) if f.insight_hours else None,
     )
 
 

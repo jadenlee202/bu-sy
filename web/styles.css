@@ -459,6 +459,35 @@ th { color: var(--muted); font-weight: 600; }
 .about dt { color: var(--muted); }
 .about dd { margin: 0; }
 
+/* ---------- historical references ---------- */
+.refs { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.refs .help { margin: 0; }
+.places { display: flex; flex-direction: column; gap: 16px; }
+.banner { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--red); font-size: 14px; font-weight: 600; }
+.banner .icon { color: var(--red); margin-top: 2px; }
+.replay-row { display: flex; flex-direction: column; gap: 12px; }
+.replay-row .playback { flex: 1; min-width: 0; }
+.day-pick { min-width: 220px; }
+@container (min-width: 40rem) {
+  .replay-row { flex-direction: row; align-items: flex-end; }
+}
+.place-week { grid-column: 1 / -1; }
+.heat { display: grid; grid-template-columns: 2.4em repeat(24, minmax(0, 1fr)); gap: 2px; margin-top: 12px; font-size: 11px; }
+.heat i { display: block; aspect-ratio: 1; min-height: 10px; border-radius: 3px; }
+.heat-hour { color: var(--muted); white-space: nowrap; overflow: visible; }
+.heat-day { color: var(--muted); align-self: center; }
+.heat-day.is-today { color: var(--text); font-weight: 700; }
+[data-step="0"] { background: color-mix(in srgb, var(--red) 10%, var(--bar)); }
+[data-step="1"] { background: color-mix(in srgb, var(--red) 28%, var(--bar)); }
+[data-step="2"] { background: color-mix(in srgb, var(--red) 48%, var(--bar)); }
+[data-step="3"] { background: color-mix(in srgb, var(--red) 72%, var(--bar)); }
+[data-step="4"] { background: var(--red); }
+[data-step="none"], .heat-none-key { background: repeating-linear-gradient(135deg, var(--bar) 0 2px, transparent 2px 5px); }
+.heat-key { display: inline-flex; gap: 2px; }
+.heat-key i, .heat-none-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.table-scroll { overflow-x: auto; }
+.place-week .help { margin: 10px 0 0; }
+
 /* ---------- about this data ---------- */
 .about-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 @container (min-width: 44rem) { .about-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

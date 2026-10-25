@@ -9,8 +9,8 @@ live in one place, web/js/recommend.js, and run on this payload in both API
 mode (/api/campus) and static mode (web/data/campus.json). Swap either file
 for a verified source (published hours, a routing service) and keep the shape.
 
-Guards: a place must point at a synthetic campus facility that exists. COD
-(an office room, historical playback) can never become a campus suggestion.
+Guards: a place must point at a campus-eligible (synthetic) facility that exists. COD
+and the campus gym (historical references) can never become campus suggestions.
 """
 import csv
 import json
@@ -165,7 +165,7 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
         f = facilities.get(fid)
         if f is None:
             raise ValueError(f"place: unknown facility {fid}")
-        if f.data_mode != "synthetic":
+        if not f.campus_eligible:
             raise ValueError(f"place: {fid} is {f.data_mode} data, not a campus destination")
         meta = raw["facilities"][fid]
         if meta["location"] not in location_ids:

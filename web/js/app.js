@@ -1,4 +1,4 @@
-import { clockSec, fmtHHMM, fmtHour, fmtTime, latestAt, obsMinute } from "./clock.js";
+import { clockSec, fmtHHMM, fmtHour, fmtTime, latestAt, obsMinute, obsOffset } from "./clock.js";
 import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
 import * as src from "./source.js";
@@ -12,27 +12,46 @@ const STEP_MIN = 5;
 const TICK_MS = 300;
 
 const CATEGORY = { fitness: "Fitness", dining: "Dining", library: "Library", office: "Office" };
-const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], ["library", "Library"], ["real", "Real data"]];
+const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], ["library", "Library"], ["historical", "Historical"]];
 
 const state = { minute: FIRST_VIEW, playing: false, timer: null, filter: "all", query: "" };
 const $view = document.getElementById("view");
 let view = null; // the mounted screen: { update?(), resize?() }
 
 // ---------- helpers ----------
-const isReal = (f) => f.data_mode !== "synthetic";
-const tag = (f) => (isReal(f) ? `<span class="tag tag-real">Real data</span>` : `<span class="tag">Sample</span>`);
+const isHistorical = (f) => f.data_mode === "historical_playback";
+const tag = (f) => (isHistorical(f)
+  ? `<span class="tag tag-real" title="Real recorded data from elsewhere, replayed. Not live, not BU.">Historical</span>`
+  : `<span class="tag">Sample</span>`);
 const backToPlaces = `<a class="back" href="#/places">${icon("back", 16)} All places</a>`;
+const offsetText = (o) => (obsOffset(o) ? `UTC${obsOffset(o).replace("-", "−")}` : "timezone unverified");
 
-/** Quietest hour that starts after `minute`, from the typical profile when there is one. */
+/**
+ * Quietest later hour. With a typical profile it's a historical pattern; without one
+ * it's read from the same recorded day, so it's labelled as hindsight. `insight_hours`
+ * limits the search (the gym's opening hours are unknown, so nights are left out).
+ */
 function quieterTime(hist, minute) {
   const series = hist.typical ?? hist.hourly;
-  const basis = hist.typical ? hist.typical_label : hist.day_label;
-  const later = series.filter((b) => b.hour * 60 > minute && b.occupancy != null);
+  // Short form here; the full averaging method is under "How this works".
+  const basis = hist.typical ? hist.typical_label.split(" (")[0] : `${hist.day_label} · in hindsight, from the same day`;
+  const [lo, hi] = hist.insight_hours ?? [0, 24];
+  const later = series.filter((b) => b.hour * 60 > minute && b.hour >= lo && b.hour < hi && b.occupancy != null);
   if (!later.length) return { kind: "none", basis };
   const best = later.reduce((a, b) => (b.occupancy < a.occupancy ? b : a));
   const thisHour = series.find((b) => b.hour === Math.floor(minute / 60));
   if (thisHour?.occupancy != null && best.occupancy >= thisHour.occupancy) return { kind: "now", basis };
   return { kind: "later", hour: best.hour, value: best.occupancy, basis, usual: !!hist.typical };
+}
+
+/** Observation at the playback minute, plus why there is none (before, gap, ended). */
+function observationAt(hist, minute) {
+  const o = latestAt(hist.observations, minute, hist.coverage_end, hist.max_hold_minutes);
+  if (o) return { o };
+  const sec = minute * 60;
+  if (!hist.observations.length || sec < clockSec(hist.observations[0].observed_at.slice(11, 19))) return { why: "before" };
+  if (sec > clockSec(hist.coverage_end)) return { why: "ended" };
+  return { why: "gap" };
 }
 
 // ---------- playback (one clock shared by every screen) ----------
@@ -51,7 +70,7 @@ function syncPlayback() {
   const ended = state.minute >= DAY_END;
   for (const el of document.querySelectorAll(".pb-time")) el.textContent = fmtTime(state.minute);
   for (const el of document.querySelectorAll(".pb-status")) {
-    el.textContent = state.playing ? "Replay running" : ended ? "End of recorded day" : "Replay paused";
+    el.textContent = state.playing ? "Replay running" : ended ? "End of replay" : "Replay paused";
   }
   for (const el of document.querySelectorAll(".pb-range")) el.value = state.minute;
   for (const el of document.querySelectorAll(".pb-toggle")) {
@@ -89,13 +108,13 @@ document.addEventListener("input", (e) => {
 async function placesView() {
   $view.innerHTML = `
     <div class="page-head"><h1 class="title">How busy is it?</h1>
-      <p class="tagline">A replay of one recorded Monday. Tags show each place's data.</p></div>
+      <p class="tagline">Replays of recorded days. Tags show where each place's data comes from.</p></div>
     ${playbackBar()}
     <label class="search">${icon("search")}<input type="search" placeholder="Search places" aria-label="Search places" value="${esc(state.query)}"></label>
     <div class="chips" role="group" aria-label="Filter places">
       ${FILTERS.map(([id, label]) => `<button class="chip" data-filter="${id}" aria-pressed="${state.filter === id}">${label}</button>`).join("")}
     </div>
-    <ul class="list list-card" id="places" aria-live="polite">${loading()}</ul>`;
+    <div id="places" class="places" aria-live="polite">${loading()}</div>`;
   syncPlayback();
 
   const $list = $view.querySelector("#places");
@@ -113,7 +132,7 @@ async function placesView() {
   const visible = () => {
     const q = state.query.trim().toLowerCase();
     return facilities.filter((f) =>
-      (state.filter === "all" || (state.filter === "real" ? isReal(f) : f.category === state.filter)) &&
+      (state.filter === "all" || (state.filter === "historical" ? isHistorical(f) : f.category === state.filter)) &&
       (!q || `${f.facility_name} ${CATEGORY[f.category] ?? ""}`.toLowerCase().includes(q)));
   };
 
@@ -123,17 +142,23 @@ async function placesView() {
       $list.innerHTML = `<div class="state">${terrier({ size: 44, sleepy: true })}<p>No places match.</p></div>`;
       return;
     }
-    $list.innerHTML = rows.map((f) => {
+    const row = (f) => {
       const h = histories[f.facility_id];
-      const o = latestAt(h.observations, state.minute, h.coverage_end);
+      const { o } = observationAt(h, state.minute);
       return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
         <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
-          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}</span></span>
+          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(h.day_label)}</span>` : ""}</span></span>
         <span class="row-count num">${fmtCount(o?.occupancy_count)}</span>
         ${level(o?.busyness ?? "unknown")}
         ${icon("chevron", 16)}
       </a></li>`;
-    }).join("");
+    };
+    const campus = rows.filter((f) => !isHistorical(f));
+    const refs = rows.filter(isHistorical);
+    $list.innerHTML = `${campus.length ? `<ul class="list list-card">${campus.map(row).join("")}</ul>` : ""}
+      ${refs.length ? `<section class="refs"><h2 class="section-title">Historical references</h2>
+        <p class="help">Real recordings from outside BU, replayed for comparison. Never suggested as places to go.</p>
+        <ul class="list list-card">${refs.map(row).join("")}</ul></section>` : ""}`;
   };
 
   $view.querySelector(".search input").addEventListener("input", (e) => { state.query = e.target.value; update(); });
@@ -161,60 +186,74 @@ async function placeView(id) {
     $view.innerHTML = `${backToPlaces}${failure(err)}`;
     return {};
   }
-  const real = isReal(f);
+  const historical = isHistorical(f);
+  const office = f.category === "office";
+  const days = hist.playback_days ?? [];
+  const dayName = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
   $view.innerHTML = `
     ${backToPlaces}
     <div class="page-head"><h1 class="title">${esc(f.facility_name)}</h1>
-      <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${real ? `<span class="muted">Office room, not BU · never suggested</span>` : ""}</p></div>
-    ${playbackBar()}
+      <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${historical ? `<span class="muted">${office ? "Office room, not BU" : "Not BU"} · never suggested</span>` : ""}</p></div>
+    ${hist.notice ? `<p class="banner" role="note">${icon("info", 16)}<span>${esc(hist.notice)}</span></p>` : ""}
+    <div class="replay-row">
+      ${days.length > 1 ? `<label class="field day-pick"><span class="field-label">Recorded day</span>
+        <select id="day">${days.map((d) => `<option value="${esc(d)}"${d === hist.day ? " selected" : ""}>${esc(dayName(d))}</option>`).join("")}</select></label>` : ""}
+      ${playbackBar()}
+    </div>
     <div class="place-grid">
-    <div class="place-now">
-      <section class="hero" id="hero" aria-live="polite"></section>
-      <section class="suggest" id="suggest"></section>
+      <div class="place-now">
+        <section class="hero" id="hero" aria-live="polite"></section>
+        <section class="suggest" id="suggest"></section>
+      </div>
+      <section class="card place-chart" id="day-card"></section>
+      ${hist.areas.length ? `<section class="card place-areas"><h2>Areas</h2><ul class="list" id="areas"></ul></section>` : ""}
+      ${hist.typical_week ? `<section class="card place-week" id="week"></section>` : ""}
     </div>
-    <section class="card place-chart">
-      <div class="card-head"><h2>${esc(hist.day_label)}</h2>
-        ${hist.typical ? `<span class="legend"><span class="key-bar"></span>This day <span class="key-line"></span>Typical</span>` : ""}</div>
-      <div class="chart" id="chart"></div>
-      <details class="table-view"><summary>Show as table</summary>${hourTable(hist)}</details>
-    </section>
-    ${hist.areas.length ? `<section class="card place-areas"><h2>Areas</h2><ul class="list" id="areas"></ul></section>` : ""}
-    </div>
-    <details class="about">
-      <summary>How this works</summary>
-      <dl>
-        <dt>Busyness</dt><dd>${esc(hist.busyness_basis)}</dd>
-        ${hist.capacity ? `<dt>Capacity</dt><dd>${hist.capacity.toLocaleString()} (illustrative, not official)</dd>` : `<dt>Capacity</dt><dd>Unknown, so no “% full” is shown.</dd>`}
-        <dt>Time</dt><dd>${esc(hist.time_note)}. Recorded ${fmtHHMM(hist.coverage_start)}–${fmtHHMM(hist.coverage_end)}.</dd>
-        <dt>Source</dt><dd>${esc(f.source)}</dd>
-        ${real ? `<dt>Counts</dt><dd>Estimated by doorway sensors at each entry or exit, so a count can stay the same for a while when nobody moves.</dd>` : ""}
-      </dl>
-    </details>`;
+    <details class="about" id="how"></details>`;
   syncPlayback();
 
-  const chart = barChart($view.querySelector("#chart"), hist);
   const $hero = $view.querySelector("#hero");
   const $suggest = $view.querySelector("#suggest");
   const $areas = $view.querySelector("#areas");
+  const $dayCard = $view.querySelector("#day-card");
+  let chart;
+
+  // Parts that depend on the selected recorded day.
+  const renderDay = () => {
+    $dayCard.innerHTML = `<div class="card-head"><h2>${esc(hist.day_label)}</h2>
+        ${hist.typical ? `<span class="legend"><span class="key-bar"></span>This day <span class="key-line"></span>Typical</span>` : ""}</div>
+      <div class="chart" id="chart"></div>
+      <details class="table-view"><summary>Show as table</summary>${hourTable(hist)}</details>`;
+    chart = barChart($dayCard.querySelector("#chart"), hist);
+    const $week = $view.querySelector("#week");
+    if ($week) $week.innerHTML = weekHeatmap(hist);
+    $view.querySelector("#how").innerHTML = howItWorks(f, hist);
+  };
 
   const update = () => {
-    const o = latestAt(hist.observations, state.minute, hist.coverage_end);
-    const when = o
-      ? real ? `Last recorded event ${fmtTime(obsMinute(o))}` : `At ${fmtTime(state.minute)}`
-      : state.minute * 60 < clockSec(hist.coverage_start) ? "Nothing recorded yet at this time" : "Recording has ended for the day";
+    const { o, why } = observationAt(hist, state.minute);
+    const meta = o
+      ? historical
+        ? `Replay ${fmtTime(state.minute)} · observed ${fmtTime(obsMinute(o))} (${offsetText(o)})`
+        : `At ${fmtTime(state.minute)}`
+      : why === "before" ? `No data yet: recording starts at ${fmtHHMM(hist.observations[0]?.observed_at.slice(11, 19) ?? hist.coverage_start)}`
+      : why === "gap" ? `No data: nothing recorded in the ${hist.max_hold_minutes} min before ${fmtTime(state.minute)}`
+      : "Recording has ended for this day";
     $hero.innerHTML = `
       <div class="hero-count"><span class="big num">${fmtCount(o?.occupancy_count)}</span><span class="unit">${o ? "people" : ""}</span></div>
       ${level(o?.busyness ?? "unknown")}
-      <p class="meta">${when}${real ? " · source local time, timezone unverified" : ""}</p>`;
+      ${hist.busyness_label && o ? `<p class="meta">${esc(hist.busyness_label)}</p>` : ""}
+      <p class="meta">${meta}</p>`;
 
     const q = quieterTime(hist, state.minute);
+    const word = historical ? "Historically quieter" : q.usual ? "Usually quieter" : "Quieter later that day";
     $suggest.innerHTML = `<span class="paw">${paw(18)}</span><div>${
       q.kind === "later"
-        ? `<strong>${q.usual ? "Usually quieter" : "Quieter"} at ${fmtHour(q.hour)}</strong><span>about ${fmtCount(q.value)} people · ${esc(q.basis)}</span>`
+        ? `<strong>${word} at ${fmtHour(q.hour)}</strong><span>about ${fmtCount(q.value)} people · ${esc(q.basis)}${historical ? " · a past pattern, not a forecast" : ""}</span>`
         : q.kind === "now"
-          ? `<strong>This is the quietest it gets for the rest of the day</strong><span>${esc(q.basis)}</span>`
-          : `<strong>No more recorded hours today</strong><span>${esc(q.basis)}</span>`
+          ? `<strong>${historical ? "Historically no quieter later" : "This is the quietest it gets for the rest of the day"}</strong><span>${esc(q.basis)}</span>`
+          : `<strong>No well-recorded hours left${historical ? " to compare" : " today"}</strong><span>${esc(q.basis)}</span>`
     }</div>`;
 
     chart.mark(Math.floor(state.minute / 60));
@@ -227,8 +266,66 @@ async function placeView(id) {
       }).join("");
     }
   };
+
+  $view.querySelector("#day")?.addEventListener("change", async (e) => {
+    const picked = e.target.value;
+    e.target.disabled = true;
+    try {
+      hist = await src.getHistory(id, picked);
+      renderDay();
+      update();
+    } catch (err) {
+      $dayCard.innerHTML = failure(err);
+    } finally {
+      e.target.disabled = false;
+    }
+  });
+
+  renderDay();
   update();
   return { update, resize: () => { chart.draw(); chart.mark(Math.floor(state.minute / 60)); } };
+}
+
+function howItWorks(f, hist) {
+  const capacity = hist.capacity
+    ? `${hist.capacity.toLocaleString()} (illustrative, not official)`
+    : "Unknown. BU-sy doesn't guess it from the highest count, so it never shows “% full”.";
+  return `<summary>How this works</summary>
+    <dl>
+      <dt>Busyness</dt><dd>${esc(hist.busyness_basis)}</dd>
+      ${hist.typical_label ? `<dt>Typical</dt><dd>${esc(hist.typical_label)}</dd>` : ""}
+      <dt>Capacity</dt><dd>${capacity}</dd>
+      <dt>Time</dt><dd>${esc(hist.time_note)}. ${hist.day_label}: recorded ${fmtHHMM(hist.coverage_start)}–${fmtHHMM(hist.coverage_end)}.</dd>
+      ${hist.max_hold_minutes ? `<dt>Gaps</dt><dd>A count stands for at most ${hist.max_hold_minutes} minutes and never past midnight; longer gaps show as no data, not zero.</dd>` : ""}
+      <dt>Source</dt><dd>${esc(f.source)}</dd>
+      ${hist.measurement_note ? `<dt>Counts</dt><dd>${esc(hist.measurement_note)}</dd>` : ""}
+      ${f.measurement_method === "estimated" ? `<dt>Counts</dt><dd>Estimated by doorway sensors at each entry or exit, so a count can stay the same for a while when nobody moves.</dd>` : ""}
+    </dl>
+    <p class="fineprint"><a href="#/about">About this data</a></p>`;
+}
+
+/** Typical weekday x hour, as a single-hue grid. Blank = too little recorded time. */
+function weekHeatmap(hist) {
+  const week = hist.typical_week;
+  const ref = hist.busyness_reference || Math.max(1, ...week.flatMap((d) => d.hours.map((h) => h.occupancy ?? 0)));
+  const step = (v) => (v == null ? "none" : Math.min(4, Math.floor((v / ref) * 5)));
+  const today = new Date(`${hist.day}T12:00:00Z`).getUTCDay();
+  const weekdayOfDay = (today + 6) % 7;       // Monday = 0, same as the data
+  const hours = week[0].hours.map((h) => h.hour);
+  const short = (label) => label.slice(0, 3);
+  return `<div class="card-head"><h2>Typical traffic by weekday and hour</h2>
+      <span class="legend">Fewer <span class="heat-key">${[0, 1, 2, 3, 4].map((n) => `<i data-step="${n}"></i>`).join("")}</span> more · <i class="heat-none-key"></i> no data</span></div>
+    <div class="heat" role="img" aria-label="Typical number of people by weekday and hour. Details in the table below.">
+      <span></span>${hours.map((h) => `<span class="heat-hour">${h % 6 === 0 ? fmtHour(h).replace(" ", "") : ""}</span>`).join("")}
+      ${week.map((d) => `<span class="heat-day${d.weekday === weekdayOfDay ? " is-today" : ""}">${short(d.label)}</span>
+        ${d.hours.map((h) => `<i data-step="${step(h.occupancy)}" title="${esc(d.label)} ${fmtHour(h.hour)}: ${h.occupancy == null ? "not enough data" : `about ${fmtCount(h.occupancy)} people`} (${h.recorded_hours} h recorded)"></i>`).join("")}`).join("")}
+    </div>
+    <p class="help">Time-weighted over ${week.reduce((n, d) => n + d.days, 0)} recorded days, semesters and breaks together.
+      Blank cells had too little recorded time. A past pattern, not a forecast.</p>
+    <details class="table-view"><summary>Show as table</summary>
+      <div class="table-scroll"><table><thead><tr><th>Hour</th>${week.map((d) => `<th>${short(d.label)}</th>`).join("")}</tr></thead><tbody>
+      ${hours.map((h, i) => `<tr><td>${fmtHour(h)}</td>${week.map((d) => `<td class="num">${fmtCount(d.hours[i].occupancy)}</td>`).join("")}</tr>`).join("")}
+      </tbody></table></div></details>`;
 }
 
 function hourTable(hist) {
@@ -411,9 +508,9 @@ async function newEventView() {
   let places;
   try {
     const facilities = await src.listFacilities();
-    const fitrec = facilities.find((f) => f.category === "fitness");
+    const fitrec = facilities.find((f) => f.category === "fitness" && f.campus_eligible);
     const areas = fitrec ? (await src.getHistory(fitrec.facility_id)).areas.map((a) => a.name) : [];
-    const others = facilities.filter((f) => !isReal(f) && f !== fitrec).map((f) => f.facility_name);
+    const others = facilities.filter((f) => f.campus_eligible && f !== fitrec).map((f) => f.facility_name);
     places = { FitRec: areas, "Elsewhere on campus": [...others, "Somewhere else on campus"] };
   } catch (err) {
     $view.innerHTML = `<a class="back" href="#/events">${icon("back", 16)} Meetups</a>${failure(err)}`;
@@ -496,6 +593,7 @@ function aboutView() {
     <div class="about-grid prose">
       ${item("Sample places", `<p>FitRec, dining and Mugar use synthetic counts from one made-up Monday. They are not BU measurements, and capacities are illustrative.</p>`)}
       ${item("One real room", `<p>The Clemente Room is an office conference room from the public COD dataset (Liu et al., 2017, ${doi}). It shows the app on real sensor data, is never suggested as a place to go, and keeps its unverified source timezone.</p>`)}
+      ${item("A real campus gym (not BU)", `<p>Campus Gym — Historical Reference replays <a href="https://www.kaggle.com/datasets/nsrose7224/crowdedness-at-the-campus-gym" target="_blank" rel="noopener">Crowdedness at the Campus Gym</a> (Nick Rose, Kaggle, 2015–2017): head counts about every 10 minutes at an unnamed university gym. It is not BU FitRec, not live, and never suggested. Collection method and capacity aren't documented, so busyness is relative to the gym's own history. Times keep the source's UTC offset. A count stands for at most 30 minutes; longer gaps are no data. Contains information from that dataset, available under the <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">Open Database License</a>; the derived files in BU-sy are shared under the same license.</p>`)}
       ${item("How a place fits", `<p>The walk there, at least your minimum time, the walk to your next stop and your buffer must all fit your free time, and the place must be open. With no starting point, BU-sy only lists places that could work and says travel isn't checked.</p>`)}
       ${item("Walks, hours, amenities", `<p>Illustrative samples, not routed or verified. A missing walking time is unknown, never zero. Places with unknown hours are listed separately, never as confirmed.</p>`)}
       ${item("Busyness", `<p>A count compared with capacity (sample places) or the room's usual high (Clemente): under 40% quiet, under 75% moderate, above that busy. These are demo thresholds. Suggestions use the count at the selected demo time, which is not a forecast for when you arrive, and a building count doesn't show free seats or equipment.</p>`)}

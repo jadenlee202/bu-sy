@@ -1,0 +1,14 @@
+{
+  "title": "Crowdedness at the Campus Gym",
+  "creator": "Nick Rose",
+  "dataset": "nsrose7224/crowdedness-at-the-campus-gym",
+  "page": "https://www.kaggle.com/datasets/nsrose7224/crowdedness-at-the-campus-gym",
+  "download_url": "https://www.kaggle.com/api/v1/datasets/download/nsrose7224/crowdedness-at-the-campus-gym",
+  "version": 2,
+  "last_updated": "2017-03-19T04:06:26.203Z",
+  "license": "Database: Open Database, Contents: Database Contents",
+  "retrieved_at": "2026-10-25T00:56:42+00:00",
+  "archive_sha256": "7ad3ead9e3513a5a3e9a7f1fff94c0a3e09c365e4d70f090fc450ee5eef7bd07",
+  "csv_sha256": "490412204d0d90c58036788adaaba1a16968dfab525fad3fefe78a18bc998ff4",
+  "description": "# Background\n\nWhen is my university campus gym least crowded, so I know when to work out? We measured how many people were in this gym once every 10 minutes over the last year. We want to be able to predict how crowded the gym will be in the future.\n\n\n# Goals\n\n 1. Given a time of day (and maybe some other features, including weather), predict how crowded the gym will be. \n 2. Figure out which features are actually important, which are redundant, and what features **could be added** to make the predictions more accurate.\n\n\n# Data\n\nThe dataset consists of 26,000 people counts (about every 10 minutes) over the last year. In addition, I gathered extra info including weather and semester-specific information that might affect how crowded it is. The label is the number of people, which I'd like to predict given some subset of the features. \n\nLabel:\n\n - Number of people \n\nFeatures:\n \n - date (string; datetime of data)\n - timestamp (int; number of seconds since beginning of day)\n - day_of_week (int; 0 [monday] - 6 [sunday])\n - is_weekend (int; 0 or 1) [boolean, if 1, it's either saturday or sunday, otherwise 0]\n - is_holiday (int; 0 or 1) [boolean, if 1 it's a federal holiday, 0 otherwise]\n - temperature (float; degrees fahrenheit)\n - is_start_of_semester (int; 0 or 1) [boolean, if 1 it's the beginning of a school semester, 0 otherwise]\n - month (int; 1 [jan] - 12 [dec])\n - hour (int; 0 - 23)\n\n\n\n# Acknowledgements\n\nThis data was collected with the consent of the university and the gym in question."
+}
