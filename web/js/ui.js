@@ -1,7 +1,7 @@
 // Small UI helpers shared by every screen.
 import { terrier } from "./icons.js";
 
-export const LEVEL = { quiet: "Quiet", moderate: "Moderate", busy: "Busy", unknown: "No data" };
+export const LEVEL = { quiet: "Quiet", moderate: "Moderate", busy: "Busy", unknown: "No data", closed: "Closed" };
 
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 export const fmtCount = (v) => (v == null ? "—" : v < 10 && !Number.isInteger(v) ? v.toFixed(1) : Math.round(v).toLocaleString());

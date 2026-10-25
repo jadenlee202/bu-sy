@@ -1,22 +1,23 @@
-import { clockSec, fmtHHMM, fmtHour, fmtTime, latestAt, obsMinute, obsOffset } from "./clock.js";
+import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obsOffset } from "./clock.js";
 import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
+import { hoursText, openSegments } from "./recommend.js";
 import * as src from "./source.js";
 import { LEVEL, esc, failure, fmtCount, level, loading } from "./ui.js";
 
 // ---------- constants ----------
-// One replay clock is shared by every screen. Its range fits what's on screen: screens that
-// mix places (Places list, planner) use 7 AM-11 PM, where every built-in source has data;
-// a single place uses its recorded hours (e.g. the campus gym records almost all day).
-const MIXED_RANGE = [7 * 60, 23 * 60];
+// One replay clock, shared by every screen, covering the whole day. Outside a place's
+// recorded hours it shows "Closed" when the place's hours say so, otherwise "No data".
+const DAY_START = 0;
+const DAY_END = 24 * 60 - 1;       // 11:59 PM
 const FIRST_VIEW = 17 * 60 + 30;   // open on a busy moment instead of an empty morning
-const STEP_MIN = 5;
+const STEP_MIN = 5;                // each playback tick; the slider itself moves by the minute
 const TICK_MS = 300;
 
 const CATEGORY = { fitness: "Fitness", dining: "Dining", library: "Library", office: "Office" };
 const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], ["library", "Library"], ["historical", "Historical"]];
 
-const state = { minute: FIRST_VIEW, range: MIXED_RANGE, playing: false, timer: null, filter: "all", query: "" };
+const state = { minute: FIRST_VIEW, playing: false, timer: null, filter: "all", query: "" };
 const $view = document.getElementById("view");
 let view = null; // the mounted screen: { update?(), resize?() }
 
@@ -46,6 +47,26 @@ function quieterTime(hist, minute) {
   return { kind: "later", hour: best.hour, value: best.occupancy, basis, usual: !!hist.typical };
 }
 
+/**
+ * Opening hours for a campus place, from the planner data (illustrative samples).
+ * null when unknown: Fenway Dining, and the historical references, whose hours
+ * aren't documented, so the app never claims they were closed.
+ */
+function openingHours(campus, facilityId) {
+  const p = campus.places.find((x) => x.facility_id === facilityId && x.hours);
+  return p ? { segs: openSegments({ hours: p.hours, closures: [] }), text: hoursText(p), basis: p.hours_basis } : null;
+}
+
+/** Closed at `minute` by those hours: { opens } (null = not again today); null when open or unknown. */
+function closedAt(hours, minute) {
+  if (!hours || hours.segs.some(([a, b]) => minute >= a && minute < b)) return null;
+  const next = hours.segs.find(([a]) => a > minute);
+  return { opens: next ? next[0] : null };
+}
+
+const closedText = (closed, hours) => `${closed.opens != null ? `Opens at ${fmtShort(closed.opens)}` : "Closed for the rest of the day"}`
+  + ` · ${hours.basis === "verified" ? "" : "sample "}hours ${hours.text}`;
+
 /** Observation at the playback minute, plus why there is none (before, gap, ended). */
 function observationAt(hist, minute) {
   const o = latestAt(hist.observations, minute, hist.coverage_end, hist.max_hold_minutes);
@@ -57,51 +78,27 @@ function observationAt(hist, minute) {
 }
 
 // ---------- playback (one clock shared by every screen) ----------
-/** Use this range from now on, keeping the clock inside it. */
-function setRange([lo, hi]) {
-  state.range = [lo, hi];
-  state.minute = Math.min(hi, Math.max(lo, state.minute));
-}
-
-/** Replay range for one recorded day: from the hour its recording starts to its last 5-minute step. */
-function rangeFor(hist) {
-  const lo = Math.floor(clockSec(hist.coverage_start) / 3600) * 60;
-  const hi = Math.min(24 * 60 - STEP_MIN, Math.ceil(clockSec(hist.coverage_end) / 60 / STEP_MIN) * STEP_MIN);
-  return hi > lo ? [lo, hi] : MIXED_RANGE;
-}
-
 function playbackBar() {
   return `<div class="playback" role="group" aria-label="Historical playback">
     <button class="icon-btn pb-toggle" data-pb="toggle"></button>
     <div class="pb-main">
       <div class="pb-row"><span class="pb-time num"></span><span class="pb-status"></span></div>
-      <input class="pb-range" type="range" step="${STEP_MIN}" aria-label="Playback time">
-      <div class="pb-ends num" aria-hidden="true"><span></span><span></span></div>
+      <input class="pb-range" type="range" min="${DAY_START}" max="${DAY_END}" step="1" aria-label="Playback time">
+      <div class="pb-ends num" aria-hidden="true"><span>${fmtTime(DAY_START)}</span><span>${fmtTime(DAY_END)}</span></div>
     </div>
-    <button class="icon-btn" data-pb="reset">${icon("reset")}</button>
+    <button class="icon-btn" data-pb="reset" aria-label="Back to ${fmtTime(DAY_START)}" title="Back to ${fmtTime(DAY_START)}">${icon("reset")}</button>
   </div>`;
 }
 
 function syncPlayback() {
-  const [lo, hi] = state.range;
-  const ended = state.minute >= hi;
+  const ended = state.minute >= DAY_END;
   for (const el of document.querySelectorAll(".pb-time")) el.textContent = fmtTime(state.minute);
   for (const el of document.querySelectorAll(".pb-status")) {
     el.textContent = state.playing ? "Replay running" : ended ? "End of replay" : "Replay paused";
   }
   for (const el of document.querySelectorAll(".pb-range")) {
-    el.min = lo;
-    el.max = hi;
     el.value = state.minute;
     el.setAttribute("aria-valuetext", fmtTime(state.minute));
-  }
-  for (const el of document.querySelectorAll(".pb-ends")) {
-    el.children[0].textContent = fmtTime(lo);
-    el.children[1].textContent = fmtTime(hi);
-  }
-  for (const el of document.querySelectorAll('[data-pb="reset"]')) {
-    el.setAttribute("aria-label", `Back to ${fmtTime(lo)}`);
-    el.title = `Back to ${fmtTime(lo)}`;
   }
   for (const el of document.querySelectorAll(".pb-toggle")) {
     el.innerHTML = icon(state.playing ? "pause" : "play");
@@ -114,11 +111,10 @@ function setPlaying(on) {
   clearInterval(state.timer);
   state.playing = on;
   if (on) {
-    const [lo, hi] = state.range;
-    if (state.minute >= hi) state.minute = lo;
+    if (state.minute >= DAY_END) state.minute = DAY_START;
     state.timer = setInterval(() => {
-      state.minute = Math.min(state.range[1], state.minute + STEP_MIN);
-      if (state.minute >= state.range[1]) setPlaying(false); else syncPlayback();
+      state.minute = Math.min(DAY_END, state.minute + STEP_MIN);
+      if (state.minute >= DAY_END) setPlaying(false); else syncPlayback();
     }, TICK_MS);
   }
   syncPlayback();
@@ -127,7 +123,7 @@ function setPlaying(on) {
 document.addEventListener("click", (e) => {
   const action = e.target.closest("[data-pb]")?.dataset.pb;
   if (action === "toggle") setPlaying(!state.playing);
-  if (action === "reset") { state.minute = state.range[0]; setPlaying(false); }
+  if (action === "reset") { state.minute = DAY_START; setPlaying(false); }
 });
 document.addEventListener("input", (e) => {
   if (!e.target.matches(".pb-range")) return;
@@ -149,9 +145,9 @@ async function placesView() {
   syncPlayback();
 
   const $list = $view.querySelector("#places");
-  let facilities, histories;
+  let facilities, histories, campus;
   try {
-    facilities = await src.listFacilities();
+    [facilities, campus] = await Promise.all([src.listFacilities(), src.getCampus()]);
     histories = Object.fromEntries(
       await Promise.all(facilities.map(async (f) => [f.facility_id, await src.getHistory(f.facility_id)])),
     );
@@ -176,17 +172,18 @@ async function placesView() {
     const row = (f) => {
       const h = histories[f.facility_id];
       const { o } = observationAt(h, state.minute);
+      const closed = !o && closedAt(openingHours(campus, f.facility_id), state.minute);
       return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
         <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
           <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(h.day_label)}</span>` : ""}</span></span>
-        <span class="row-count num">${fmtCount(o?.occupancy_count)}</span>
-        ${level(o?.busyness ?? "unknown")}
+        <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
+        ${level(o?.busyness ?? (closed ? "closed" : "unknown"))}
         ${icon("chevron", 16)}
       </a></li>`;
     };
-    const campus = rows.filter((f) => !isHistorical(f));
+    const places = rows.filter((f) => !isHistorical(f));
     const refs = rows.filter(isHistorical);
-    $list.innerHTML = `${campus.length ? `<ul class="list list-card">${campus.map(row).join("")}</ul>` : ""}
+    $list.innerHTML = `${places.length ? `<ul class="list list-card">${places.map(row).join("")}</ul>` : ""}
       ${refs.length ? `<section class="refs"><h2 class="section-title">Historical references</h2>
         <p class="help">Real recordings from outside BU, replayed for comparison. Never suggested as places to go.</p>
         <ul class="list list-card">${refs.map(row).join("")}</ul></section>` : ""}`;
@@ -207,9 +204,10 @@ async function placesView() {
 // ---------- screen: one place ----------
 async function placeView(id) {
   $view.innerHTML = `${backToPlaces}${loading()}`;
-  let f, hist;
+  let f, hist, hours;
   try {
-    const facilities = await src.listFacilities();
+    const [facilities, campus] = await Promise.all([src.listFacilities(), src.getCampus()]);
+    hours = openingHours(campus, id);
     f = facilities.find((x) => x.facility_id === id);
     if (!f) throw new Error("We couldn't find that place.");
     hist = await src.getHistory(id);
@@ -219,7 +217,6 @@ async function placeView(id) {
   }
   const historical = isHistorical(f);
   const office = f.category === "office";
-  setRange(rangeFor(hist));
   const days = hist.playback_days ?? [];
   const dayName = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
@@ -265,7 +262,9 @@ async function placeView(id) {
 
   const update = () => {
     const { o, why } = observationAt(hist, state.minute);
-    const meta = o
+    const closed = !o && closedAt(hours, state.minute);
+    const meta = closed ? closedText(closed, hours)
+      : o
       ? historical
         ? `Replay ${fmtTime(state.minute)} · observed ${fmtTime(obsMinute(o))} (${offsetText(o)})`
         : `At ${fmtTime(state.minute)}`
@@ -273,8 +272,9 @@ async function placeView(id) {
       : why === "gap" ? `No data: nothing recorded in the ${hist.max_hold_minutes} min before ${fmtTime(state.minute)}`
       : "Recording has ended for this day";
     $hero.innerHTML = `
-      <div class="hero-count"><span class="big num">${fmtCount(o?.occupancy_count)}</span><span class="unit">${o ? "people" : ""}</span></div>
-      ${level(o?.busyness ?? "unknown")}
+      <div class="hero-count">${closed ? `<span class="big">Closed</span>`
+        : `<span class="big num">${fmtCount(o?.occupancy_count)}</span><span class="unit">${o ? "people" : ""}</span>`}</div>
+      ${closed ? "" : level(o?.busyness ?? "unknown")}
       ${hist.busyness_label && o ? `<p class="meta">${esc(hist.busyness_label)}</p>` : ""}
       <p class="meta">${meta}</p>`;
 
@@ -294,7 +294,7 @@ async function placeView(id) {
       $areas.innerHTML = hist.areas.map((a) => {
         const ao = latestAt(a.observations, state.minute, hist.coverage_end);
         return `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(a.name)}</span></span>
-          <span class="row-count num">${fmtCount(ao?.occupancy_count)}</span>${level(ao?.busyness ?? "unknown")}</li>`;
+          <span class="row-count num">${closed ? "" : fmtCount(ao?.occupancy_count)}</span>${level(ao?.busyness ?? (closed ? "closed" : "unknown"))}</li>`;
       }).join("");
     }
   };
@@ -304,9 +304,8 @@ async function placeView(id) {
     e.target.disabled = true;
     try {
       hist = await src.getHistory(id, picked);
-      setRange(rangeFor(hist));
       renderDay();
-      syncPlayback();
+      update();
     } catch (err) {
       $dayCard.innerHTML = failure(err);
     } finally {
@@ -651,8 +650,6 @@ async function route() {
   const current = section === "" ? "plan" : section === "place" ? "places" : section;
   for (const a of document.querySelectorAll("[data-section]")) a.toggleAttribute("aria-current", a.dataset.section === current);
   view = null;
-  setPlaying(false);
-  setRange(MIXED_RANGE);   // a place page narrows or widens it once its data has loaded
   window.scrollTo(0, 0);
   const next =
     section === "place" && id ? placeView(decodeURIComponent(id))

@@ -10,7 +10,7 @@ import * as src from "./source.js";
 import { esc, failure, level, loading } from "./ui.js";
 
 const PRESETS = [30, 45, 60, 90];
-const PLAYBACK = [7 * 60, 23 * 60]; // range the demo clock can show
+const PLAYBACK = [0, 24 * 60 - 1];  // range the demo clock can show (12 AM-11:59 PM)
 const TYPING_MS = 600;              // wait this long after typing before updating
 const TYPED = new Set(["custom", "start", "minActivity", "buffer"]);
 

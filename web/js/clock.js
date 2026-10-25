@@ -7,7 +7,7 @@ export const toMin = (hhmm) => clockSec(hhmm) / 60;
 export const toHHMM = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
 export const fmtTime = (min) => { const h = Math.floor(min / 60) % 24; return `${h % 12 || 12}:${String(min % 60).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
 export const fmtHour = (h) => `${h % 12 || 12} ${h % 24 < 12 ? "AM" : "PM"}`;
-export const fmtHHMM = (t) => fmtTime(clockSec(t) / 60);
+export const fmtHHMM = (t) => fmtTime(Math.floor(clockSec(t) / 60)); // "00:09:02" -> 12:09 AM
 /** "6 AM", "4:30 PM", "12 AM" (midnight at the end of the day). */
 export const fmtShort = (min) => (min % 60 ? fmtTime(min) : fmtHour(min / 60));
 

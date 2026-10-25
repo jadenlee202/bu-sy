@@ -390,6 +390,8 @@ label.check { display: flex; flex-direction: row; align-items: center; gap: 12px
 .level[data-level="moderate"] i:nth-child(-n+2),
 .level[data-level="busy"] i { background: var(--red); }
 .level[data-level="unknown"] { color: var(--muted); font-weight: 500; }
+.level[data-level="closed"] { color: var(--muted); }
+.level[data-level="closed"] .meter { display: none; }
 
 /* ---------- places ---------- */
 .playback { display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
