@@ -20,10 +20,18 @@ const TYPED = new Set(["custom", "start", "minActivity", "buffer", "preparation"
 // Kept for the session, so going to a place and back keeps the inputs.
 const draft = { req: null, startEdited: false, lastSelected: false };
 
-const header = () => `<div class="page-head hero-banner hero-skyline planner-skyline">
-  <div class="hero-bg" aria-hidden="true">${bostonSkyline()}</div>
+// Hero: a Boston skyline photo (Unsplash, local copy) behind the title. If the
+// image ever fails to load it swaps itself for the hand-drawn skyline, so the
+// header is never broken. Overlay + credit are styled in .hero-photo.
+const header = () => `<div class="page-head hero-banner hero-photo">
+  <div class="hero-bg" aria-hidden="true">
+    <img class="hero-img" src="assets/campus/boston-hero.jpg" alt="" loading="lazy" decoding="async"
+      onerror="this.replaceWith(this.nextElementSibling.content.cloneNode(true))">
+    <template>${bostonSkyline()}</template>
+  </div>
   <div class="hero-body"><h1 class="title">What fits now?</h1>
-    <p class="tagline">I have a free window. Make it a plan.</p></div></div>`;
+    <p class="tagline">I have a free window. Make it a plan.</p></div>
+  <p class="hero-credit">Photo: Prateek Pisat / Unsplash</p></div>`;
 
 export async function planView($view, clock) {
   $view.innerHTML = header() + loading("Loading campus data…");
