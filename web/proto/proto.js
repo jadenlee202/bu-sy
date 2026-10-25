@@ -5,6 +5,7 @@ import { daySegments, zonedInstant } from "../js/availability.js";
 import { fmtTime, toHHMM, toMin } from "../js/clock.js";
 import { clubBusy, clubEventItems, loadClubEvents } from "../js/clubevents.js";
 import { campusDateTime, nowStatus, nowText } from "../js/hours.js";
+import { terrier } from "../js/icons.js";
 import { directionsURL } from "../js/plan.js";
 import * as prefs from "../js/prefs.js";
 import * as engine from "../js/recommend.js";
@@ -93,6 +94,41 @@ const TABS = { plan: "plan", answer: "plan", options: "plan", schedule: "schedul
 let current = null;
 const routeOf = () => (location.hash.replace(/^#\/?/, "").split("/")[0] || "plan");
 
+// ---------- loader: the terrier, "Loading…", a thin progress line ----------
+const brand = `<span class="brand">${terrier({ size: 26 })}<span>BU-<em>sy</em></span></span>`;
+let loaderTimer = 0;
+function showLoader(text) {
+  let $l = document.getElementById("loader");
+  if (!$l) {
+    document.body.insertAdjacentHTML("beforeend", `<div id="loader" class="loader" role="status" aria-live="polite">
+      <div class="loader-mark">${terrier({ size: 64 })}</div>
+      <p class="loader-text"><span></span><span class="dots" aria-hidden="true"><i>.</i><i>.</i><i>.</i></span></p>
+      <div class="loader-line" aria-hidden="true"><i></i></div></div>`);
+    $l = document.getElementById("loader");
+  }
+  $l.querySelector(".loader-text span").textContent = text;
+  document.body.setAttribute("aria-busy", "true");
+  requestAnimationFrame(() => $l.classList.add("on"));
+}
+function hideLoader() {
+  clearTimeout(loaderTimer);
+  const $l = document.getElementById("loader");
+  document.body.removeAttribute("aria-busy");
+  if (!$l) return;
+  $l.classList.remove("on");
+  setTimeout(() => { if (!$l.classList.contains("on")) $l.remove(); }, reduced() ? 0 : 300);
+}
+// Returning to the page (back button, or the Maps app opened instead of a tab) clears the loader.
+window.addEventListener("pageshow", (e) => { if (e.persisted) hideLoader(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && current) hideLoader(); });
+
+/** Show the loader, let it settle for a beat, then hand over to Google Maps in this tab. */
+function openDirections(url) {
+  showLoader("Opening Google Maps");
+  setTimeout(() => location.assign(url), reduced() ? 80 : 650);
+  loaderTimer = setTimeout(hideLoader, 6000);      // the Maps app may open instead and leave this page up
+}
+
 async function route() {
   let name = routeOf();
   if (!settings.onboarded && !["welcome", "access"].includes(name)) { location.replace("#/welcome"); return; }
@@ -103,7 +139,11 @@ async function route() {
   document.documentElement.dataset.dir = dir;
   const previous = current;
   current = name;
+  // Only show the loader if loading is slow enough to notice, so a fast load doesn't flicker.
+  const slow = data ? 0 : setTimeout(() => showLoader("Loading campus data"), 150);
   try { await loadData(); } catch (err) {
+    clearTimeout(slow);
+    hideLoader();
     $view.innerHTML = `<div class="stack"><h1>Couldn't load campus data</h1><p class="fine">${esc(err.message)}</p><button class="btn primary" onclick="location.reload()">Try again</button></div>`;
     return;
   }
@@ -120,6 +160,7 @@ async function route() {
     draw();
     if (previous) { $view.classList.remove("enter"); void $view.offsetWidth; $view.classList.add("enter"); }
   }
+  if (slow) { clearTimeout(slow); hideLoader(); }
   if (previous) $view.focus({ preventScroll: true });
 }
 const go = (hash) => { if (location.hash === hash) route(); else location.hash = hash; };
@@ -171,7 +212,7 @@ function pop(selector) {
 const SCREENS = {
   welcome() {
     $view.innerHTML = `<section class="welcome stagger">
-      <div class="logo">${icon.clock}</div>
+      <div class="logo">${terrier({ size: 56, label: "BU-sy" })}</div>
       <h1>Got a gap between classes?</h1>
       <p class="lede">Tell BU-sy how long you have. It finds a spot on campus that fits, and gets you to your next class on time.</p>
       <div class="btn-col">
@@ -211,7 +252,8 @@ const SCREENS = {
       : sentence.fromSchedule && !sentence.picked
         ? `<span class="chip free">${icon.cal}Free until ${at(sentence.fromSchedule.until)} · from your schedule</span>` : "";
     const access = Object.entries(settings.access).filter(([, v]) => v === "yes").map(([k]) => ({ library: "library", fitness: "FitRec", dining: "dining" })[k]);
-    $view.innerHTML = `<section class="plan stagger">
+    $view.innerHTML = `<header class="topbar">${brand}</header>
+    <section class="plan stagger">
       ${chip}
       <p class="sentence">I have <button class="word" data-pick="time" aria-label="Free time: ${esc(L.durationText(sentence.minutes))}. Change">${esc(L.durationText(sentence.minutes))}</button>
         to <button class="word" data-pick="activity" aria-label="Activity: ${esc(act.verb)}. Change">${esc(act.verb)}</button>,
@@ -404,12 +446,17 @@ function renderAnswer(o, result, count, back) {
       <ol class="steps">${steps.map(([t, text]) => `<li><time>${fmtTime(t)}</time><span>${text}</span></li>`).join("")}</ol>
       <div class="spacer"></div>
       <div class="btn-col">
-        ${directions ? `<a class="btn primary" href="${esc(directions)}" target="_blank" rel="noopener">Open directions</a>` : `<a class="btn primary" href="index.html#/place/${encodeURIComponent(o.place.facility_id)}">See this place</a>`}
+        ${directions ? `<a class="btn primary" href="${esc(directions)}" data-directions>Open directions</a>` : `<a class="btn primary" href="index.html#/place/${encodeURIComponent(o.place.facility_id)}">See this place</a>`}
         ${count > 1 ? `<a class="btn" href="#/options">See all ${count} options</a>` : ""}
         <p class="fine" style="text-align:center">Busyness is simulated, not live. Walks are estimates; check hours before you go.</p>
       </div>
     </section>`;
   $announce.textContent = `Go to ${o.place.name}: ${o.activity} minutes to ${act.verb}.`;
+  $view.querySelector("[data-directions]")?.addEventListener("click", (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;   // let "open in new tab" work as usual
+    e.preventDefault();
+    openDirections(e.currentTarget.href);
+  });
 }
 
 function optionCard(o, first) {

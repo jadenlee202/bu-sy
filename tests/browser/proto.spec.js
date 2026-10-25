@@ -93,6 +93,23 @@ test("explore shows live status and filters places and clubs", async ({ page }) 
   await expect(page.locator("#results li:not([hidden])")).toContainText("Charles River Run Club");
 });
 
+test("directions show the logo loader, then hand over to Google Maps", async ({ page, context }) => {
+  // Google Maps is stubbed so the test never leaves this machine.
+  await context.route("https://www.google.com/maps/**", (route) => route.fulfill({ contentType: "text/html", body: "<title>Maps stub</title>" }));
+  await onboard(page);
+  await expect(page.locator(".topbar .brand")).toContainText("BU-sy");
+  await pick(page, "from", "Mugar Library");
+  await pick(page, "to", "Warren Towers");
+  await page.getByRole("link", { name: "Find a spot" }).click();
+  await page.getByRole("link", { name: "Open directions" }).click();
+  const loader = page.locator("#loader");
+  await expect(loader).toHaveClass(/on/);
+  await expect(loader).toContainText("Opening Google Maps");
+  await expect(loader.locator(".terrier")).toBeVisible();
+  await page.waitForURL(/google\.com\/maps\/dir/);
+  expect(new URL(page.url()).searchParams.get("travelmode")).toBe("walking");
+});
+
 test("press feedback and transitions are off under reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await onboard(page);
