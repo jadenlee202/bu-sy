@@ -381,6 +381,8 @@ label.check { display: flex; flex-direction: row; align-items: center; gap: 12px
 .row-hours { color: var(--muted); font-variant-numeric: tabular-nums; }
 .row-hours-status { color: var(--text); font-weight: 600; }
 .row-hours-status[data-status="closed"] { color: var(--muted); }
+.row-hours-source { display: block; padding: 0 2px 10px; color: var(--muted); font-size: 12px; text-underline-offset: 2px; }
+.row-hours-source:hover { color: var(--text); }
 .row-count { font-weight: 600; font-size: 17px; min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
 
 /* busyness: 3 steps + word */
