@@ -75,9 +75,6 @@ Current operating-hour cards may repeat a published weekly pattern outside its d
 
 ### Calendar: your .ics schedule
 
-Each Pages deployment versions the stylesheet, entry module and all local module imports with the same
-commit key, preventing a fresh page from mixing old cached scripts with new ones.
-
 The Calendar page lets a student upload a calendar file (`.ics`, exported from Google Calendar,
 Apple Calendar, Outlook or any iCalendar app). There is no sign-in and no calendar account
 connection. The file is parsed **in the browser** with [ical.js](https://github.com/kewisch/ical.js)
@@ -131,9 +128,6 @@ uploaded, *Open during my free time* and *Serving breakfast/brunch/lunch/dinner 
 time* filter by date and minimum length. Places whose hours can't be checked are listed as
 unchecked rather than hidden, and historical references are never suggested.
 
-The FastAPI server still contains the earlier Google Calendar OAuth endpoints
-(`server/google_calendar.py`), but the web app no longer calls them.
-
 The footer always names the data source (*built-in demo files* or *BU-sy API*). If a requested API can't be
 reached, a notice says so and the built-in demo files are used. Both modes give the same suggestions
 (see *Static and API modes* below).
@@ -150,7 +144,7 @@ Setup, model download and how it works: [`web/counter/README.md`](web/counter/RE
 ## Checks
 
 ```bash
-python -m pytest                        # API, calendar OAuth/freebusy, data loaders + gym import, analytics, events
+python -m pytest                        # API, clubs, hours, calendar OAuth/freebusy, data loaders + gym import, analytics
 node --test "tests/*.test.mjs"          # planner engine, static clubs, .ics import + free time, people counter (Node 22+, no packages; or: npm test)
 ```
 CI runs both (`.github/workflows/tests.yml`).
@@ -382,6 +376,8 @@ If the data can't load, the planner shows an error with a retry. It never falls 
    **version note** in the page's corner (bottom right on wide screens, under the footer on phones) shows the
    new version and opens the full history. Every merge or direct commit on `main` is one version. The file is
    generated, not committed; run `python server/write_version.py` to preview it locally.
+5. Each deploy versions the stylesheet, entry module and all local module imports with the same commit key,
+   so a fresh page never mixes old cached scripts with new ones.
 
 ## What's inside
 
