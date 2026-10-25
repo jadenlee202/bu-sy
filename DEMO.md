@@ -1,15 +1,10 @@
 # BU-sy demo runbook
 
-Integration checks (October 25, 2026): all fetched feature branches are combined locally.
-198 Python tests and 104 JavaScript tests pass. Calendar requires the declared cryptography
-dependency and optional OAuth configuration described in README; no Google account was connected.
-The local integration includes actionable plans, calendar/availability, the Places list,
-the club directory and separately sourced facility metadata.
-
-Earlier actionable-plan checks: 115 Python tests and 66 JavaScript tests passed.
-The static exporter was run locally. Browser inspection was attempted but the computer-use tool
-stopped because it could not reliably determine Edge's current URL. The 390/768/1280 px,
-both-theme, keyboard, overflow and external-link browser checks remain **not executed** for this change.
+Checks (October 25, 2026): 166 Python, 192 JavaScript and 19 Chromium browser tests pass locally,
+and CI runs the same suites on every push; the Pages deploy waits for them. The browser tests cover
+the phone frame at 375–1280 px in both themes, motion, the custom-duration planner field and the service worker. Calendar requires the
+declared cryptography dependency and optional OAuth configuration described in README; no Google
+account was connected. Firefox, Safari and physical phones remain unverified.
 Historical browser reports in section 4 below belong to older builds and are not new verification.
 
 ## 0. Before the demo (once, with internet)
@@ -17,7 +12,7 @@ Historical browser reports in section 4 below belong to older builds and are not
 | Need | Version | Used for |
 |---|---|---|
 | Python | 3.12 or newer (verified 3.14; CI uses 3.12) | the site's local server, the API, pytest |
-| Node | 22 or newer (verified 24; CI uses 22) | **only** the JS tests (planner engine, static clubs, .ics import); not needed to run the app |
+| Node | 22 or newer (verified 22 and 24; CI uses 22) | **only** the JS, CSS and browser tests; not needed to run the app |
 | Browser | any current Chromium/Edge (verified); Firefox/Safari *not verified* | the app |
 
 ```bash
@@ -25,8 +20,9 @@ git clone https://github.com/jadenlee202/bu-sy.git
 cd bu-sy
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
-.venv\Scripts\python -m pytest -q                           # expect 115 passed
-node --test "tests/*.test.mjs"                              # expect 66 passed (or: npm test)
+.venv\Scripts\python -m pytest -q                           # expect 166 passed
+npm ci                                                      # dev tools for the JS checks
+npm test                                                    # expect 192 passed
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 
@@ -94,8 +90,8 @@ accurate provenance labels, and supported directions links. No results are inven
 .venv\Scripts\python server/export_static.py    # rewrites web/data/*.json
 .venv\Scripts\python -m pytest -q               # includes "static export == API"
 ```
-Keep regenerated `web/data/` with the local change; do not commit, push or deploy without explicit instruction. GitHub Pages serves those files as they are; it doesn't run
-the export.
+Commit the regenerated `web/data/` together with the change that caused it. GitHub Pages serves those
+files as they are; it doesn't run the export.
 
 ## 4. Checks and results (2026-10-24)
 
@@ -166,8 +162,8 @@ The only console error in static mode is an expected 404: the app checking wheth
 | Problem | Do this |
 |---|---|
 | API won't start or crashes | Ctrl+C, then run option A. The demo results are identical. |
-| API dies mid-demo | The planner keeps working with data already loaded. Other screens show *"Can't reach the data source"* with **Try again**. Restart the API and press Try again, or switch to option A. Nothing is ever relabelled as live. |
-| No internet | Nothing needed: the app makes no external requests. Only `pip install` and the DOI link on About need the internet. |
+| API dies mid-demo | The planner keeps working with data already loaded. Other screens show *"Can't reach the data source"* with **Try again**. Restart the API and press Try again, or switch to option A. Nothing is ever relabeled as live. |
+| No internet | Nothing needed: the app makes no external requests. Only `pip install` and the DOI link on About need the internet, and the people counter (`/counter/`) unless `python web/counter/get_model.py` was run beforehand. |
 | `?api=https://host` is wrong or down | A notice says the API couldn't be reached, and the app uses the built-in demo files. |
 | Port 8000 busy | Use another port, e.g. `8080`. |
 | Phone can't connect | Same Wi-Fi? Firewall prompt accepted? Using the laptop's IP, not `localhost`? Otherwise demo from the laptop. |
@@ -187,11 +183,10 @@ The only console error in static mode is an expected 404: the app checking wheth
 
 ## 7. Known limitations
 
-- **GitHub Pages deployment has not been verified.** It needs the repo owner to set **Settings → Pages →
-  Source: GitHub Actions**, and a public repo (or a paid plan for private repos). The Pages workflow deploys
-  on every push to `main` without waiting for the tests. The `/bu-sy/` layout was checked locally by
-  serving the site from that subpath.
-- *Not verified:* Python 3.12 (CI uses it), Node 22, Firefox, Safari, physical phones, screen readers.
+- **GitHub Pages** is live at https://jadenlee202.github.io/bu-sy/ (**Settings → Pages → Source: GitHub
+  Actions**; a public repo, or a paid plan for private repos). The workflow deploys pushes to `main` only
+  after the checks in `tests.yml` pass.
+- *Not verified:* Firefox, Safari, physical phones, screen readers. (CI runs Python 3.12 and Node 22.)
 - `--host 0.0.0.0` and the API's open CORS (`*`, no credentials) suit a demo network. Restrict CORS with
   `BUSY_CORS_ORIGINS` for anything public.
 - pytest prints a Starlette deprecation warning about `httpx` in the test client. It's harmless today.

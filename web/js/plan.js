@@ -154,6 +154,14 @@ export async function planView($view, clock) {
       $form.elements.minActivity.value = remembered ?? engine.activityInfo(campus, e.target.value).default_min;
     }
     if (name === "preset" && e.target.value === "custom") $form.elements.custom.focus();
+    if (name === "customUnit") {
+      // Keep the same duration when the unit changes (90 minutes <-> 1.5 hours).
+      const el = $form.elements, before = el.customUnit.value === "hours" ? "minutes" : "hours";
+      if (el.custom.value.trim() !== "") {
+        const minutes = toMinutes(Number(el.custom.value), before);
+        if (Number.isFinite(minutes)) el.custom.value = fromMinutes(minutes, el.customUnit.value);
+      }
+    }
     if (name === "mode") {
       // Carry a valid window across (60 min from 3 PM <-> until 4 PM); keep the other field otherwise.
       const both = { ...readForm($form), minutes: durationMinutes($form), until: $form.elements.until.value };
@@ -260,8 +268,9 @@ function formHTML(campus) {
           ${PRESETS.map((m) => `<label><input type="radio" name="preset" value="${m}"><span class="num">${m} min</span></label>`).join("")}
           <label><input type="radio" name="preset" value="custom"><span>Other</span></label>
         </div>
-        <label class="field custom" hidden><span class="field-label">Minutes free</span>
-          <input name="custom" type="number" min="5" max="720" inputmode="numeric" enterkeyhint="done"></label>
+        <label class="field custom" hidden><span class="field-label">Free time</span>
+          <span class="custom-amount"><input name="custom" type="number" min="0" step="any" inputmode="decimal" enterkeyhint="done">
+          <select name="customUnit" aria-label="Unit"><option value="minutes">Minutes</option><option value="hours">Hours</option></select></span></label>
       </div>
       <div class="until-block" hidden>
         <label class="field"><span class="field-label">Next class or commitment starts</span>
@@ -329,7 +338,7 @@ function readForm(f) {
     activity, start, mode, until,
     // "until": minutes come from the two times (the engine re-derives and validates them).
     minutes: mode === "until" ? engine.minutesUntil(start, until) ?? NaN
-      : preset === "custom" ? num("custom") : preset ? Number(preset) : NaN,
+      : preset === "custom" ? toMinutes(num("custom"), d.get("customUnit")) : preset ? Number(preset) : NaN,
     source: "manual", from: d.get("from") || "", to: d.get("to") || null,
     preparation: num("preparation"), cleanup: num("cleanup"),
     access: Object.fromEntries(["library", "fitness", "dining"].map(k => [k, d.get(`access-${k}`)])),
@@ -339,10 +348,24 @@ function readForm(f) {
   };
 }
 
+/** Custom free time in minutes. Hours may be decimal (1.5 h = 90 min) and round to the nearest minute;
+ *  minutes are passed through, so the engine still rejects fractions, zero, negatives and > 720. */
+export function toMinutes(value, unit) {
+  if (!Number.isFinite(value)) return NaN;
+  return unit === "hours" ? Math.round(value * 60) : value;
+}
+
+/** The custom field's value in `unit` for a duration in minutes (hours to 2 decimals). */
+export function fromMinutes(minutes, unit) {
+  return unit === "hours" ? Number((minutes / 60).toFixed(2)) : minutes;
+}
+
 /** The duration-mode minutes as the preset/custom fields hold them (NaN when unset). */
 function durationMinutes(f) {
   const el = f.elements;
-  if (el.preset.value === "custom") return el.custom.value.trim() === "" ? NaN : Number(el.custom.value);
+  if (el.preset.value === "custom") {
+    return el.custom.value.trim() === "" ? NaN : toMinutes(Number(el.custom.value), el.customUnit.value);
+  }
   return el.preset.value ? Number(el.preset.value) : NaN;
 }
 
@@ -356,7 +379,7 @@ function fillWindow(f, req) {
   const preset = !Number.isFinite(req.minutes) ? (el.preset.value === "custom" ? "custom" : "")
     : PRESETS.includes(req.minutes) ? String(req.minutes) : "custom";
   for (const r of el.preset) r.checked = r.value === preset;
-  el.custom.value = preset === "custom" && Number.isFinite(req.minutes) ? req.minutes : "";
+  el.custom.value = preset === "custom" && Number.isFinite(req.minutes) ? fromMinutes(req.minutes, el.customUnit.value) : "";
 }
 
 function fill(f, req, campus) {

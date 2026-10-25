@@ -9,9 +9,11 @@ see when to depart, prepare, do the activity, pack up and reach the next destina
 Occupancy supports the decision; it isn't the product. Browsing places, the replayable traffic charts and
 a student club directory are still there as secondary screens.
 
+**Live demo:** https://jadenlee202.github.io/bu-sy/ · People counter: https://jadenlee202.github.io/bu-sy/counter/
+
 Independent student project, **not affiliated with Boston University**.
 
-> **Data honesty:** busyness at BU-named places is **simulated** (labelled *Simulated*): FitRec follows one
+> **Data honesty:** busyness at BU-named places is **simulated** (labeled *Simulated*): FitRec follows one
 > recorded day at a real campus gym elsewhere; Mugar follows people counts in one small library room in
 > Singapore (ROBOD); dining halls follow canteen purchases in Switzerland at lunch (NOVANIMAL), turned into
 > diners with an assumed 30-minute meal, while breakfast and dinner stay modeled. All of it is rescaled to
@@ -69,12 +71,9 @@ The API allows cross-origin requests (`BUSY_CORS_ORIGINS` restricts them). Cooki
 allowed across origins for the exact origins listed there, which the Google Calendar session needs
 when the site and API are on different origins.
 
-Current operating-hour cards may repeat a published weekly pattern outside its dates, labelled Assumed. Fenway opts out. These assumptions do not establish historical operating hours for the replay.
+Current operating-hour cards may repeat a published weekly pattern outside its dates, labeled Assumed. Fenway opts out. These assumptions do not establish historical operating hours for the replay.
 
 ### Calendar: your .ics schedule
-
-Each Pages deployment versions the stylesheet, entry module and all local module imports with the same
-commit key, preventing a fresh page from mixing old cached scripts with new ones.
 
 The Calendar page lets a student upload a calendar file (`.ics`, exported from Google Calendar,
 Apple Calendar, Outlook or any iCalendar app). There is no sign-in and no calendar account
@@ -94,7 +93,7 @@ connection. The file is parsed **in the browser** with [ical.js](https://github.
   names such as Outlook's `Eastern Standard Time` via the file's own `VTIMEZONE`), UTC stays UTC,
   and floating times and all-day dates use America/New_York. Weekly classes keep their local time
   across daylight-saving changes. Recurrence rules, `EXDATE`, moved occurrences (`RECURRENCE-ID`)
-  and cancellations are honoured; events marked free (`TRANSP:TRANSPARENT`, Outlook *Free*) and
+  and cancellations are honored; events marked free (`TRANSP:TRANSPARENT`, Outlook *Free*) and
   cancelled events aren't busy. Occurrences are expanded from 31 days before the import to 366 days
   after it; dates outside that range are shown as unknown, never as free.
 - **No upload = empty schedule:** without an uploaded file, the Calendar page, the place cards and
@@ -125,12 +124,8 @@ file, handled in the browser.
 
 Each place's detail page has a *Find a time to eat* (dining) or *Find free time here* card that
 searches 7 days from a chosen date. On Places, *Open now* uses published hours; with a schedule
-uploaded, *Open during my free time* and *Serving breakfast/brunch/lunch/dinner during my free
-time* filter by date and minimum length. Places whose hours can't be checked are listed as
+uploaded, *Open during my free time* filters by date and minimum length. Places whose hours can't be checked are listed as
 unchecked rather than hidden, and historical references are never suggested.
-
-The FastAPI server still contains the earlier Google Calendar OAuth endpoints
-(`server/google_calendar.py`), but the web app no longer calls them.
 
 The footer always names the data source (*built-in demo files* or *BU-sy API*). If a requested API can't be
 reached, a notice says so and the built-in demo files are used. Both modes give the same suggestions
@@ -141,13 +136,28 @@ a visible default under **Preferences**. Or open **Try a sample** (80 free minut
 Mugar to a class at Warren Towers). The other samples show a best match chosen on evidence (*study, outlets needed*) and a
 window where nothing fits, with a one-tap fix the engine has checked.
 
+**Minimal prototype** (branch `proto/minimal-brownstone`): open `http://localhost:8000/proto.html`. The planner as
+one sentence ("I have **1 hr** to **study**, starting from **Mugar Library**"), in the Brownstone palette, with three
+tabs (Plan, Schedule, Explore), a first-run guide, press feedback and page transitions (off under reduced motion).
+It uses the same engine, data, verified hours, `.ics` import and saved club meetings as the main app, so both see
+the same schedule. Its own settings (onboarding, access, start and next stop) live under `busy.proto.v1` in this browser.
+
+**People counter** (camera, on-device): open `http://localhost:8000/counter/`. It counts people crossing a line
+and never uploads video. It's a prototype for producing real counts; nothing in the planner uses it yet.
+Setup, model download and how it works: [`web/counter/README.md`](web/counter/README.md).
+
 ## Checks
 
 ```bash
-python -m pytest                        # API, calendar OAuth/freebusy, data loaders + gym import, analytics, events
-node --test "tests/*.test.mjs"          # planner engine, static clubs, .ics import + free time (Node 22+, no packages; or: npm test)
+python -m pytest                        # API, clubs, hours, calendar OAuth/freebusy, data loaders + gym import, analytics
+npm ci                                  # dev tools only (PostCSS, Playwright); Node 22+
+npm run check:css                       # strict CSS parse + merge-conflict markers
+npm test                                # planner engine, static clubs, .ics import + free time, CSS validator, people counter
+npx playwright install chromium
+npm run test:browser                    # phone-frame layout, motion and service worker in Chromium
 ```
-CI runs both (`.github/workflows/tests.yml`).
+CI runs all of them (`.github/workflows/tests.yml`), and the Pages deploy waits for them.
+`npm test` needs `npm ci` first: the CSS validator test runs PostCSS.
 
 ## How "What fits now?" works
 
@@ -155,7 +165,8 @@ The rules live in one file, [`web/js/recommend.js`](web/js/recommend.js). They a
 no randomness and no clock reads, and the same code runs in the browser and in the Node tests.
 
 **The window.** It starts at the selected time (the demo clock by default) and ends at your next commitment.
-Enter it either as **How long** (free minutes, `start + free minutes`) or **Until next class** (the time
+Enter it either as **How long** (a preset, or **Other** in minutes or decimal hours: 1.5 hours = 90 minutes,
+rounded to the nearest minute; `start + free minutes`) or **Until next class** (the time
 your next class or commitment starts; free minutes = that time − start). Both feed the same engine
 (`normalizeRequest` in `recommend.js`). The next-class time must be later the same day: a time at or before
 the start is rejected, never wrapped to tomorrow, because the demo models one day. Switching modes carries a
@@ -186,7 +197,7 @@ replays (Mon, Oct 19, 2026, read from the histories), and looks hours up for tha
   `effectiveThrough`, or is a listed special date (special closures and adjusted hours win). Weekly hours
   alone never count as verified. Eating at a dining hall uses the **meal-service** periods (kept inside
   verified building hours); studying or working out uses **building** hours.
-- Otherwise the **illustrative** demo hours from the campus data, labelled as not official, with the reason
+- Otherwise the **illustrative** demo hours from the campus data, labeled as not official, with the reason
   (for example *BU hours not published for Monday, Oct 19*).
 - With neither, hours are **unknown** and the place goes to *Hours unknown*, never a confirmed fit.
 
@@ -344,7 +355,7 @@ It lives in **Places** as a data demo and is excluded from campus suggestions.
   capacity is unknown; no "% full";
 - a week of selectable days (also in static mode) with replay time and observation time shown separately.
 
-It is labelled "Historical gym data — not live and not BU FitRec." To set it up or refresh it:
+It is labeled "Historical gym data — not live and not BU FitRec." To set it up or refresh it:
 `python data/import_campus_gym.py --download`, then `python server/export_static.py`
 (details, statistics and license in [`data/README.md`](data/README.md#campus-gym-real-historical-reference-not-bu)).
 The app runs normally without it.
@@ -369,13 +380,15 @@ If the data can't load, the planner shows an error with a retry. It never falls 
 
 ## Publish on GitHub Pages
 
-1. Push to `main`.
-2. **Settings → Pages → Source: GitHub Actions.** Free accounts need a public repo for Pages.
-3. Every push to `main` deploys `web/` (`.github/workflows/pages.yml`).
+1. **Settings → Pages → Source: GitHub Actions.** Free accounts need a public repo for Pages.
+2. Push to `main`.
+3. Every push to `main` deploys `web/` (`.github/workflows/pages.yml`) once the checks in `tests.yml` pass.
 4. Each deploy also writes `web/version.json` from `main`'s history (`server/write_version.py`), so the
    **version note** in the page's corner (bottom right on wide screens, under the footer on phones) shows the
    new version and opens the full history. Every merge or direct commit on `main` is one version. The file is
    generated, not committed; run `python server/write_version.py` to preview it locally.
+5. Each deploy versions the stylesheet, entry module and all local module imports with the same commit key,
+   so a fresh page never mixes old cached scripts with new ones.
 
 ## What's inside
 
@@ -390,8 +403,14 @@ web/       the site: index.html, styles.css, js/
              calendar.js / findtime.js  availability   ics.js / schedule.js  .ics import (in the browser)
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
-tests/     test_api.py, test_campus_gym.py, test_clubs.py (pytest); recommend / planner_features / plan_prefs / clock / hours / clubs_static / ics .test.mjs (node --test)
+           counter/      on-device people counter (detector, tracker, line crossing)
+           proto.html, proto/  minimal one-sentence prototype (Brownstone)
+           sw.js, manifest.webmanifest  offline support and install metadata
+           vendor/       ical.js (unmodified)
+tests/     test_*.py (pytest), *.test.mjs (node --test), browser/*.spec.js (Playwright)
+tools/     check-css.mjs, serve-web.mjs (test server), manual-counting/ pilot tool
 DEMO.md    demo runbook: startup, demo sequence, checks, recovery
+LAYOUT_CHECKS.md  phone-frame contract and browser regression checks
 ```
 
 ### API
@@ -407,7 +426,7 @@ DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 ## Clubs (secondary)
 
 A directory of student clubs: browse and filter, view details, sign up, see *My clubs*, and (for a
-club's creator) edit it and approve, decline or waitlist applications. Sample clubs are labelled and
+club's creator) edit it and approve, decline or waitlist applications. Sample clubs are labeled and
 aren't real BU organizations. What it does **not** protect:
 
 - **No accounts.** A device is a random ID kept in the browser: *identification, not authentication*.
@@ -429,7 +448,7 @@ aren't real BU organizations. What it does **not** protect:
    but neither says anything about BU: a pilot needs BU's own data, a documented counting method and an
    agreed capacity or reference.
 2. **Verified hours**, from published schedules, with `hours_basis: "verified"`. FitRec is tracked as one
-   building: per-court, pool or room occupancy, classes and reservations aren't modelled, because no data
+   building: per-court, pool or room occupancy, classes and reservations aren't modeled, because no data
    could support them.
 3. **Real walking estimates**, from campus routing data or a maps service, replacing `sample_travel_times.csv`.
 4. **Verified amenities** (outlets, quiet floors) from the facilities themselves.

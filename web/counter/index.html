@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>BU-sy Counter</title>
+  <meta name="description" content="Counts people walking past a camera, entirely on this device. No video leaves the browser.">
+  <meta name="theme-color" content="#cc0000">
+  <link rel="icon" href="../assets/terrier.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="counter.css">
+</head>
+<body class="counter-app">
+  <header class="top">
+    <div class="top-inner">
+      <a class="brand" href="../" aria-label="Back to BU-sy"><span class="brand-mark"></span><span class="brand-name">BU-<em>sy</em></span></a>
+      <span class="app-name">People counter</span>
+      <span class="local-badge" title="Frames are processed in this browser and never uploaded">On-device</span>
+    </div>
+  </header>
+
+  <section class="stats" aria-label="Counts" aria-live="polite">
+    <div class="stat stat-in"><span class="stat-label">People In</span><span class="stat-value num" id="c-in">0</span></div>
+    <div class="stat stat-out"><span class="stat-label">People Out</span><span class="stat-value num" id="c-out">0</span></div>
+    <div class="stat"><span class="stat-label">Visible now</span><span class="stat-value num" id="c-visible">0</span></div>
+    <div class="stat"><span class="stat-label">Total</span><span class="stat-value num" id="c-total">0</span><span class="stat-note num" id="c-net">net 0</span></div>
+  </section>
+
+  <section class="viewport" id="viewport">
+    <div class="stage" id="stage">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay" aria-label="Camera view with counting line. Drag the line or its ends to move it."></canvas>
+      <div class="placeholder" id="placeholder">
+        <p id="message">Press <strong>Start camera</strong> to begin. Video stays on this device.</p>
+      </div>
+      <div class="perf num" id="perf" hidden></div>
+    </div>
+  </section>
+
+  <nav class="toolbar" aria-label="Controls">
+    <button class="btn btn-primary" id="toggle" type="button">Start camera</button>
+    <button class="btn" id="reset" type="button">Reset</button>
+    <button class="btn" id="flip" type="button" title="Swap which direction counts as In">Flip In/Out</button>
+    <button class="btn" id="preset" type="button" title="Snap the line to vertical or horizontal">Line: vertical</button>
+    <button class="btn" id="mirror" type="button" title="Show the camera like a mirror, or as the real scene">Mirror: on</button>
+    <button class="btn" id="switch" type="button" title="Use the other camera" hidden>Switch camera</button>
+  </nav>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
