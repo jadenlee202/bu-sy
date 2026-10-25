@@ -468,7 +468,7 @@ function resultsHTML(r, campus) {
       ? top.busy.level === "unknown" ? "No best match: no busyness data for this option" : "No clear best match: tied with others, listed by name"
       : null;
     body = `${head(`${plural(fits, "place fits", "places fit")}`)}
-      <ol class="recs">
+      <ol class="recs list">
         ${card(top, { req, campus, hero: true, featured: r.featured, reason: r.featured?.why ?? tie })}
         ${rest.map((o) => card(o, { req, campus, reason: engine.rankReason(o, top) })).join("")}
       </ol>
@@ -478,7 +478,7 @@ function resultsHTML(r, campus) {
     body = `${head(plural(r.browse.length, "place could work", "places could work"))}
       <div class="callout">${icon("walk", 18)}<p><strong>Travel not checked.</strong> Choose a starting point to see what fits with the walk.</p>
         <button class="btn btn-small" type="button" data-focus-from>Set starting point</button></div>
-      <ol class="recs">${shown.map((o) => card(o, { req, campus })).join("")}</ol>
+      <ol class="recs list">${shown.map((o) => card(o, { req, campus })).join("")}</ol>
       ${r.browse.length > shown.length ? moreList(`${r.browse.length - shown.length} more could work`, r.browse.slice(shown.length), (o) => `Up to ${o.activity} min before walking`) : ""}`;
   } else {
     const considered = r.excluded.length + r.checkHours.length;
@@ -509,8 +509,8 @@ const excludedRow = (e) => `<li class="row row-static"><span class="row-main"><s
   <span class="row-sub">${esc(e.reason)}</span></span>${e.code === "route" ? `<a class="btn" href="#/place/${encodeURIComponent(e.place.facility_id)}">Check details</a>` : ""}</li>`;
 
 const moreList = (title, list, sub) => `<details class="more"><summary>${title}</summary><ul class="list">
-  ${list.map((o) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(o.place.name)}</span>
-    <span class="row-sub num">${sub(o)}</span></span>${level(o.busy.level)}</li>`).join("")}</ul></details>`;
+  ${list.map((o) => `<li class="row"><span class="row-main"><span class="row-name">${esc(o.place.name)}</span>
+    <span class="row-sub num">${sub(o)}</span></span><span class="row-side">${level(o.busy.level)}</span></li>`).join("")}</ul></details>`;
 
 const stat = (value, unit, caption) => `<div class="stat"><span class="stat-value"><span class="stat-num num">${value}</span>${unit ? `<span class="stat-unit">${unit}</span>` : ""}</span><span class="stat-cap">${caption}</span></div>`;
 

@@ -7,7 +7,7 @@ fit, and shows the arithmetic: *"Fits your 80-minute window: 10 min there + 5 mi
 see when to depart, prepare, do the activity, pack up and reach the next destination.
 
 Occupancy supports the decision; it isn't the product. Browsing places, the replayable traffic charts and
-unofficial student meetups are still there as secondary screens.
+a student club directory are still there as secondary screens.
 
 Independent student project, **not affiliated with Boston University**.
 
@@ -37,7 +37,7 @@ Requires **Python 3.12+**. Node 22+ is only needed for the JS tests. There are n
 python -m http.server 8000 -d web       # macOS/Linux: python3
 # open http://localhost:8000
 ```
-It reads the pre-built JSON in `web/data/`; meetups are saved in your browser.
+It reads the pre-built JSON in `web/data/`; clubs and club sign-ups are saved in your browser.
 
 **Operating hours.** Location identity and categories come from `web/data/facilities.json`;
 `web/data/campus.json` contains illustrative planner hours, used only as a fallback when no verified schedule covers the planning date.
@@ -52,9 +52,9 @@ instead of a simulated count. Without verified hours for that date, the illustra
 Closed only when there is no count. Dates outside a published schedule are marked unavailable; unverified
 locations remain explicit. The facility-details disclosure links field-level official sources,
 independently of occupancy provenance. The current home
-screen is the planner; Places and Meetups remain secondary navigation destinations.
+screen is the planner; Places, Calendar and Clubs are secondary navigation destinations.
 
-**With the API** (meetups shared between everyone using the server):
+**With the API** (clubs and sign-ups shared between everyone using the server):
 ```bash
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt          # macOS/Linux: .venv/bin/python
@@ -69,87 +69,57 @@ when the site and API are on different origins.
 
 Current operating-hour cards may repeat a published weekly pattern outside its dates, labelled Assumed. Fenway opts out. These assumptions do not establish historical operating hours for the replay.
 
-### Optional Google Calendar availability
+### Calendar: sample week or your .ics schedule
 
 **Sample-week preview:** open **Calendar** (or the sample-week link on the planner). It defaults to the
-supplied October 25–31, 2026 screenshot, in `America/New_York` (GMT-04), and works on GitHub Pages without
-a calendar server. Pick any day to see the shared availability engine calculate free windows and campus
+supplied October 25–31, 2026 screenshot, in `America/New_York` (GMT-04), and works on GitHub Pages with no
+server and no upload. Pick any day to see the shared availability engine calculate free windows and campus
 hour matches. Class blocks with cropped ends use a labelled 50-minute estimate; Saturday's code review
 uses a labelled 15-minute estimate. Halloween is informational and does not block the day. Overlapping
 Wednesday commitments count once. Dates outside that week stay unknown, and the sample replays the full
-day without filtering against today's clock. No sample titles, locations or intervals are sent to Google,
-and preview choices do not overwrite personal calendar preferences. Turn off **Use sample schedule** to
-return to the normal connection flow. The source fixture is `web/js/sample-schedule.js`.
+day without filtering against today's clock. Preview choices are not saved. Turn off **Use sample
+schedule**, or upload your own calendar file, to use your schedule instead (an uploaded schedule that is
+still kept turns the sample off when the page opens). The source fixture is `web/js/sample-schedule.js`.
 
 Each Pages deployment versions the stylesheet, entry module and all local module imports with the same
 commit key, preventing a fresh page from mixing old cached scripts with the new preview.
 
-The Calendar page uses Google's OAuth authorization-code flow with PKCE and the single
-`calendar.freebusy` scope. It requests only the primary calendar's busy intervals; event names,
-descriptions, attendees, and locations are not read, returned to the browser, or logged. BU-sy
-does not send calendar data to an AI service. The API encrypts access and refresh tokens at rest,
-keeps them in a private SQLite session database, and exposes only the opaque session cookie to
-the browser. Disconnect removes the local session and asks Google to revoke its refresh token.
-Daily free-time windows are calculated in the timezone entered on the Calendar page (defaulting
-to the browser timezone), then intersected with the date-scoped building and meal-service data in
-`web/data/hours.json`. No travel time is estimated.
+The Calendar page also lets a student upload a calendar file (`.ics`, exported from Google Calendar,
+Apple Calendar, Outlook or any iCalendar app). There is no sign-in and no calendar account
+connection. The file is parsed **in the browser** with [ical.js](https://github.com/kewisch/ical.js)
+2.2.1 (MPL-2.0, vendored unmodified in `web/vendor/`), and never sent to a server or AI service.
+
+- **What's kept:** only merged busy intervals (start/end instants), the file name, import counts
+  and the date range covered. Never the file, event titles, descriptions, locations or attendees.
+  By default this lives in `sessionStorage` (cleared when the tab closes); *Remember my schedule
+  on this device* moves it to `localStorage`. *Remove schedule* deletes it from both.
+- **Validation:** `.ics` name (or `text/calendar` type), at most 2 MB, and contents must start
+  with `BEGIN:VCALENDAR` and parse. A failed upload, or a valid calendar with no events, never
+  replaces the previous schedule. The import reports events imported and entries skipped (no
+  start, no end/duration, end before start, unknown timezone, unsupported repeat rule).
+- **Times:** a `TZID` is used as written (IANA names via the browser's timezone data; other
+  names such as Outlook's `Eastern Standard Time` via the file's own `VTIMEZONE`), UTC stays UTC,
+  and floating times and all-day dates use America/New_York. Weekly classes keep their local time
+  across daylight-saving changes. Recurrence rules, `EXDATE`, moved occurrences (`RECURRENCE-ID`)
+  and cancellations are honoured; events marked free (`TRANSP:TRANSPARENT`, Outlook *Free*) and
+  cancelled events aren't busy. Occurrences are expanded from 31 days before the import to 366 days
+  after it; dates outside that range are shown as unknown, never as free.
+- **Free time** is the gap between merged busy blocks inside your preferred hours, at least your
+  minimum length, intersected with the date-scoped building and meal-service hours in
+  `web/data/hours.json`. No travel time is estimated.
+
+The server still contains the earlier Google Calendar free/busy integration (`server/google_calendar.py`,
+`/api/calendar/*`), but the Calendar page no longer uses it: availability comes from the sample week or an
+uploaded `.ics` file, both handled in the browser.
+
 Each place's detail page has a *Find a time to eat* (dining) or *Find free time here* card that
-searches the next 7 days in one FreeBusy request and lists windows where you're free, the
-building is open and, for dining, the chosen meal is being served. Without a connection the
-Calendar page shows an empty day with no events (it never assumes you're free) alongside the
-selected location's published hours. Calendar settings (window, minimum, timezone, location) are
-saved in the browser; busy times never are.
-On Places, *Open now* filters by each place's published hours. With Google Calendar connected,
-*Open during my free time* and *Serving lunch/dinner during my free time* filter by a chosen date
-and minimum length. Places whose hours aren't verified for that date are listed as unchecked
-rather than hidden, and historical references are never suggested.
+searches 7 days from a chosen date. On Places, *Open now* uses published hours; with a schedule
+uploaded, *Open during my free time* and *Serving breakfast/brunch/lunch/dinner during my free
+time* filter by date and minimum length. Places whose hours can't be checked are listed as
+unchecked rather than hidden, and historical references are never suggested.
 
-This feature is **not active on GitHub Pages alone**. To enable it, deploy the FastAPI app over
-HTTPS and configure Google Cloud:
-
-1. Enable the Google Calendar API and configure the OAuth consent screen. During development,
-   add your account as a test user. Review Google's
-   [OAuth 2.0](https://developers.google.com/identity/protocols/oauth2) and
-   [Calendar FreeBusy](https://developers.google.com/workspace/calendar/api/v3/reference/freebusy/query)
-   documentation. Public use may require Google's OAuth verification for the requested scope.
-2. Create a Google OAuth **Web application** client. Add the exact backend callback URL as an
-   authorized redirect URI: `https://YOUR_API_HOST/api/calendar/callback`.
-3. Set these server environment variables (never put the client secret or encryption key in the
-   static frontend or repository):
-
-   ```text
-   GOOGLE_CLIENT_ID=...
-   GOOGLE_CLIENT_SECRET=...
-   GOOGLE_REDIRECT_URI=https://YOUR_API_HOST/api/calendar/callback
-   CALENDAR_FRONTEND_ORIGIN=https://YOUR_SITE_ORIGIN
-   CALENDAR_FRONTEND_URL=https://YOUR_SITE_ORIGIN/optional/site/path/
-   CALENDAR_TOKEN_ENCRYPTION_KEY=<Fernet key>
-   CALENDAR_SESSION_DB=<private persistent writable path>/calendar.sqlite3
-   BUSY_CORS_ORIGINS=https://YOUR_SITE_ORIGIN
-   ```
-
-   Generate a Fernet key with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
-   Preserve that key and the SQLite database across restarts; losing the key invalidates stored
-   sessions. The database file is restricted to owner read/write access. SQLite storage assumes
-   one backend instance with a persistent disk. Calendar endpoints that reach Google or write sessions
-   (`connect`, `callback`, `freebusy`, `disconnect`) are rate-limited to 30 requests per minute per
-   session (or client address), counted in memory per process; behind a reverse proxy run Uvicorn
-   with `--proxy-headers` so client addresses are real. Temporary Google
-   failures (network errors, 5xx, rate limits) are retried twice with backoff, and authorizations
-   left unfinished expire after 10 minutes. Configure reverse-proxy/access logs to redact
-   `/api/calendar/callback` query strings, which contain a short-lived OAuth authorization code;
-   the built-in Uvicorn access-log filter also redacts that callback path.
-4. On the GitHub Pages URL, open the site with the backend query parameter, for example
-   `https://YOUR_SITE/?api=https://YOUR_API_HOST#/calendar`. The callback preserves that API
-   parameter. Because browsers may block third-party cookies between GitHub Pages and a separate
-   API domain, production deployment should use a custom website domain and an API subdomain under
-   the same registrable domain (or serve the frontend and API from the same site). Both must use
-   HTTPS.
-
-When the API or OAuth configuration is missing, Calendar shows that connection is unavailable;
-all existing static Places and planning features continue to work. No OAuth credentials are
-included in this repository. The primary calendar is the only supported calendar in this
-implementation.
+The FastAPI server still contains the earlier Google Calendar OAuth endpoints
+(`server/google_calendar.py`), but the web app no longer calls them.
 
 The footer always names the data source (*built-in demo files* or *BU-sy API*). If a requested API can't be
 reached, a notice says so and the built-in demo files are used. Both modes give the same suggestions
@@ -164,7 +134,7 @@ window where nothing fits, with a one-tap fix the engine has checked.
 
 ```bash
 python -m pytest                        # API, calendar OAuth/freebusy, data loaders + gym import, analytics, events
-node --test "tests/*.test.mjs"          # planner engine + static meetups (Node 22+, no packages; or: npm test)
+node --test "tests/*.test.mjs"          # planner engine, static clubs, .ics import + free time (Node 22+, no packages; or: npm test)
 ```
 CI runs both (`.github/workflows/tests.yml`).
 
@@ -401,14 +371,15 @@ If the data can't load, the planner shows an error with a retry. It never falls 
 ```
 data/      raw + cleaned data, planner samples, sources and cleaning notes (data/README.md)
 server/    FastAPI app (main.py), data adapter (sources.py), planner data loader (campus.py),
-           analytics.py (busyness, time-weighted averages, playback), meetups, static export
+           analytics.py (busyness, time-weighted averages, playback), clubs.py, static export
 web/       the site: index.html, styles.css, js/
              recommend.js  planner engine (single source of truth)
              plan.js       "What fits now?" screen     prefs.js  remembered planner settings
-             app.js        router, Places, playback, meetups, About
+             app.js        router, Places, playback, About   clubs.js  club directory
+             calendar.js / findtime.js  availability   ics.js / schedule.js  .ics import (in the browser)
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
-tests/     test_api.py, test_campus_gym.py (pytest); recommend / planner_features / plan_prefs / clock / hours / meetups_static .test.mjs (node --test)
+tests/     test_api.py, test_campus_gym.py, test_clubs.py (pytest); recommend / planner_features / plan_prefs / clock / hours / clubs_static / ics / sample_schedule / sample_calendar_view .test.mjs (node --test)
 DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 ```
 
@@ -419,35 +390,25 @@ DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 | `GET /api/facilities?at=17:30` | all places at a playback time |
 | `GET /api/facilities/{id}?at=18:00` | one place |
 | `GET /api/facilities/{id}/history?date=YYYY-MM-DD` | one recorded day: observations, hourly averages, typical profile; historical references add playback days, the gap rule and a weekday × hour grid |
-| `GET/POST /api/community-events`, `POST …/{id}/join`, `…/leave`, `…/cancel` | unofficial student meetups (device ID in the `X-BUsy-Device` header or POST body) |
+| `GET/POST /api/clubs`, `GET /api/clubs/{id}`, `POST …/{id}/edit`, `…/apply`, `…/withdraw` | club directory: sample clubs + student-created (device ID in the `X-BUsy-Device` header or POST body) |
+| `GET /api/clubs/{id}/applications`, `POST …/applications/{app_id}/decide` | organizer review (organizer's device token only) |
 
-## Meetups (unofficial, secondary)
+## Clubs (secondary)
 
-Students can post things like "basketball run, court 4". It's kept deliberately simple, and here is what it
-does **not** protect:
+A directory of student clubs: browse and filter, view details, sign up, see *My clubs*, and (for a
+club's creator) edit it and approve, decline or waitlist applications. Sample clubs are labelled and
+aren't real BU organizations. What it does **not** protect:
 
-- **No accounts.** A person is a nickname plus a random device ID kept in their browser. That ID is
-  *identification, not authentication*: anyone holding it can act as that device. It is sent in POST bodies
-  or the `X-BUsy-Device` header, never in a URL, so it stays out of server logs.
-- **Invite only means "a code is needed to join"; it is not private.** Every event's title, place and time
-  are visible to everyone using the server. Codes (8 characters from 32 symbols, ~10¹² combinations) are
-  returned only to the host and compared in constant time. There's no HTTPS locally, so don't use it for
-  anything sensitive.
-- **Static mode (GitHub Pages)** keeps meetups in that one browser. Nobody else can see or join them, and
-  the screens say so.
-- **The server enforces the rules:**
-  - only the host can cancel, and you can only leave yourself;
-  - joining twice is a no-op;
-  - capacity holds under concurrent joins (200 max when no limit is set);
-  - ended or cancelled events can't be joined;
-  - text is trimmed and length-limited, and control characters are refused;
-  - dates must be in the future and at most 60 days ahead;
-  - at most 300 upcoming events, and old ones are pruned;
-  - saves are atomic.
-
-  Static mode follows the same rules (`tests/meetups_static.test.mjs`).
-- **Run one server process.** Storage is a JSON file guarded by an in-process lock, so it isn't safe with
-  several uvicorn workers.
+- **No accounts.** A device is a random ID kept in the browser: *identification, not authentication*.
+  Whoever creates a club is its organizer, and only that device's ID can edit it or review its
+  applications. It is sent in POST bodies or the `X-BUsy-Device` header, never in a URL.
+- **Applications** (name, school email, year, optional notes) are returned only to the club's organizer,
+  and each student only gets their own application back. Tokens are never returned.
+- **Static mode (GitHub Pages)** keeps clubs and sign-ups in that one browser, with the same rules
+  (`tests/clubs_static.test.mjs`); the server's rules are tested in `tests/test_clubs.py`.
+- **Busyness hints** for a meeting time are estimates from the demo campus data, and say so.
+- **Run one server process.** Storage is a JSON file (`server/clubs.json`, git-ignored) guarded by an
+  in-process lock, so it isn't safe with several uvicorn workers.
 
 ## What a real BU pilot would need
 

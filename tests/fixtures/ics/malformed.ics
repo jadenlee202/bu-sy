@@ -1,0 +1,4 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+this line has no colon
+END:VCALENDAR

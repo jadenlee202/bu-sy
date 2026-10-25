@@ -1,9 +1,9 @@
 """Club directory: browse student clubs, apply, waitlist, and organizer review.
 
-Stored in server/clubs.json (created on first run, git-ignored). Same identity
-model as community_events.py: a random per-device token, no accounts. Whoever
-creates a club is its organizer: their token becomes `organizer_token`, and only
-that token can edit the club or read and decide its applications. That is
+Stored in server/clubs.json (created on first run, git-ignored). Identity is a
+random per-device token, no accounts. Whoever creates a club is its organizer:
+their token becomes `organizer_token`, and only that token can edit the club or
+read and decide its applications. That is
 demo-grade gating (identification, not authentication), and the UI says so.
 
 Privacy: applications (name, school email, year, optional notes) are returned
