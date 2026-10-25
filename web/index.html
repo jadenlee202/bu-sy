@@ -20,6 +20,38 @@
 </head>
 <body>
   <a class="skip" href="#view">Skip to content</a>
+
+  <!-- Liquid Glass rim-refraction filter. Bends content only at the rim band
+       (the displacement map is strong at the edges, ~0 in the center) and adds a
+       specular rim highlight. Center stays undistorted for legibility. The glass
+       chrome references this via filter: url(#liquid-glass). Decorative only;
+       hidden from assistive tech and from layout. -->
+  <svg class="glass-defs" aria-hidden="true" focusable="false" width="0" height="0">
+    <defs>
+      <radialGradient id="glass-rim-map" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="#808080"/>  <!-- 0x80 = no displacement -->
+        <stop offset="62%"  stop-color="#808080"/>
+        <stop offset="88%"  stop-color="#b0b0b0"/>   <!-- rim: push outward -->
+        <stop offset="100%" stop-color="#4a4a4a"/>   <!-- extreme edge: pull in -->
+      </radialGradient>
+      <filter id="liquid-glass" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+        <!-- A soft edge-weighted displacement map rendered from the gradient. -->
+        <feImage href="#glass-rim-map" result="map" preserveAspectRatio="none"/>
+        <feGaussianBlur in="map" stdDeviation="2" result="mapBlur"/>
+        <!-- Bend the backdrop at the rim. scale is small so the center is clean. -->
+        <feDisplacementMap in="SourceGraphic" in2="mapBlur" scale="14"
+          xChannelSelector="R" yChannelSelector="G" result="refracted"/>
+        <!-- Specular rim light: a highlight that reads as glass catching light. -->
+        <feSpecularLighting in="mapBlur" surfaceScale="3" specularConstant="0.9"
+          specularExponent="18" lighting-color="#ffffff" result="spec">
+          <fePointLight x="80" y="-40" z="140"/>
+        </feSpecularLighting>
+        <feComposite in="spec" in2="refracted" operator="in" result="specClip"/>
+        <feComposite in="refracted" in2="specClip" operator="over"/>
+      </filter>
+    </defs>
+  </svg>
+
   <div class="app">
     <header class="side">
       <a class="brand" href="#/" aria-label="BU-sy home"><span class="brand-mark"></span><span class="brand-name">BU-<em>sy</em></span></a>
