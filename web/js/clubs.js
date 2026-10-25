@@ -110,7 +110,7 @@ export async function clubsView($main) {
         <button class="btn" type="button" data-clear>Clear filters</button></div>`;
       return;
     }
-    $list.innerHTML = `<ul class="clubs">${rows.map(card).join("")}</ul>`;
+    $list.innerHTML = `<ul class="list clubs">${rows.map(card).join("")}</ul>`;
   };
 
   $view.querySelector(".search input").addEventListener("input", (e) => { f.query = e.target.value; save(); update(); });
@@ -141,13 +141,15 @@ function card(c) {
     : c.my_application ? myPill(c.my_application)
     : c.status === "Full" ? `<span class="muted">Not taking sign-ups</span>`
     : `<a class="btn btn-small btn-primary" href="#/club/${encodeURIComponent(c.id)}/join">${c.status === "Waitlist" ? "Join waitlist" : "Join"}</a>`;
-  return `<li class="club">
-    <div class="club-top">${statusBadge(c)}<span class="tag">${esc(c.category)}</span>${sampleTag(c)}</div>
-    <h2 class="club-name"><a href="#/club/${encodeURIComponent(c.id)}">${esc(c.name)}</a></h2>
-    <p class="club-line">${icon("clock", 14)}<span>${esc(schedule(c))}</span></p>
-    <p class="club-line">${icon("pin", 14)}<span>${esc(place(c))}</span></p>
-    ${hint(c)}
-    <div class="club-foot"><span class="muted">${esc(spots(c))}</span>${action}</div>
+  return `<li class="row club">
+    <div class="row-main">
+      <div class="club-top">${statusBadge(c)}<span class="tag">${esc(c.category)}</span>${sampleTag(c)}</div>
+      <h2 class="row-name"><a href="#/club/${encodeURIComponent(c.id)}">${esc(c.name)}</a></h2>
+      <p class="club-line">${icon("clock", 14)}<span>${esc(schedule(c))}</span></p>
+      <p class="club-line">${icon("pin", 14)}<span>${esc(place(c))}</span></p>
+      ${hint(c)}
+    </div>
+    <div class="row-side"><span class="muted">${esc(spots(c))}</span>${action}</div>
   </li>`;
 }
 
@@ -330,20 +332,20 @@ export async function myClubsView($main) {
     }
     const mine = all.filter((c) => c.my_application);
     const run = all.filter((c) => c.is_organizer);
-    const row = (c) => `<li class="row row-static">
+    const row = (c) => `<li class="row">
       <span class="row-main"><a class="row-name" href="#/club/${encodeURIComponent(c.id)}">${esc(c.name)}</a>
         <span class="row-sub">${esc(schedule(c))} ${sampleTag(c)}</span></span>
-      ${myPill(c.my_application)}
-      ${c.my_application.status !== "rejected" ? `<button class="link" type="button" data-withdraw="${esc(c.id)}" data-name="${esc(c.name)}">Withdraw</button>` : ""}</li>`;
+      <span class="row-side">${myPill(c.my_application)}
+      ${c.my_application.status !== "rejected" ? `<button class="link" type="button" data-withdraw="${esc(c.id)}" data-name="${esc(c.name)}">Withdraw</button>` : ""}</span></li>`;
     $view.innerHTML = `${head("My clubs", `<p class="tagline">Clubs this device applied to or runs.</p>`)}
       <p class="hint">${mode === "static" ? "<strong>Demo mode:</strong> this list lives in this browser only." : "Tied to this browser's anonymous device ID, not an account."}
         ${src.clubs.persistent ? "" : " Your browser is blocking storage, so this list lasts only until you close the tab."}</p>
       <p class="success" role="status"${message ? "" : " hidden"}>${esc(message)}</p>
-      <section aria-live="polite">${mine.length ? `<ul class="list list-card">${mine.map(row).join("")}</ul>`
+      <section aria-live="polite">${mine.length ? `<ul class="list">${mine.map(row).join("")}</ul>`
         : `<div class="state">${terrier({ size: 44, sleepy: true })}<p>You haven't signed up for any clubs yet.</p><a class="btn btn-primary" href="#/clubs">Browse clubs</a></div>`}</section>
-      ${run.length ? `<h2 class="section-title">Clubs you run</h2><ul class="list list-card">${run.map((c) => `<li class="row row-static">
+      ${run.length ? `<h2 class="section-title">Clubs you run</h2><ul class="list">${run.map((c) => `<li class="row">
         <span class="row-main"><a class="row-name" href="#/club/${encodeURIComponent(c.id)}">${esc(c.name)}</a><span class="row-sub">${esc(spots(c))}</span></span>
-        <a class="btn btn-small" href="#/club/${encodeURIComponent(c.id)}/manage">Manage</a></li>`).join("")}</ul>` : ""}`;
+        <span class="row-side"><a class="btn btn-small" href="#/club/${encodeURIComponent(c.id)}/manage">Manage</a></span></li>`).join("")}</ul>` : ""}`;
   };
   $view.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-withdraw]");
@@ -477,14 +479,14 @@ export async function manageView($main, id) {
       return;
     }
     const field = (label, value) => `<dt>${label}</dt><dd>${value ? esc(value).replace(/\n/g, "<br>") : `<span class="muted">Not given</span>`}</dd>`;
-    const appCard = (a, actions) => `<li class="app-card">
-      <div class="app-head"><strong>${a.example ? "Sample member (no details)" : esc(a.name)}</strong>${myPill(a)}</div>
+    const appCard = (a, actions) => `<li class="row">
+      <div class="row-main"><strong class="row-name">${a.example ? "Sample member (no details)" : esc(a.name)}</strong>
       ${a.example ? "" : `<dl class="facts">${field("Email", a.email)}${field("Year", a.year)}${field("Other contact", a.contact)}
-        ${field("Why join", a.reason)}${field("Availability", a.availability)}</dl>`}
-      ${actions && !a.example ? `<div class="app-actions">${actions}</div>` : ""}</li>`;
+        ${field("Why join", a.reason)}${field("Availability", a.availability)}</dl>`}</div>
+      <div class="row-side">${myPill(a)}${actions && !a.example ? `<div class="app-actions">${actions}</div>` : ""}</div></li>`;
     const btn = (a, decision, text, primary = false) => `<button class="btn btn-small${primary ? " btn-primary" : ""}" type="button" data-decide="${decision}" data-app="${esc(a.id)}" data-name="${esc(a.name)}">${text}</button>`;
     const group = (title, items, actions, empty) => `<section class="app-group"><h2 class="section-title">${title} <span class="muted">${items.length}</span></h2>
-      ${items.length ? `<ul class="apps">${items.map((a) => appCard(a, actions(a))).join("")}</ul>` : `<p class="muted">${empty}</p>`}</section>`;
+      ${items.length ? `<ul class="list">${items.map((a) => appCard(a, actions(a))).join("")}</ul>` : `<p class="muted">${empty}</p>`}</section>`;
     const by = (s) => apps.filter((a) => a.status === s);
     const free = c.capacity == null || c.spots_left > 0;
     $view.innerHTML = `${backTo}

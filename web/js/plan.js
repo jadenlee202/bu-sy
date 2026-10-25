@@ -345,7 +345,7 @@ function resultsHTML(r, campus) {
       ? top.busy.level === "unknown" ? "No best match: no busyness data for this option" : "No clear best match: tied with others, listed by name"
       : null;
     body = `${head(`${plural(fits, "place fits", "places fit")}`)}
-      <ol class="recs">
+      <ol class="recs list">
         ${card(top, { req, campus, hero: true, featured: r.featured, reason: r.featured?.why ?? tie })}
         ${rest.map((o) => card(o, { req, campus, reason: engine.rankReason(o, top) })).join("")}
       </ol>
@@ -355,7 +355,7 @@ function resultsHTML(r, campus) {
     body = `${head(plural(r.browse.length, "place could work", "places could work"))}
       <div class="callout">${icon("walk", 18)}<p><strong>Travel not checked.</strong> Choose a starting point to see what fits with the walk.</p>
         <button class="btn btn-small" type="button" data-focus-from>Set starting point</button></div>
-      <ol class="recs">${shown.map((o) => card(o, { req, campus })).join("")}</ol>
+      <ol class="recs list">${shown.map((o) => card(o, { req, campus })).join("")}</ol>
       ${r.browse.length > shown.length ? moreList(`${r.browse.length - shown.length} more could work`, r.browse.slice(shown.length), (o) => `Up to ${o.activity} min before walking`) : ""}`;
   } else {
     const considered = r.excluded.length + r.checkHours.length;
@@ -371,8 +371,8 @@ function resultsHTML(r, campus) {
 
   const check = r.checkHours.length ? `<section class="check-hours"><h3 class="section-title">Hours unknown</h3>
     <p class="help">Enough time, but no hours in the data. Check before going.</p>
-    <ul class="list">${r.checkHours.map((o) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(o.place.name)}</span>
-      <span class="row-sub">${o.upTo ? `Up to ${o.activity} min · walk not checked` : `${o.activity} min · ${o.there + o.onward} min walking`}</span></span>${level(o.busy.level)}</li>`).join("")}</ul></section>` : "";
+    <ul class="list">${r.checkHours.map((o) => `<li class="row"><span class="row-main"><span class="row-name">${esc(o.place.name)}</span>
+      <span class="row-sub">${o.upTo ? `Up to ${o.activity} min · walk not checked` : `${o.activity} min · ${o.there + o.onward} min walking`}</span></span><span class="row-side">${level(o.busy.level)}</span></li>`).join("")}</ul></section>` : "";
   const excluded = r.excluded.length && (fits || r.browse.length)
     ? `<details class="more"><summary>Why ${plural(r.excluded.length, "other place doesn't", "other places don't")} fit</summary>
       <ul class="list">${r.excluded.map(excludedRow).join("")}</ul></details>` : "";
@@ -381,12 +381,12 @@ function resultsHTML(r, campus) {
     <p class="fineprint">${icon("info", 14)} Suggestions, not reservations. <a href="#/about">About this data</a></p>`;
 }
 
-const excludedRow = (e) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(e.place.name)}</span>
+const excludedRow = (e) => `<li class="row"><span class="row-main"><span class="row-name">${esc(e.place.name)}</span>
   <span class="row-sub">${esc(e.reason)}</span></span></li>`;
 
 const moreList = (title, list, sub) => `<details class="more"><summary>${title}</summary><ul class="list">
-  ${list.map((o) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(o.place.name)}</span>
-    <span class="row-sub num">${sub(o)}</span></span>${level(o.busy.level)}</li>`).join("")}</ul></details>`;
+  ${list.map((o) => `<li class="row"><span class="row-main"><span class="row-name">${esc(o.place.name)}</span>
+    <span class="row-sub num">${sub(o)}</span></span><span class="row-side">${level(o.busy.level)}</span></li>`).join("")}</ul></details>`;
 
 const stat = (value, unit, caption) => `<div class="stat"><span class="stat-value"><span class="stat-num num">${value}</span>${unit ? `<span class="stat-unit">${unit}</span>` : ""}</span><span class="stat-cap">${caption}</span></div>`;
 
@@ -411,15 +411,19 @@ function card(o, { req, campus, hero = false, featured = null, reason = null }) 
   ] : [];
   const scope = o.place.area_id ? "Counts people in this area, not free equipment." : "Counts the whole building, not free seats or equipment.";
 
-  return `<li class="rec${hero ? " rec-hero" : ""}">
-    <div class="rec-top">${badge}${modeChip(o.place)}
-      <a class="rec-link" href="#/place/${encodeURIComponent(o.place.facility_id)}">View place ${icon("chevron", 14)}</a></div>
-    <h3 class="rec-name">${esc(o.place.name)}</h3>
-    ${o.place.area_id ? `<p class="rec-sub">${esc(o.place.facility_name)}</p>` : ""}
-    <div class="stats">${time}${walk}</div>
-    <div class="rec-busy">${level(o.busy.level, busy.label)}</div>
-    ${why ? `<p class="rec-reason">${esc(why)}</p>` : ""}
-    <details class="why"><summary>${checked ? "Why this fits" : "Details"} ${icon("down", 14)}</summary>
+  return `<li class="row rec${hero ? " is-featured" : ""}">
+    <div class="row-main">
+      <div class="rec-top">${badge}${modeChip(o.place)}</div>
+      <h3 class="row-name">${esc(o.place.name)}</h3>
+      ${o.place.area_id ? `<p class="row-sub">${esc(o.place.facility_name)}</p>` : ""}
+      ${why ? `<p class="rec-reason">${esc(why)}</p>` : ""}
+    </div>
+    <div class="row-side">
+      <div class="stats">${time}${walk}</div>
+      <div class="rec-busy">${level(o.busy.level, busy.label)}</div>
+      <a class="rec-link" href="#/place/${encodeURIComponent(o.place.facility_id)}">View place ${icon("chevron", 14)}</a>
+    </div>
+    <details class="why row-full"><summary>${checked ? "Why this fits" : "Details"} ${icon("down", 14)}</summary>
       <div class="why-body">
         ${checked ? `<div class="budget" aria-hidden="true">${o.budget.filter((b) => b.minutes > 0)
           .map((b) => `<span class="seg seg-${b.kind}" style="flex-grow:${b.minutes}"></span>`).join("")}</div>` : ""}

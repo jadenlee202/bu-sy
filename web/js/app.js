@@ -258,7 +258,7 @@ async function placesView() {
     const currentDate = campusDateTime().date;
     // The summary's own phrases already say "today", so the "Today:" label shortens them.
     const TODAY_TEXT = { "Closed today": "Closed", "Today's hours not published": "Hours not published" };
-    const fact = (label, value, attrs = "") => `<div class="place-fact"><dt>${label}</dt><dd${attrs}>${value}</dd></div>`;
+    const fact = (label, value, attrs = "") => `<div class="row-fact"><dt>${label}</dt><dd${attrs}>${value}</dd></div>`;
     // One list item per place: labelled facts on the left, the replay count and level on the right.
     // The whole item links to the place page, as before.
     const row = (f) => {
@@ -275,17 +275,17 @@ async function placesView() {
         isHistorical(f) ? fact("Recorded day", esc(h.day_label)) : "",
         summary ? fact("Today", esc(TODAY_TEXT[summary] ?? summary), ' class="num"') : "",
         selectedStatus && ["open", "closed"].includes(selectedStatus.status)
-          ? fact("Status", selectedStatusLabel(selectedStatus), ` class="place-status" data-status="${selectedStatus.status}"`) : "",
+          ? fact("Status", selectedStatusLabel(selectedStatus), ` class="row-status" data-status="${selectedStatus.status}"`) : "",
         f.category === "dining" && locationHours
           ? fact("Meal service", esc(serviceStatusLabel(serviceAtTime(locationHours, currentDate, state.minute), selectedStatus))) : "",
         windows[f.facility_id]
           ? fact("Fits your free time", `${formatInstant(windows[f.facility_id].start, zone)}–${formatInstant(windows[f.facility_id].end, zone)}`, ' class="num"') : "",
       ].join("");
-      return `<li><a class="place-item" href="#/place/${encodeURIComponent(f.facility_id)}">
-        <span class="place-main"><span class="row-name">${esc(f.facility_name)}</span>
-          <dl class="place-facts">${facts}</dl>
-          <span class="place-more" aria-hidden="true">View details →</span></span>
-        <span class="place-busy">
+      return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
+        <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
+          <dl class="row-facts">${facts}</dl>
+          <span class="row-more" aria-hidden="true">View details →</span></span>
+        <span class="row-side">
           <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
           ${level(o?.busyness ?? (closed ? "closed" : "unknown"))}
           ${icon("chevron", 16)}
@@ -294,10 +294,10 @@ async function placesView() {
     };
     const places = rows.filter((f) => !isHistorical(f));
     const refs = rows.filter(isHistorical);
-    $list.innerHTML = `${filtered.notice}${places.length ? `<ul class="list place-list" aria-label="Places">${places.map(row).join("")}</ul>` : ""}${uncheckedNote}
+    $list.innerHTML = `${filtered.notice}${places.length ? `<ul class="list" aria-label="Places">${places.map(row).join("")}</ul>` : ""}${uncheckedNote}
       ${refs.length ? `<section class="refs"><h2 class="section-title">Historical references</h2>
         <p class="help">Real recordings from outside BU, replayed for comparison. Never suggested as places to go.</p>
-        <ul class="list place-list" aria-label="Historical references">${refs.map(row).join("")}</ul></section>` : ""}`;
+        <ul class="list" aria-label="Historical references">${refs.map(row).join("")}</ul></section>` : ""}`;
   };
 
   $view.querySelector(".search input").addEventListener("input", (e) => { state.query = e.target.value; update(); });
@@ -504,8 +504,8 @@ async function placeView(id) {
     if ($areas) {
       $areas.innerHTML = hist.areas.map((a) => {
         const ao = latestAt(a.observations, state.minute, hist.coverage_end);
-        return `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(a.name)}</span></span>
-          <span class="row-count num">${closed ? "" : fmtCount(ao?.occupancy_count)}</span>${level(ao?.busyness ?? (closed ? "closed" : "unknown"))}</li>`;
+        return `<li class="row"><span class="row-main"><span class="row-name">${esc(a.name)}</span></span>
+          <span class="row-side"><span class="row-count num">${closed ? "" : fmtCount(ao?.occupancy_count)}</span>${level(ao?.busyness ?? (closed ? "closed" : "unknown"))}</span></li>`;
       }).join("");
     }
   };
@@ -650,11 +650,11 @@ function barChart(el, hist) {
 // ---------- screen: about ----------
 function aboutView() {
   const doi = `<a href="https://doi.org/10.5281/zenodo.996587" target="_blank" rel="noopener">doi:10.5281/zenodo.996587</a>`;
-  const item = (title, body) => `<section class="about-item"><h2>${title}</h2>${body}</section>`;
+  const item = (title, body) => `<li class="row about-item"><div class="row-main"><h2 class="row-name">${title}</h2>${body}</div></li>`;
   $view.innerHTML = `
     <div class="page-head"><h1 class="title">About this data</h1>
       <p class="tagline">What's sample, what's real, and how suggestions are worked out.</p></div>
-    <div class="about-grid prose">
+    <ul class="list prose">
       ${item("Sample places", `<p>FitRec, dining and Mugar use synthetic counts from one made-up Monday. They are not BU measurements, and capacities are illustrative.</p>`)}
       ${item("One real room", `<p>The Clemente Room is an office conference room from the public COD dataset (Liu et al., 2017, ${doi}). It shows the app on real sensor data, is never suggested as a place to go, and keeps its unverified source timezone.</p>`)}
       ${item("A real campus gym (not BU)", `<p>Campus Gym — Historical Reference replays <a href="https://www.kaggle.com/datasets/nsrose7224/crowdedness-at-the-campus-gym" target="_blank" rel="noopener">Crowdedness at the Campus Gym</a> (Nick Rose, Kaggle, 2015–2017): head counts about every 10 minutes at an unnamed university gym. It is not BU FitRec, not live, and never suggested. Collection method and capacity aren't documented, so busyness is relative to the gym's own history. Times keep the source's UTC offset. A count stands for at most 30 minutes; longer gaps are no data. Contains information from that dataset, available under the <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">Open Database License</a>; the derived files in BU-sy are shared under the same license.</p>`)}
@@ -664,7 +664,7 @@ function aboutView() {
       ${item("Hourly averages", `<p>Time-weighted: each count holds until the next one, and never past the end of the recorded day.</p>`)}
       ${item("Your settings", `<p>Preferences and your last chosen starting point stay in this browser. Reset them under Preferences. BU-sy never detects your location.</p>`)}
       ${item("Clubs", `<p>Sample clubs are labeled and aren't real BU organizations. Signing up stores your name, school email and year (plus anything optional you add) for that club's organizer only; on the built-in demo files that stays in this browser. Organizer access is a device token, not a login. Busyness hints for meeting times are estimates from the simulated campus data.</p>`)}
-    </div>
+    </ul>
     <p class="fineprint">BU-sy is an independent student prototype, not affiliated with Boston University. A real version would need verified hours, real walking routes and an authorized, aggregate campus count.</p>`;
   return {};
 }
