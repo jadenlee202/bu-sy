@@ -4,12 +4,17 @@ Occupancy inputs and the simulation built from them. Nothing here is live, and n
 
 | File | What it is | Real? |
 |---|---|---|
-| `campus_simulation_occupancy.csv` | Simulated campus places on one demo Monday (2026-10-19), every 15 min: FitRec as one building (from the campus gym), 4 dining halls and Mugar (modeled). Made by `generate_campus_simulation.py`. | **No, simulated** |
+| `campus_simulation_occupancy.csv` | Simulated campus places on one demo Monday (2026-10-19), every 15 min: FitRec as one building (campus gym), Mugar (ROBOD library room), 4 dining halls (NOVANIMAL at lunch, modeled otherwise). Made by `generate_campus_simulation.py`. | **No, simulated** |
 | `simulation_provenance.json` | Which data drives each simulated place, every step and parameter, limits, citations. | — |
 | `clean_cod_occupancy.csv` | Every valid event from the Clemente conference room in COD, cleaned by `clean_cod.py`. | **Yes**, but an office room, not BU |
 | `sample_10_records.csv` | The first 10 rows of the cleaned COD file (chronological, not random). | Yes |
 | `clean_campus_gym_occupancy.csv` | Every valid reading from *Crowdedness at the Campus Gym* (a non-BU university gym, 2015–2017), made by `import_campus_gym.py`. Optional: the app runs without it. | **Yes**, but not BU |
 | `campus_gym_import.json`, `campus_gym_quality.md` | The import's statistics, gap policy and playback days (the server reads the JSON). | — |
+| `clean_robod_library_occupancy.csv` | Every valid 5-minute people count from ROBOD Room 5, a library space at the National University of Singapore (2021), made by `import_robod.py`. Reference input for Mugar; never shown as a place. | **Yes**, but not BU |
+| `robod_import.json`, `robod_quality.md` | That import's source record, statistics, gaps and gap policy. | — |
+| `clean_novanimal_transactions.csv` | Purchases per canteen per 15 minutes (`source_location,interval_start,transaction_count`) at two ZHAW canteens (2017), made by `import_novanimal.py`. Purchases, **not** people. Reference input for dining lunch. | **Yes**, but not BU |
+| `novanimal_import.json`, `novanimal_quality.md` | That import's source record, transaction grouping, timestamp evidence and statistics. | — |
+| `raw/robod/`, `raw/novanimal/` | The publishers' original files, unchanged, with `SOURCE.json` (checksums, retrieval) and a licence README. | — |
 | `raw/campus_gym/` | The publisher's `data.csv`, unchanged, with `SOURCE.json` (URL, version, retrieval time, checksums). | Yes |
 
 Columns everywhere: `facility_id,timestamp,occupancy_count`.
@@ -117,16 +122,16 @@ with a verified source before a pilot.
 ## Simulated campus places
 
 `generate_campus_simulation.py` writes `campus_simulation_occupancy.csv` (one demo Monday, every 15 minutes,
-392 rows; FitRec is the single series `SYN_BU_FITREC`) and `simulation_provenance.json` (every target, source, transformation,
-parameter and limit; served at `/api/sources`, exported to `web/data/sources.json`, shown on the app's
+384 rows; FitRec is the single series `SYN_BU_FITREC`) and `simulation_provenance.json` (every target, source,
+period, transformation, parameter and limit; served at `/api/sources`, exported to `web/data/sources.json`, shown on the app's
 **Sources & Simulation** page). It reads only local files and never downloads. The hand-authored
 `bu_campus_synthetic_occupancy.csv` it replaces is retired (still in git history).
 
-| Place | Basis | Source |
-|---|---|---|
-| FitRec (whole building) | **Reference dataset** | Campus gym, 2016-12-05 (a Monday), rescaled |
-| Warren, Marciano, West Campus, Fenway dining | **Modeled, no dataset** | Meal-window profile |
-| Mugar Library | **Modeled, no dataset** | Study-day profile |
+| Place | Basis | Source | Periods |
+|---|---|---|---|
+| FitRec (whole building) | **Reference dataset** | Campus gym, 2016-12-05 (a Monday), rescaled | 06:00–24:00 dataset |
+| Mugar Library | **Reference dataset** | ROBOD Room 5, all 9 recorded Mondays, averaged and rescaled | 08:00–22:00 dataset; 22:00–24:00 not simulated |
+| Warren, Marciano, West Campus, Fenway dining | **Dataset + modeled** | NOVANIMAL purchases, 24 canteen-Mondays, as diners | 07:00–11:00 modeled; 11:00–14:00 dataset; 14:00–23:00 modeled |
 
 **FitRec, step by step.** Take the gym's readings for 2016-12-05 (source local time, −08:00, kept in the
 source file). Every 15 minutes from 6 AM to midnight (FitRec's sample hours) take the latest reading at or
@@ -136,8 +141,36 @@ maps the gym's typical high (72 people) to 75% of FitRec's illustrative capacity
 FitRec is one building-level count: there are no per-area series (courts, pools, rooms), because nothing
 in the data could say where in the building people are.
 
-**Dining and Mugar** use documented (hour, share of illustrative capacity) knots, linearly interpolated,
-times each place's illustrative capacity. They carry no dataset citation because none was used.
+**Mugar, step by step.** ROBOD measures people in one library room (0–16), every 5 minutes, on 47 weekdays in
+2021 (+08:00). Take Room 5's `occupant_count` (not Wi-Fi devices, not the presence flag) on all 9 recorded
+Mondays. For each 15-minute slot take the time-weighted mean (each reading stands for 5 minutes, never across a
+gap or midnight), then average the slot over the 9 days. Keep 08:00–22:00: inside Mugar's sample hours
+(08:00–24:00) and the hours when someone was in the room on at least one recorded Monday. Put each slot at the
+same clock time on the demo Monday. Multiply by 45: the room's typical high (10 people, its 95th time-weighted
+percentile within 08:00–22:00 on all 47 dates) becomes 75% of Mugar's illustrative capacity (600). The room's
+maximum (16) is not used as anything about Mugar's size. **22:00–24:00 has no values** (shown as no data, not
+zero, not closed): the room is empty by then on every recorded Monday, which says nothing about a library open
+late.
+
+**Dining, step by step.** NOVANIMAL records purchases, not people. `import_novanimal.py` groups the 26,340
+article lines into 25,628 transactions by (canteen, date, transaction_id): several articles, two of the same
+article, or three menus on one checkout are one purchase; a weighed buffet plate (fractional `qty_weight`, kg)
+is one purchase, never 0.4 people; one refund is left out. `trans_date` ends in `Z`, but the publisher's
+variable list shows it without a zone and median sale times stay the same across the end of Swiss summer time
+(Grüental 12:01 → 12:00, Vista 11:44 → 11:44), so it is read as local wall-clock time. Then
+`generate_campus_simulation.py`:
+
+1. Lunch window 11:00–13:30: the 15-minute-aligned span holding the central 99.5% of purchases.
+2. Illustrative diners at a time = purchases in the 30 minutes before it (**assumed** meal length: each purchase
+   is one diner for 30 minutes). So lunch values run 11:00–14:00.
+3. Average each slot over the 24 canteen-Mondays (both canteens pooled; peak 91 diners at 12:00).
+4. Per hall, multiply by 0.75 × illustrative capacity / 103 (the 95th percentile of diners over every canteen-day
+   and lunch slot): ×2.9126 for the 400-seat halls, ×1.4563 for Fenway (200).
+5. 07:00–11:00 and 14:00–23:00 use modeled knots (breakfast; afternoon and dinner) × illustrative capacity.
+   Every slot comes from exactly one period: no blending at 11:00 or 14:00, nothing counted twice.
+
+Hall differences come only from illustrative capacities. Nothing here gives wait times, queues, or table or seat
+availability.
 
 **Datasets considered and not used** (checked 2026-10-25):
 
@@ -149,6 +182,7 @@ times each place's illustrative capacity. They carry no dataset citation because
   [doi:10.24432/C5P605](https://doi.org/10.24432/C5P605)). Manually recorded 0–3 people in one test room; people
   were present on only three days, on an experimenter-chosen schedule. As a dining proxy, the meal shaping would
   decide the curve, so citing it would mislead.
-- No openly licensed dining-hall occupancy dataset was found in a time-boxed search.
+- No openly licensed dining-hall *occupancy* dataset was found in a time-boxed search; NOVANIMAL (sales) is
+  used for lunch instead, with its limits stated above. Breakfast and dinner have no dataset.
 
 Capacities (in `server/sources.py`), hours, amenities and walking times remain illustrative.

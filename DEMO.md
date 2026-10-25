@@ -16,8 +16,8 @@ git clone https://github.com/jadenlee202/bu-sy.git
 cd bu-sy
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
-.venv\Scripts\python -m pytest -q                           # expect 85 passed
-node --test "tests/*.test.mjs"                              # expect 45 passed (or: npm test)
+.venv\Scripts\python -m pytest -q                           # expect 103 passed
+node --test "tests/*.test.mjs"                              # expect 46 passed (or: npm test)
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 
@@ -60,14 +60,20 @@ API mode gives exactly the same text as static mode (verified).
    - Open **Why this fits** on a card: calculation, timeline, busyness source, hours and limits.
 3. **"An hour to study, outlets needed"** (under *Try a sample*).
    - Expect **Best match: Marciano Commons** (quieter at the selected demo time), then Mugar Library (moderate).
+     Open **Why this fits**: the busyness line names the period, e.g. *(Breakfast and morning: modeled)* or
+     *(From a library room's counts)*.
    - *Why 1 other place doesn't fit*: West Campus Dining, "Outlets not listed in sample metadata".
 4. **"30-minute lunch across campus (nothing fits)"**.
    - Expect **"Nothing fits this window"**, with reasons and a per-place list.
    - Tap **Extend to 48 minutes**: the form updates and 2 options fit.
 5. **View place** on any card. The chart and playback open at the same demo time (3:00 PM). Press play.
    Point out the **Simulated** tag and **How it's simulated**: it opens **Sources & Simulation**, which maps
-   FitRec to the campus gym dataset (rescaled, whole building only), shows dining and Mugar as modeled with no
-   dataset, and explains why the Chapel Hill library and UCI room datasets weren't used.
+   FitRec to the campus gym dataset (rescaled, whole building only), Mugar to ROBOD's library room, and the
+   dining halls to NOVANIMAL at lunch (with breakfast and dinner modeled), and explains why the Chapel Hill
+   library and UCI room datasets weren't used. On **Places → Mugar Library**, move the slider past 10 PM:
+   *No data · Not simulated: the source library room is empty by this hour* (not Closed: the sample hours run
+   to midnight). On **Warren Towers Dining**, the line under the count switches between *Breakfast and
+   morning: modeled*, *Lunch: from canteen purchase times* and *Afternoon and dinner: modeled*.
 6. **Places → Historical references → Campus Gym — Historical Reference.** Point out the notice
    ("Historical gym data — not live and not BU FitRec."), pick another **Recorded day** (5–11 Dec 2016), press
    play, and show "Replay 5:30 PM · observed 5:24 PM (UTC−08:00)", the busyness line "Relative to this gym's
@@ -85,6 +91,16 @@ Commit `web/data/` together with the change. GitHub Pages serves those files as 
 the export.
 
 ## 4. Checks and results (2026-10-24)
+
+Library and dining references (`feature/library-dining-references`): ROBOD drives Mugar, NOVANIMAL drives dining
+lunch (breakfast and dinner modeled).
+
+| Check | Result |
+|---|---|
+| `pytest`: everything below plus ROBOD parsing/offsets, zero vs missing vs invalid/negative counts, duplicate and conflicting timestamps, time-weighted slots and gaps; NOVANIMAL transaction grouping, repeated lines, multi-menu and kg purchases, refunds, wall-clock reading; dwell-time sums, scaling, explicit periods, no negatives, mappings, static == API, missing source files | **103 passed** |
+| `node --test`: everything below plus simulation periods in the card text | **46 passed** |
+| Full pipeline rerun (3 importers, generator, export): 29 outputs byte-identical | passed |
+| Browser: Sources (mapping, periods, dwell, licences, deep links) 49/49; closed/slider incl. Mugar after 10 PM and Warren periods 43/43; planner 66/66; gym 42/42; meetups 22/22; subpath 9/9; 7 screens at 375–1440 px in light and dark, no overflow or page errors (56/56) | passed |
 
 FitRec as one building (`feature/fitrec-building-only`): areas, the sample class/intramural schedule,
 reservations, `/api/schedule` and `/api/programs` removed.

@@ -1,0 +1,118 @@
+{
+  "source": {
+    "title": "Supplementary material (aggregated data set): Egeler, G.-A. & Baur, P. (2020). Menüwahl in der Hochschulmensa: Fleisch oder Vegi? Ergebnisse eines 12-wöchigen Feldexperiments (NOVANIMAL Working Paper No. 5). ZHAW. https://doi.org/10.21256/zhaw-1405",
+    "creators": "Gian-Andrea Egeler",
+    "publisher": "Zenodo",
+    "doi": "10.5281/zenodo.3890931",
+    "page": "https://doi.org/10.5281/zenodo.3890931",
+    "published": "2020-06-12",
+    "updated": "2024-07-19T19:26:35.387740+00:00",
+    "license": "CC BY 4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "working_paper": "Egeler, G.-A. & Baur, P. (2020). NOVANIMAL Working Paper No. 5. ZHAW. https://doi.org/10.21256/zhaw-1405",
+    "retrieved_at": "2026-10-25T03:05:40+00:00",
+    "csv_sha256": "abd286cf58c90e6aec5369b4b6ead48f60a98df1c4ad983aab6b2ce47dd7c239"
+  },
+  "download_url": "https://zenodo.org/api/records/3890931/files/2017_ZHAW_aggregated_menu_sales_NOVANIMAL.csv/content",
+  "original_location": "Two ZHAW university canteens (Grüental and Vista, Wädenswil, Switzerland), not BU",
+  "metric": "Point-of-sale transactions (purchases) counted per 15-minute interval; not people present",
+  "fields_used": [
+    "transaction_id",
+    "trans_date",
+    "date",
+    "shop_description",
+    "qty_weight (checked only)",
+    "total_amount (refund check only)"
+  ],
+  "timestamp_interpretation": "trans_date is read as the canteen's local wall-clock time. The publisher's variable list shows it without a zone ('2017-10-02 11:29:50') and the sale times don't move across the end of Swiss summer time (see clock_evidence); the trailing 'Z' is treated as an export artefact. No conversion is applied.",
+  "clock_evidence": {
+    "Grüental before 2017-10-29": {
+      "purchases": 4216,
+      "median": "12:01"
+    },
+    "Grüental from 2017-10-29": {
+      "purchases": 9323,
+      "median": "12:00"
+    },
+    "Vista before 2017-10-29": {
+      "purchases": 4007,
+      "median": "11:44"
+    },
+    "Vista from 2017-10-29": {
+      "purchases": 8081,
+      "median": "11:44"
+    }
+  },
+  "rows_in_file": 26340,
+  "rows_valid": 26340,
+  "rows_rejected": {},
+  "rejected_examples": [],
+  "transactions_in_file": 25628,
+  "purchases_kept": 25627,
+  "lines_per_transaction": {
+    "1": 24984,
+    "2": 597,
+    "3": 36,
+    "4": 5,
+    "5": 3,
+    "6": 2,
+    "7": 1
+  },
+  "repeated_identical_lines": 341,
+  "conflicting_times_dropped": [],
+  "refunds_excluded": [
+    {
+      "canteen": "Vista",
+      "date": "2017-10-26",
+      "transaction_id": "2406182"
+    }
+  ],
+  "transactions_with_some_negative_lines": 0,
+  "transaction_ids_reused_across_canteen_or_date": 0,
+  "qty_weight": {
+    "integer_rows": 22640,
+    "fractional_rows": 3700,
+    "fractional_articles": [
+      "Hot and Cold"
+    ],
+    "meaning": "number of menus, or kg for 'Hot and Cold' plates; never a number of people"
+  },
+  "canteens": {
+    "Grüental": 13539,
+    "Vista": 12088
+  },
+  "dates": 60,
+  "first_date": "2017-10-02",
+  "last_date": "2017-12-22",
+  "dates_by_weekday": {
+    "Mon": 12,
+    "Tue": 12,
+    "Wed": 12,
+    "Thu": 12,
+    "Fri": 12,
+    "Sat": 0,
+    "Sun": 0
+  },
+  "purchases_per_canteen_day": {
+    "min": 111,
+    "median": 218.5,
+    "max": 298
+  },
+  "sale_time_quantiles": {
+    "p0.5": "11:13",
+    "p1": "11:15",
+    "median": "11:53",
+    "p99": "13:17",
+    "p99.5": "13:26"
+  },
+  "earliest_sale": "2017-10-02T11:14:07",
+  "latest_sale": "2017-12-22T13:33:52",
+  "interval_minutes": 15,
+  "transformations": [
+    "Read the semicolon-separated file; rejected rows with a missing ID or canteen, an unrecognised trans_date, a date that disagrees with trans_date, or unparseable numbers (listed above).",
+    "Grouped rows into transactions by (canteen, date, transaction_id); each transaction counts once, however many article lines or menus it has. Lines identical to another line of the same transaction are kept inside that one transaction (they look like the same article bought twice).",
+    "Dropped transactions with two different clock times; left out refunds/cancellations (all lines negative).",
+    "Read trans_date as local wall-clock time (raw text unchanged in the original file).",
+    "Counted purchases per canteen in 15-minute intervals from each canteen-day's first to last sale; empty intervals inside that span are zeros."
+  ]
+}

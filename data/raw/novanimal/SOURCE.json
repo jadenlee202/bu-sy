@@ -1,0 +1,28 @@
+{
+  "title": "Supplementary material (aggregated data set): Egeler, G.-A. & Baur, P. (2020). Menüwahl in der Hochschulmensa: Fleisch oder Vegi? Ergebnisse eines 12-wöchigen Feldexperiments (NOVANIMAL Working Paper No. 5). ZHAW. https://doi.org/10.21256/zhaw-1405",
+  "creators": "Gian-Andrea Egeler",
+  "publisher": "Zenodo",
+  "doi": "10.5281/zenodo.3890931",
+  "page": "https://doi.org/10.5281/zenodo.3890931",
+  "published": "2020-06-12",
+  "updated": "2024-07-19T19:26:35.387740+00:00",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "working_paper": "Egeler, G.-A. & Baur, P. (2020). NOVANIMAL Working Paper No. 5. ZHAW. https://doi.org/10.21256/zhaw-1405",
+  "files": {
+    "2017_ZHAW_aggregated_menu_sales_NOVANIMAL.csv": {
+      "download_url": "https://zenodo.org/api/records/3890931/files/2017_ZHAW_aggregated_menu_sales_NOVANIMAL.csv/content",
+      "size": 5831307,
+      "publisher_checksum": "md5:7afa496fb199e39cd5df523cd6fa2b99",
+      "sha256": "abd286cf58c90e6aec5369b4b6ead48f60a98df1c4ad983aab6b2ce47dd7c239"
+    },
+    "variables_aggregated_dataset_20201007.pdf": {
+      "download_url": "https://zenodo.org/api/records/3890931/files/variables_aggregated_dataset_20201007.pdf/content",
+      "size": 77364,
+      "publisher_checksum": "md5:da0db37892e2d5e8027cf67c34b3003b",
+      "sha256": "ca40311157e8e8000ac63bd83d4888d4056dd4f3a14cc61a1cf7aef1debe5851"
+    }
+  },
+  "retrieved_at": "2026-10-25T03:05:40+00:00",
+  "csv_sha256": "abd286cf58c90e6aec5369b4b6ead48f60a98df1c4ad983aab6b2ce47dd7c239"
+}

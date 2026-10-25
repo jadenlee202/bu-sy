@@ -54,8 +54,9 @@ def test_demo_clock_is_a_relabelling_not_a_timezone_conversion():
 
 
 def test_interpolation_follows_the_documented_knots():
-    assert gen.interpolate(gen.DINING_KNOTS, 12) == 0.75
-    assert gen.interpolate(gen.DINING_KNOTS, 12.5) == pytest.approx(0.70)
+    assert gen.interpolate(gen.EVENING_KNOTS, 18) == 0.85
+    assert gen.interpolate(gen.EVENING_KNOTS, 18.75) == pytest.approx(0.70)
+    assert gen.interpolate(gen.BREAKFAST_KNOTS, 6) == 0.05          # before the first knot: the first value
 
 
 # ---------- generated output ----------
@@ -83,7 +84,8 @@ def test_fitrec_is_one_building_count_equal_to_the_scaled_gym_count():
     assert {fid for fid, _, _ in fitrec_rows} == {"SYN_BU_FITREC"}     # one series: no courts, pools or rooms
     assert {t: c for _, t, c in fitrec_rows} == {
         gen.demo_time(m): round(c * sim["parameters"]["scale"]) for m, c in profile.items()}
-    assert sim["targets"] == [{"facility_id": "fitrec-synthetic", "name": "FitRec (whole building)", "capacity": 870}]
+    assert [(t["facility_id"], t["name"], t["capacity"]) for t in sim["targets"]] == [
+        ("fitrec-synthetic", "FitRec (whole building)", 870)]
 
 
 # ---------- provenance ----------
@@ -99,12 +101,19 @@ def test_mappings_are_complete_and_cite_only_used_datasets():
     for d in datasets.values():
         assert all(d[k] for k in ("title", "creators", "url", "license", "metric", "original_location", "status"))
     for s in PROV["simulations"]:
-        for k in ("transformations", "assumptions", "limits", "units", "window", "parameters", "label"):
+        for k in ("transformations", "assumptions", "limits", "units", "window", "parameters", "label", "periods",
+                  "metric", "gap_handling"):
             assert s[k], (s["id"], k)
-        if s["basis"] == "reference_dataset":
+        if s["basis"] in ("reference_dataset", "mixed"):
             assert datasets[s["dataset_id"]]["status"] == "used" and s["source_fields"] and s["source_period"]
         else:
             assert s["dataset_id"] is None and s["label"] == "Modeled (no dataset)"   # no misleading citation
+        # A period cites a dataset only when it is dataset-derived.
+        for p in s["periods"]:
+            assert (p["dataset_id"] is not None) == (p["basis"] == "reference_dataset"), (s["id"], p)
+            if p["dataset_id"]:
+                assert p["dataset_id"] == s["dataset_id"]
+        assert (s["basis"] == "mixed") == ({p["basis"] for p in s["periods"]} >= {"reference_dataset", "modeled"})
     assert {d["status"] for d in datasets.values()} >= {"used", "evaluated_not_used", "reference_only"}
 
 
@@ -115,10 +124,17 @@ def test_api_labels_simulated_places_and_leaves_references_unsimulated():
         if fid in REFERENCES:
             assert f["simulation"] is None and not f["campus_eligible"]
         else:
-            assert f["simulation"]["basis"] in ("reference_dataset", "modeled") and f["campus_eligible"]
+            assert f["simulation"]["basis"] in ("reference_dataset", "mixed", "modeled") and f["campus_eligible"]
             assert "Not a BU measurement" in f["source"]
-    assert rows["mugar-synthetic"]["simulation"]["basis"] == "modeled"
-    assert rows["warren-dining-synthetic"]["source"].startswith("Modeled profile (no dataset)")
+    assert rows["mugar-synthetic"]["simulation"]["id"] == "mugar-from-robod-library"
+    assert rows["mugar-synthetic"]["source"].startswith("Simulated from ROBOD")
+    assert rows["warren-dining-synthetic"]["simulation"]["basis"] == "mixed"
+    assert rows["warren-dining-synthetic"]["source"].startswith("Lunch simulated from NOVANIMAL")
+    assert "other hours modeled" in rows["warren-dining-synthetic"]["source"]
+    # The value's own period sits next to it in the explanation.
+    assert rows["warren-dining-synthetic"]["busyness_basis"].startswith("Lunch: from canteen purchase times: ")
+    assert client.get("/api/facilities/warren-dining-synthetic?at=18:00").json()["busyness_basis"].startswith(
+        "Afternoon and dinner: modeled: ")
 
 
 def test_no_area_schedule_or_reservation_is_served():

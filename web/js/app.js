@@ -1,7 +1,7 @@
 import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obsOffset } from "./clock.js";
 import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
-import { hoursText, openSegments } from "./recommend.js";
+import { hoursText, openSegments, periodAt } from "./recommend.js";
 import * as src from "./source.js";
 import { LEVEL, esc, failure, fmtCount, level, loading } from "./ui.js";
 
@@ -262,11 +262,14 @@ async function placeView(id) {
   const update = () => {
     const { o, why } = observationAt(hist, state.minute);
     const closed = !o && closedAt(hours, state.minute);
+    const period = periodAt(f.simulation, state.minute);   // dataset-derived, modeled or not simulated
     const meta = closed ? closedText(closed, hours)
       : o
       ? historical
         ? `Replay ${fmtTime(state.minute)} · observed ${fmtTime(obsMinute(o))} (${offsetText(o)})`
-        : `At ${fmtTime(state.minute)}`
+        : `At ${fmtTime(state.minute)}${period ? ` · ${period.label}` : ""}`
+      : f.simulation
+      ? period?.basis === "unavailable" ? period.label : "No simulated value at this time"
       : why === "before" ? `No data yet: recording starts at ${fmtHHMM(hist.observations[0]?.observed_at.slice(11, 19) ?? hist.coverage_start)}`
       : why === "gap" ? `No data: nothing recorded in the ${hist.max_hold_minutes} min before ${fmtTime(state.minute)}`
       : "Recording has ended for this day";
@@ -611,7 +614,7 @@ function aboutView() {
     <div class="page-head"><h1 class="title">About this data</h1>
       <p class="tagline">What's sample, what's real, and how suggestions are worked out.</p></div>
     <div class="about-grid prose">
-      ${item("Simulated campus places", `<p>Busyness at FitRec, the dining halls and Mugar is simulated on one demo Monday: FitRec follows a real campus gym elsewhere, rescaled; dining and Mugar follow documented models. None of it measures BU. Datasets, mappings and steps: <a href="#/sources">Sources &amp; Simulation</a>.</p>`)}
+      ${item("Simulated campus places", `<p>Busyness at FitRec, the dining halls and Mugar is simulated on one demo Monday: FitRec follows a real campus gym elsewhere; Mugar follows people counts in a small library room in Singapore; dining halls follow canteen purchases in Switzerland at lunch, with breakfast and dinner modeled. All of it is rescaled. None of it measures BU. Datasets, mappings and steps: <a href="#/sources">Sources &amp; Simulation</a>.</p>`)}
       ${item("One real room", `<p>The Clemente Room is an office conference room from the public COD dataset (Liu et al., 2017, ${doi}). It shows the app on real sensor data, is never suggested as a place to go, and keeps its unverified source timezone.</p>`)}
       ${item("A real campus gym (not BU)", `<p>Campus Gym — Historical Reference replays head counts taken about every 10 minutes at an unnamed university gym, 2015–2017, as recorded. It is not BU FitRec, not live, and never suggested. Capacity and counting method aren't documented, so busyness is relative to the gym's own history; a count stands for at most 30 minutes. Citation and license (ODbL): <a href="#/sources">Sources &amp; Simulation</a>.</p>`)}
       ${item("How a place fits", `<p>The walk there, at least your minimum time, the walk to your next stop and your buffer must all fit your free time, and the place must be open. With no starting point, BU-sy only lists places that could work and says travel isn't checked.</p>`)}
@@ -636,7 +639,8 @@ async function sourcesView(openId) {
     return {};
   }
   const datasets = Object.fromEntries(p.datasets.map((d) => [d.id, d]));
-  const BASIS = { reference_dataset: "Reference dataset", modeled: "Modeled (no dataset)" };
+  const BASIS = { reference_dataset: "Reference dataset", mixed: "Dataset + modeled", modeled: "Modeled (no dataset)",
+    unavailable: "Not simulated" };
   const STATUS = { used: "Used", evaluated_not_used: "Evaluated, not used", reference_only: "Shown as a reference only" };
   const link = (url, text) => `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>`;
   const list = (items, tag = "ul") => `<${tag}>${items.map((t) => `<li>${esc(t)}</li>`).join("")}</${tag}>`;
@@ -645,7 +649,7 @@ async function sourcesView(openId) {
   const mapRow = (s, name) => {
     const d = datasets[s.dataset_id];
     return `<tr><td>${name}</td><td><span class="basis basis-${esc(s.basis)}">${BASIS[s.basis]}</span></td>
-      <td>${d ? link(d.url, d.title) : "—"}</td><td>${d ? esc(d.original_location) : "—"}</td>
+      <td>${d ? `${link(d.url, d.title)}<span class="cell-note">${esc(d.measures)}</span>` : "—"}</td><td>${d ? esc(d.original_location) : "—"}</td>
       <td><a href="#/sources/${encodeURIComponent(s.id)}">Steps</a></td></tr>`;
   };
   const mapping = p.simulations.flatMap((s) => s.targets.map((t) => mapRow(s, esc(t.name)))).join("");
@@ -659,8 +663,11 @@ async function sourcesView(openId) {
         ${facts([
           ["Source", d ? `${link(d.url, d.title)} (${esc(d.creators)}): ${esc(d.original_location)}` : "No dataset. A documented model."],
           ["Fields", s.source_fields.length ? esc(s.source_fields.join(", ")) : null],
-          ["Period", s.source_period ? esc(s.source_period) : null],
-          ["Simulated", `${esc(s.window[0])}:00–${esc(s.window[1])}:00 on the demo Monday, every ${p.grid_minutes} minutes`],
+          ["Source days", s.source_period ? esc(s.source_period) : null],
+          ["Metric", s.metric ? esc(s.metric) : null],
+          ["Periods", `<ul class="periods">${s.periods.map((x) => `<li><span class="num">${esc(x.start)}–${esc(x.end)}</span>
+            <span class="basis basis-${esc(x.basis)}">${BASIS[x.basis]}</span> ${esc(x.label)}</li>`).join("")}</ul>`],
+          ["Gaps", s.gap_handling ? esc(s.gap_handling) : null],
           ["Units", esc(s.units)],
           ["Parameters", `<code>${esc(JSON.stringify(s.parameters))}</code>`],
         ])}
@@ -676,8 +683,10 @@ async function sourcesView(openId) {
       ["Creators", esc(d.creators)], ["Publisher", esc(d.publisher)], ["Link", link(d.url, d.url)],
       ["Version", esc(d.version)], ["Retrieved", esc(d.retrieved)],
       ["License", d.license_url ? link(d.license_url, d.license) : esc(d.license)], ["Obligations", esc(d.obligations)],
-      ["Location", esc(d.original_location)], ["Metric", esc(d.metric)], ["Sampling", esc(d.sampling)],
-      ["Time", esc(d.timezone)], ["Method", esc(d.measurement)], ["Notes", esc(d.notes)],
+      ["Cite", d.citation ? esc(d.citation) : null], ["Paper", d.paper ? esc(d.paper) : null],
+      ["Location", esc(d.original_location)], ["Metric", esc(d.metric)], ["Measures", esc(d.measures)],
+      ["Sampling", esc(d.sampling)], ["Time", esc(d.timezone)], ["Method", esc(d.measurement)],
+      ["Changes", d.modifications ? esc(d.modifications) : null], ["Notes", esc(d.notes)],
     ])}</div></details>`;
 
   $view.innerHTML = `
@@ -687,7 +696,7 @@ async function sourcesView(openId) {
     <section class="card src-card"><h2>Which data drives each place</h2>
       <div class="table-scroll"><table class="map-table"><thead><tr><th>Place</th><th>Basis</th><th>Dataset</th><th>Original location</th><th></th></tr></thead>
         <tbody>${mapping}</tbody></table></div>
-      <p class="help">A reference dataset gives a real time-of-day pattern from somewhere else; it is not a measurement of the BU place. ${esc(p.demo_clock)}</p>
+      <p class="help">A reference dataset gives a real time-of-day pattern from somewhere else; it is not a measurement of the BU place. ${esc(p.measures_note)} ${esc(p.demo_clock)}</p>
     </section>
     <section class="src-section"><h2 class="section-title">How each simulation is made</h2>${p.simulations.map(sim).join("")}</section>
     <section class="src-section"><h2 class="section-title">Datasets</h2>${p.datasets.map(dataset).join("")}</section>

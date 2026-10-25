@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  budgetSentence, busynessText, rankReason, recommend, requestFromScenario, whyItFits,
+  budgetSentence, busynessText, periodAt, rankReason, recommend, requestFromScenario, whyItFits,
 } from "../web/js/recommend.js";
 
 // ---------- tiny fixtures ----------
@@ -143,6 +143,24 @@ test("zero occupancy is quiet; missing occupancy is unavailable", () => {
   assert.equal(missing.busy.level, "unknown");
   assert.equal(missing.busy.count, null);
   assert.equal(busynessText(missing, req()).label, "No busyness data");
+});
+
+test("a value names its simulation period: dataset-derived, modeled or not simulated", () => {
+  const simulation = { periods: [
+    { start: "07:00", end: "11:00", basis: "modeled", label: "Breakfast and morning: modeled" },
+    { start: "11:00", end: "14:00", basis: "reference_dataset", label: "Lunch: from canteen purchase times" },
+    { start: "14:00", end: "23:00", basis: "unavailable", label: "Not simulated: no source data" },
+  ] };
+  assert.equal(periodAt(simulation, 11 * 60 - 1).basis, "modeled");
+  assert.equal(periodAt(simulation, 11 * 60).basis, "reference_dataset");   // [start, end): one period per minute
+  assert.equal(periodAt(simulation, 23 * 60), null);
+  assert.equal(periodAt(null, 600), null);
+
+  const lunch = one({ start: "12:00" }, {}, { ...hist(30), simulation }).options[0];
+  assert.match(busynessText(lunch, req({ start: "12:00" })).basis, /at 12:00 PM \(Lunch: from canteen purchase times\)\. Not a forecast/);
+  const late = one({ start: "15:00" }, {}, { ...hist(null), simulation }).options[0];
+  assert.equal(late.busy.level, "unknown");
+  assert.match(busynessText(late, req()).basis, /Not simulated: no source data\.$/);
 });
 
 test("busyness before the first observation is unavailable, not zero", () => {

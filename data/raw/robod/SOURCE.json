@@ -1,0 +1,22 @@
+{
+  "title": "ROBOD, Room-level Occupancy and Building Operation Dataset",
+  "creators": "Zeynep Duygu Tekler, Eikichi Ono, Yuzhen Peng, Sicheng Zhang, Bertrand Lasternas, Adrian Chong",
+  "publisher": "figshare",
+  "doi": "10.6084/m9.figshare.19234530.v7",
+  "version": 7,
+  "page": "https://doi.org/10.6084/m9.figshare.19234530",
+  "published": "2022-07-11T09:49:10Z",
+  "modified": "2023-05-31T17:48:07Z",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "citation": "Tekler, Zeynep Duygu; Ono, Eikichi; Peng, Yuzhen; Zhang, Sicheng; Lasternas, Bertrand; Chong, Adrian (2022). ROBOD, Room-level Occupancy and Building Operation Dataset. figshare. Dataset. https://doi.org/10.6084/m9.figshare.19234530.v7",
+  "paper": "Tekler, Z.D., Ono, E., Peng, Y., Zhang, S., Lasternas, B., Chong, A. (2022). ROBOD, room-level occupancy and building operation dataset. Building Simulation. https://doi.org/10.1007/s12273-022-0925-9",
+  "code_repository": "https://github.com/ideas-lab-nus/robod",
+  "download_url": "https://ndownloader.figshare.com/files/36228765",
+  "archive": "SupplementaryData.zip",
+  "member": "combined_Room5.csv",
+  "retrieved_at": "2026-10-25T03:04:06+00:00",
+  "archive_md5": "92161b84b4d5e29499bae308cd672100",
+  "archive_sha256": "c9ce6b6085d42fe44550fa89dedd25d38feede42e090c552796b84cb7b0b3939",
+  "csv_sha256": "dc33b443a78d3e6c874868616187b6444db73000d54f546ba716aba2d48f16bf"
+}

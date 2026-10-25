@@ -185,7 +185,8 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
         travel=load_travel(travel_path, location_ids),
         scenarios=scenarios,
         notes=[
-            "Counts are simulated (FitRec from a real non-BU campus gym, dining and Mugar modeled); "
+            "Counts are simulated (FitRec from a non-BU campus gym, Mugar from a library room's counts, dining "
+            "lunch from canteen purchases, other dining hours modeled); "
             "capacities, hours and amenities are illustrative. None of it measures BU.",
             "Busyness is read at the selected demo time. It is not a forecast for when you arrive.",
             "Historical references (the COD Clemente Room, the campus gym) are never suggested as campus places.",

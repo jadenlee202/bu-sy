@@ -86,12 +86,18 @@ export function openSegments(place) {
 export const hoursText = (place) =>
   place.hours?.map(([a, b]) => `${fmtShort(toMin(a))}–${fmtShort(toMin(b))}`).join(", ") ?? null;
 
+/** The simulation period covering `minute` (dataset-derived, modeled or unavailable), or null. */
+export function periodAt(simulation, minute) {
+  return simulation?.periods?.find((p) => toMin(p.start) <= minute && minute < toMin(p.end)) ?? null;
+}
+
 /** Busyness at the selected demo minute: the latest observation at or before it, or unknown. */
 export function busynessAt(place, histories, minute) {
   const hist = histories[place.facility_id];
   const o = hist ? latestAt(hist.observations, minute, hist.coverage_end, hist.max_hold_minutes) : null; // a value covers its slot only
-  if (!o) return { level: "unknown", count: null, capacity: null, observedAt: null };
-  return { level: o.busyness, count: o.occupancy_count, capacity: hist.capacity, observedAt: o.observed_at.slice(11, 16) };
+  const period = periodAt(hist?.simulation, minute);
+  if (!o) return { level: "unknown", count: null, capacity: null, observedAt: null, period };
+  return { level: o.busyness, count: o.occupancy_count, capacity: hist.capacity, observedAt: o.observed_at.slice(11, 16), period };
 }
 
 // ---------- one place ----------
@@ -308,13 +314,14 @@ export function busynessText(o, req) {
   const at = fmtTime(toMin(req.start));
   const b = o.busy;
   if (b.level === "unknown") {
-    return { label: "No busyness data", basis: `No count at ${at}, so this option is ranked with less occupancy information.` };
+    const why = b.period?.basis === "unavailable" ? ` ${b.period.label}.` : "";
+    return { label: "No busyness data", basis: `No count at ${at}, so this option is ranked with less occupancy information.${why}` };
   }
   const demo = o.place.data_mode === "synthetic";
   return {
     label: `${LEVEL_WORD[b.level]} at ${at}`,
     basis: `${demo ? "Simulated count" : "Count"} ${b.count.toLocaleString("en-US")} of ${b.capacity?.toLocaleString("en-US") ?? "?"}`
-      + `${demo ? " (illustrative capacity)" : ""} at ${at}. Not a forecast for when you arrive.`,
+      + `${demo ? " (illustrative capacity)" : ""} at ${at}${b.period ? ` (${b.period.label})` : ""}. Not a forecast for when you arrive.`,
   };
 }
 

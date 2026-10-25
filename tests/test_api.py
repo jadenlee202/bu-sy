@@ -82,8 +82,10 @@ def test_facility_list_and_playback():
     assert fitrec["occupancy_count"] == expected
     assert fitrec["busyness"] == classify(expected / fitrec["capacity"])
     assert fitrec["data_mode"] == "synthetic" and fitrec["capacity_is_illustrative"]
-    assert fitrec["simulation"] == {"id": "fitrec-from-campus-gym", "basis": "reference_dataset",
-                                    "label": "Simulated from a real campus gym (not BU)"}
+    assert {k: fitrec["simulation"][k] for k in ("id", "basis", "label")} == {
+        "id": "fitrec-from-campus-gym", "basis": "reference_dataset", "label": "Simulated from a real campus gym (not BU)"}
+    assert fitrec["simulation"]["periods"] == [{"start": "06:00", "end": "24:00", "basis": "reference_dataset",
+                                                "label": "From a campus gym's counts"}]
     cod = rows[COD]
     assert cod["data_mode"] == "historical_playback"
     assert cod["timezone"] is None and cod["capacity"] is None

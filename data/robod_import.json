@@ -1,0 +1,199 @@
+{
+  "facility_id": "ROBOD_ROOM5_LIBRARY",
+  "source": {
+    "title": "ROBOD, Room-level Occupancy and Building Operation Dataset",
+    "creators": "Zeynep Duygu Tekler, Eikichi Ono, Yuzhen Peng, Sicheng Zhang, Bertrand Lasternas, Adrian Chong",
+    "publisher": "figshare",
+    "doi": "10.6084/m9.figshare.19234530.v7",
+    "version": 7,
+    "page": "https://doi.org/10.6084/m9.figshare.19234530",
+    "modified": "2023-05-31T17:48:07Z",
+    "license": "CC BY 4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "citation": "Tekler, Zeynep Duygu; Ono, Eikichi; Peng, Yuzhen; Zhang, Sicheng; Lasternas, Bertrand; Chong, Adrian (2022). ROBOD, Room-level Occupancy and Building Operation Dataset. figshare. Dataset. https://doi.org/10.6084/m9.figshare.19234530.v7",
+    "paper": "Tekler, Z.D., Ono, E., Peng, Y., Zhang, S., Lasternas, B., Chong, A. (2022). ROBOD, room-level occupancy and building operation dataset. Building Simulation. https://doi.org/10.1007/s12273-022-0925-9",
+    "download_url": "https://ndownloader.figshare.com/files/36228765",
+    "retrieved_at": "2026-10-25T03:04:06+00:00",
+    "archive_md5": "92161b84b4d5e29499bae308cd672100",
+    "csv_sha256": "dc33b443a78d3e6c874868616187b6444db73000d54f546ba716aba2d48f16bf"
+  },
+  "original_location": "Room 5, a library space in the SDE4 building, National University of Singapore",
+  "metric": "occupant_count [number]: people in the room (ground truth), a whole number",
+  "fields_not_used": "wifi_connected_devices [number] (devices, not people) and occupant_presence [binary] (only cross-checked against the count); environmental and energy fields",
+  "timestamp_interpretation": "Local time with a +08:00 UTC offset, as written (Singapore). Kept as-is; no named timezone is assigned and nothing is converted to Boston time.",
+  "rows_in_file": 13536,
+  "rows_kept": 13536,
+  "rows_rejected": {},
+  "rejected_examples": [],
+  "duplicate_instants": {
+    "identical_collapsed": 0,
+    "conflicting_dropped": []
+  },
+  "out_of_order_in_file": 0,
+  "presence_disagreements": 0,
+  "first": "2021-09-07T00:00:00+08:00",
+  "last": "2021-12-23T23:55:00+08:00",
+  "offsets": {
+    "+08:00": 13536
+  },
+  "local_dates": 47,
+  "dates": [
+    "2021-09-07",
+    "2021-09-08",
+    "2021-09-10",
+    "2021-09-13",
+    "2021-09-14",
+    "2021-09-15",
+    "2021-09-16",
+    "2021-09-17",
+    "2021-09-20",
+    "2021-09-21",
+    "2021-09-22",
+    "2021-09-23",
+    "2021-09-24",
+    "2021-09-27",
+    "2021-09-28",
+    "2021-09-29",
+    "2021-09-30",
+    "2021-10-01",
+    "2021-10-25",
+    "2021-10-26",
+    "2021-10-27",
+    "2021-10-28",
+    "2021-10-29",
+    "2021-11-01",
+    "2021-11-02",
+    "2021-11-03",
+    "2021-11-04",
+    "2021-11-05",
+    "2021-11-08",
+    "2021-11-09",
+    "2021-11-10",
+    "2021-11-11",
+    "2021-11-12",
+    "2021-11-15",
+    "2021-11-16",
+    "2021-11-17",
+    "2021-12-09",
+    "2021-12-10",
+    "2021-12-13",
+    "2021-12-14",
+    "2021-12-15",
+    "2021-12-16",
+    "2021-12-17",
+    "2021-12-20",
+    "2021-12-21",
+    "2021-12-22",
+    "2021-12-23"
+  ],
+  "dates_by_weekday": {
+    "Mon": 9,
+    "Tue": 10,
+    "Wed": 10,
+    "Thu": 9,
+    "Fri": 9,
+    "Sat": 0,
+    "Sun": 0
+  },
+  "readings_per_date": {
+    "288": 47
+  },
+  "count_min": 0,
+  "count_max": 16,
+  "zero_rows": 7777,
+  "count_distribution": {
+    "0": 7777,
+    "1": 812,
+    "2": 1284,
+    "3": 794,
+    "4": 604,
+    "5": 482,
+    "6": 464,
+    "7": 353,
+    "8": 319,
+    "9": 223,
+    "10": 141,
+    "11": 112,
+    "12": 80,
+    "13": 44,
+    "14": 29,
+    "15": 11,
+    "16": 7
+  },
+  "interval_median_min": 5.0,
+  "intervals_min": {
+    "5.0": 13524,
+    "1445.0": 1,
+    "2885.0": 8,
+    "30245.0": 1,
+    "33125.0": 1
+  },
+  "gaps": [
+    {
+      "from": "2021-09-08T23:55:00+08:00",
+      "to": "2021-09-10T00:00:00+08:00",
+      "hours": 24.1
+    },
+    {
+      "from": "2021-09-10T23:55:00+08:00",
+      "to": "2021-09-13T00:00:00+08:00",
+      "hours": 48.1
+    },
+    {
+      "from": "2021-09-17T23:55:00+08:00",
+      "to": "2021-09-20T00:00:00+08:00",
+      "hours": 48.1
+    },
+    {
+      "from": "2021-09-24T23:55:00+08:00",
+      "to": "2021-09-27T00:00:00+08:00",
+      "hours": 48.1
+    },
+    {
+      "from": "2021-10-01T23:55:00+08:00",
+      "to": "2021-10-25T00:00:00+08:00",
+      "hours": 552.1
+    },
+    {
+      "from": "2021-10-29T23:55:00+08:00",
+      "to": "2021-11-01T00:00:00+08:00",
+      "hours": 48.1
+    },
+    {
+      "from": "2021-11-05T23:55:00+08:00",
+      "to": "2021-11-08T00:00:00+08:00",
+      "hours": 48.1
+    },
+    {
+      "from": "2021-11-12T23:55:00+08:00",
+      "to": "2021-11-15T00:00:00+08:00",
+      "hours": 48.1
+    },
+    {
+      "from": "2021-11-17T23:55:00+08:00",
+      "to": "2021-12-09T00:00:00+08:00",
+      "hours": 504.1
+    },
+    {
+      "from": "2021-12-10T23:55:00+08:00",
+      "to": "2021-12-13T00:00:00+08:00",
+      "hours": 48.1
+    },
+    {
+      "from": "2021-12-17T23:55:00+08:00",
+      "to": "2021-12-20T00:00:00+08:00",
+      "hours": 48.1
+    }
+  ],
+  "gap_policy": {
+    "max_hold_minutes": 5,
+    "day_boundary": "local midnight",
+    "rule": "A reading stands for its own 5-minute interval only; longer gaps are no data."
+  },
+  "transformations": [
+    "Parsed `timestamp` with its +08:00 offset; no timezone conversion.",
+    "Used `occupant_count [number]` only. Rejected rows with an unparseable timestamp, or a missing, non-numeric, fractional or negative count (listed above). Zero is a reading, kept as zero.",
+    "Collapsed identical duplicate instants; dropped conflicting ones.",
+    "Sorted by instant (stable); kept only facility_id, timestamp, occupancy_count."
+  ]
+}
