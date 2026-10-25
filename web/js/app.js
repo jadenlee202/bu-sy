@@ -280,6 +280,11 @@ async function placesView() {
       return;
     }
     const currentDate = campusDateTime().date;
+    // The summary's own phrases already say "today", so the "Today:" label shortens them.
+    const TODAY_TEXT = { "Closed today": "Closed", "Today's hours not published": "Hours not published" };
+    const fact = (label, value, attrs = "") => `<div class="place-fact"><dt>${label}</dt><dd${attrs}>${value}</dd></div>`;
+    // One list item per place: labelled facts on the left, the replay count and level on the right.
+    // The whole item links to the place page, as before.
     const row = (f) => {
       const h = histories[f.facility_id];
       const { o } = observationAt(h, state.minute);
@@ -289,28 +294,34 @@ async function placesView() {
         : locationHours ? buildingHoursSummary(locationHours, currentDate) : "Hours unverified";
       const selectedStatus = locationHours ? selectedBuildingStatus(locationHours, currentDate, state.minute) : null;
       const closed = !o && selectedStatus?.status === "closed";
-      const hoursSummary = summary
-        ? `<span class="row-hours">${summary === "Hours unverified" || summary === "Today's hours not published" || summary === "Closed today"
-          ? esc(summary) : `Today: ${esc(summary)}`}</span>`
-        : "";
-      const statusText = selectedStatus && ["open", "closed"].includes(selectedStatus.status)
-        ? `<span class="row-hours-status" data-status="${selectedStatus.status}">${selectedStatusLabel(selectedStatus)}</span>`
-        : "";
-      return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
-        <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
-          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(h.day_label)}</span>` : ""}</span>
-          ${hoursSummary}${statusText}${windows[f.facility_id] ? `<span class="row-hours">Fits your free time: ${formatInstant(windows[f.facility_id].start, zone)}–${formatInstant(windows[f.facility_id].end, zone)}</span>` : ""}</span>
-        <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
-        ${level(o?.busyness ?? (closed ? "closed" : "unknown"))}
-        ${icon("chevron", 16)}
+      const facts = [
+        fact("Category", `${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}`),
+        isHistorical(f) ? fact("Recorded day", esc(h.day_label)) : "",
+        summary ? fact("Today", esc(TODAY_TEXT[summary] ?? summary), ' class="num"') : "",
+        selectedStatus && ["open", "closed"].includes(selectedStatus.status)
+          ? fact("Status", selectedStatusLabel(selectedStatus), ` class="place-status" data-status="${selectedStatus.status}"`) : "",
+        f.category === "dining" && locationHours
+          ? fact("Meal service", esc(serviceStatusLabel(serviceAtTime(locationHours, currentDate, state.minute), selectedStatus))) : "",
+        windows[f.facility_id]
+          ? fact("Fits your free time", `${formatInstant(windows[f.facility_id].start, zone)}–${formatInstant(windows[f.facility_id].end, zone)}`, ' class="num"') : "",
+      ].join("");
+      return `<li><a class="place-item" href="#/place/${encodeURIComponent(f.facility_id)}">
+        <span class="place-main"><span class="row-name">${esc(f.facility_name)}</span>
+          <dl class="place-facts">${facts}</dl>
+          <span class="place-more" aria-hidden="true">View details →</span></span>
+        <span class="place-busy">
+          <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
+          ${level(o?.busyness ?? (closed ? "closed" : "unknown"))}
+          ${icon("chevron", 16)}
+        </span>
       </a></li>`;
     };
     const places = rows.filter((f) => !isHistorical(f));
     const refs = rows.filter(isHistorical);
-    $list.innerHTML = `${filtered.notice}${places.length ? `<ul class="list list-card">${places.map(row).join("")}</ul>` : ""}${uncheckedNote}
+    $list.innerHTML = `${filtered.notice}${places.length ? `<ul class="list place-list" aria-label="Places">${places.map(row).join("")}</ul>` : ""}${uncheckedNote}
       ${refs.length ? `<section class="refs"><h2 class="section-title">Historical references</h2>
         <p class="help">Real recordings from outside BU, replayed for comparison. Never suggested as places to go.</p>
-        <ul class="list list-card">${refs.map(row).join("")}</ul></section>` : ""}`;
+        <ul class="list place-list" aria-label="Historical references">${refs.map(row).join("")}</ul></section>` : ""}`;
   };
 
   $view.querySelector(".search input").addEventListener("input", (e) => { state.query = e.target.value; update(); });
