@@ -68,7 +68,8 @@ function hoursSummary(locationHours, category, isoDate) {
       rows.push(`<li><strong>Meal service</strong><span>Not published for this date</span></li>`);
     }
   }
-  return `<ul class="calendar-matches">${rows.join("")}</ul>`;
+  const assumed = building.assumed ? `<p class="help">Assumed: these repeat the published weekly hours. No hours have been published for this date yet.</p>` : "";
+  return `<ul class="calendar-matches">${rows.join("")}</ul>${assumed}`;
 }
 
 export async function calendarView($view) {
@@ -236,6 +237,7 @@ export async function calendarView($view) {
     const match = locationHours
       ? matchFreeWindows(usable, { ...locationHours, category: matchingLocation?.category }, $date.value, minimum)
       : { status: "unverified", matches: [] };
+    const assumedNote = match.assumed ? " Hours for this date are assumed to repeat the published weekly schedule." : "";
     const timelineHtml = segments.length ? `<ul class="calendar-timeline">${segments.map((interval) =>
       `<li class="calendar-interval" data-kind="${interval.kind}"><strong>${SEGMENT_LABELS[interval.kind]}</strong>
         <span>${formatInstant(interval.start, zone)}–${formatInstant(interval.end, zone)}</span>
@@ -261,7 +263,7 @@ export async function calendarView($view) {
       <h3>Your day</h3>${timelineHtml}
       <p class="help">Events marked "Free" in Google Calendar, declined events, and most all-day events aren't counted as busy.</p>
       <h3>Time at ${locationName}</h3>${matchesHtml}
-      <p class="help">Availability is based on free/busy only and does not include travel time. Confirm the trip fits your schedule. ${verifiedNote}</p>`;
+      <p class="help">Availability is based on free/busy only and does not include travel time. Confirm the trip fits your schedule.${assumedNote} ${verifiedNote}</p>`;
   };
 
   const loadStatus = async () => {

@@ -31,11 +31,51 @@ test("Places status reflects the selected playback time", () => {
 });
 
 test("Places reports unpublished dates without claiming an open or closed status", () => {
-  const marciano = hours.locations["marciano-dining-synthetic"];
-  const status = selectedBuildingStatus(marciano, "2026-10-31", 12 * 60);
+  // Fenway's schedule says not to apply it beyond its published week.
+  const fenway = hours.locations["fenway-dining-synthetic"];
+  const status = selectedBuildingStatus(fenway, "2026-10-26", 12 * 60);
 
   assert.equal(status.status, "unpublished");
-  assert.equal(buildingHoursSummary(marciano, "2026-10-31"), "Today's hours not published");
+  assert.equal(buildingHoursSummary(fenway, "2026-10-26"), "Today's hours not published");
+});
+
+test("weekly hours repeat beyond the published dates and are marked assumed", () => {
+  const marciano = hours.locations["marciano-dining-synthetic"];
+  const published = daySchedule(marciano, "2026-10-24");
+  const nextWeek = daySchedule(marciano, "2026-10-31");
+  const weekBefore = daySchedule(marciano, "2026-10-17");
+
+  assert.equal(published.assumed, undefined);
+  assert.equal(nextWeek.status, "scheduled");
+  assert.equal(nextWeek.assumed, true);
+  assert.deepEqual(nextWeek.periods, published.periods);
+  assert.deepEqual(weekBefore.periods, published.periods);
+  assert.equal(buildingHoursSummary(marciano, "2026-10-31"), "9:00 AM–9:00 PM (assumed)");
+  assert.equal(selectedBuildingStatus(marciano, "2026-10-31", 12 * 60).status, "open");
+  assert.deepEqual(displaySchedule(marciano, "2026-10-31", "dining").periods.map(({ label }) => label),
+    ["Breakfast", "Lunch", "Dinner"]);
+});
+
+test("special hours override assumed weekly hours, and in-range dates are not assumed", () => {
+  const fitrec = hours.locations["fitrec-synthetic"];
+  // Thanksgiving closure (special) wins inside the range; after Dec 10 the week repeats.
+  assert.equal(daySchedule(fitrec, "2026-11-26").status, "closed");
+  assert.equal(daySchedule(fitrec, "2026-11-26").assumed, undefined);
+  const afterSemester = daySchedule(fitrec, "2026-12-14");
+  assert.equal(afterSemester.assumed, true);
+  assert.deepEqual(afterSemester.periods, daySchedule(fitrec, "2026-12-07").periods);
+
+  const later = structuredClone(fitrec);
+  later.buildingHours.specialHours.push({ date: "2026-12-14", status: "closed", note: "Winter break", periods: [] });
+  assert.equal(daySchedule(later, "2026-12-14").status, "closed");
+  assert.equal(daySchedule(later, "2026-12-14").assumed, undefined);
+});
+
+test("a schedule marked repeatsWeekly false stays unpublished outside its dates", () => {
+  const fenway = hours.locations["fenway-dining-synthetic"];
+  assert.equal(daySchedule(fenway, "2026-10-25").status, "scheduled");
+  assert.equal(daySchedule(fenway, "2026-10-26").status, "unpublished");
+  assert.equal(displaySchedule(fenway, "2026-10-26", "dining").status, "unpublished");
 });
 
 test("Places date calculation uses Boston time across the UTC date boundary", () => {
@@ -89,5 +129,5 @@ test("dining weekly display uses named service periods while non-dining keeps bu
   assert.deepEqual(saturdayMeals.periods.map(({ label }) => label), ["Breakfast", "Lunch", "Dinner"]);
   assert.deepEqual(sundayMeals.periods.map(({ label }) => label), ["Brunch", "Dinner"]);
   assert.deepEqual(building.periods.map(({ label }) => label), ["Building hours"]);
-  assert.equal(displaySchedule(marciano, "2026-10-31", "dining").status, "unpublished");
+  assert.equal(displaySchedule(hours.locations["fenway-dining-synthetic"], "2026-11-01", "dining").status, "unpublished");
 });

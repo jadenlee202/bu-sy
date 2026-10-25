@@ -120,10 +120,11 @@ export function matchFreeWindows(free, location, isoDate, minimum, campusTimezon
         end: Math.min(range.end, open.end),
         label: range.label,
       })).filter(({ start, end }) => start < end));
-    return { status: "scheduled", matches: intersect(free, services, minimum) };
+    return { status: "scheduled", assumed: !!(building.assumed || service.assumed), matches: intersect(free, services, minimum) };
   }
   return {
     status: "scheduled",
+    assumed: !!building.assumed,
     matches: intersect(free, buildingRanges.map((range) => ({ ...range, label: "Open" })), minimum),
   };
 }
@@ -158,7 +159,7 @@ export function findOpportunities(busy, location, startDate, days, options) {
     if (result.status !== "scheduled") outcomes.push({ date, reason: result.status });
     else if (!found.length) outcomes.push({ date, reason: meal ? "meal_not_served" : "closed_when_free" });
     else outcomes.push({ date, reason: "match" });
-    matches.push(...found.map((match) => ({ ...match, date })));
+    matches.push(...found.map((match) => ({ ...match, date, ...(result.assumed ? { assumed: true } : {}) })));
   }
   return { matches, outcomes };
 }

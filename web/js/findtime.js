@@ -86,10 +86,11 @@ export async function findTimeCard($card, facility, scheduleLocation) {
     }
     const [next, ...later] = matches;
     const range = (match) => `${formatInstant(match.start, zone)}–${formatInstant(match.end, zone)}`;
-    const detail = (match) => `${durationLabel(match.end - match.start)} free · ${dining ? `Serving ${esc(match.label.toLowerCase())}` : "Open"}`;
+    const assumed = (match) => (match.assumed ? " · assumed hours" : "");
+    const detail = (match) => `${durationLabel(match.end - match.start)} free · ${dining ? `Serving ${esc(match.label.toLowerCase())}` : "Open"}${assumed(match)}`;
     $results.innerHTML = `<h3>Your next opportunity${dining ? " to eat" : ""}</h3>
       <p class="calendar-total"><strong>${dayName(next.date, startDate)}, ${range(next)}</strong><br>
-        You have ${durationLabel(next.end - next.start)} available. ${name} is open${dining ? ` and serving ${esc(next.label.toLowerCase())}` : ""}.</p>
+        You have ${durationLabel(next.end - next.start)} available. ${name} is open${dining ? ` and serving ${esc(next.label.toLowerCase())}` : ""}${next.assumed ? " (assumed: repeats the published weekly hours)" : ""}.</p>
       ${later.length ? `<h3>Later</h3><ul class="calendar-matches">${later.slice(0, 4).map((match) =>
         `<li><strong>${dayName(match.date, startDate)}, ${range(match)}</strong><span>${detail(match)}</span></li>`).join("")}</ul>` : ""}
       <p class="help">Travel time is not included. Based on your free/busy times and ${name}'s published hours (campus time).</p>`;

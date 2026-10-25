@@ -39,7 +39,10 @@ keyed by facility ID. It displays a Monday–Sunday week, lets users select date
 and displays named meal-service periods for dining locations while retaining building hours for
 other locations. The detail-page building and meal-service status updates with the selected slider
 time; Places cards show open/closed status based on the selected slider time. Dates outside a published
-schedule are marked unavailable; unverified locations remain explicit. Source and verification
+schedule repeat its weekly hours and are labelled *Assumed* until newer hours are published;
+`specialHours` entries always override a date. A schedule with `"repeatsWeekly": false` (currently
+Fenway Dining, whose source says not to apply it beyond its week) is shown as unavailable outside
+its dates instead. Unverified locations remain explicit. Source and verification
 metadata remain in the hours data file and are not linked in the UI.
 
 **With the API** (meetups shared between everyone using the server):

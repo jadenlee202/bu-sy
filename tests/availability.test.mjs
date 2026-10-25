@@ -9,6 +9,7 @@ import {
 
 const hours = JSON.parse(readFileSync(new URL("../web/data/hours.json", import.meta.url), "utf8"));
 const marciano = { ...hours.locations["marciano-dining-synthetic"], category: "dining" };
+const fenway = { ...hours.locations["fenway-dining-synthetic"], category: "dining" };
 
 test("normalizes overlapping and adjacent busy blocks without double-counting", () => {
   const start = Date.parse("2026-10-24T08:00:00-04:00");
@@ -90,7 +91,7 @@ test("does not match a dining meal when the building is closed or hours are unpu
   }];
 
   assert.equal(matchFreeWindows(free, closedLocation, "2026-10-24", 15).matches.length, 0);
-  assert.equal(matchFreeWindows(free, marciano, "2026-10-31", 15).status, "unpublished");
+  assert.equal(matchFreeWindows(free, fenway, "2026-10-31", 15).status, "unpublished");
 });
 
 test("usable windows drop gaps under the minimum and time that has already passed", () => {
@@ -178,9 +179,21 @@ test("search ignores time that has passed and reports unpublished dates", () => 
   const today = findOpportunities(weekBusy, marciano, "2026-10-24", 1, { ...searchOptions, now: afterLunch });
   assert.deepEqual(today.outcomes.map(({ reason }) => reason), ["no_free_time"]);
 
-  const outside = findOpportunities([], marciano, "2026-10-31", 1, searchOptions);
+  const outside = findOpportunities([], fenway, "2026-10-31", 1, searchOptions);
   assert.deepEqual(outside.outcomes.map(({ reason }) => reason), ["unpublished"]);
   assert.deepEqual(outside.matches, []);
+});
+
+test("matches on dates past the published week use repeated hours and are flagged assumed", () => {
+  const nextSaturday = [
+    { start: "2026-10-31T08:00:00-04:00", end: "2026-10-31T12:15:00-04:00" },
+    { start: "2026-10-31T12:55:00-04:00", end: "2026-10-31T22:00:00-04:00" },
+  ];
+  const { matches } = findOpportunities(nextSaturday, marciano, "2026-10-31", 1, searchOptions);
+  assert.deepEqual(matches.map(({ label, assumed }) => [label, assumed]), [["Lunch", true]]);
+
+  const published = findOpportunities(weekBusy, marciano, "2026-10-24", 1, searchOptions);
+  assert.equal(published.matches[0].assumed, undefined);
 });
 
 test("an empty calendar is matched only within the location's verified hours", () => {
@@ -219,5 +232,6 @@ test("free-time filters match building hours, meals, and only dining for meals",
 
 test("free-time filters report unverified or unpublished hours as unchecked", () => {
   assert.equal(placeAvailability(mugar, "library", "free", filterContext).result, "unchecked");
-  assert.equal(placeAvailability(marciano, "dining", "lunch", { ...filterContext, date: "2026-10-31", busy: [] }).result, "unchecked");
+  assert.equal(placeAvailability(fenway, "dining", "lunch", { ...filterContext, date: "2026-10-31", busy: [] }).result, "unchecked");
+  assert.equal(placeAvailability(marciano, "dining", "lunch", { ...filterContext, date: "2026-10-31", busy: [] }).result, "match");
 });

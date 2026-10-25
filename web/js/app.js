@@ -419,8 +419,9 @@ async function placeView(id) {
       const date = addDays(start, index);
       const schedule = displaySchedule(scheduleLocation, date, f.category);
       let details;
+      const assumedNote = schedule.assumed ? `<span class="hours-note">Assumed: repeats the published weekly hours</span>` : "";
       if (schedule.status === "closed") {
-        details = `<span class="hours-closed">Closed${schedule.note ? ` · ${esc(schedule.note)}` : ""}</span>`;
+        details = `<span class="hours-closed">Closed${schedule.note ? ` · ${esc(schedule.note)}` : ""}</span>${assumedNote}`;
       } else if (schedule.status === "unverified") {
         details = `<span class="hours-unknown">Hours unverified${schedule.reason ? ` · ${esc(schedule.reason)}` : ""}</span>`;
       } else if (schedule.status === "unpublished") {
@@ -432,6 +433,7 @@ async function placeView(id) {
           `<span class="hours-period"><strong>${esc(f.category === "dining" ? period.label : "Building hours")}:</strong> ${esc(formatPeriod(period))}</span>`,
         ).join("");
         if (schedule.note) details += `<span class="hours-note">${esc(schedule.note)}</span>`;
+        details += assumedNote;
       }
       return `<li><button type="button" class="schedule-day${date === today ? " is-today" : ""}${date === selectedScheduleDate ? " is-selected" : ""}" data-schedule-date="${date}"${date === today ? ' aria-current="date"' : ""} aria-pressed="${date === selectedScheduleDate}">
         <span class="schedule-day-name">${esc(dateLabel(date))}${date === today ? " · Today" : ""}</span>
@@ -451,8 +453,10 @@ async function placeView(id) {
     }
     $view.querySelector("#selected-hours").innerHTML = `<p><strong>${esc(dateLabel(selectedScheduleDate))} · ${esc(fmtTime(state.minute))}</strong></p>
       <p>Building status: <strong>${esc(statusText)}</strong></p>${mealStatus}`;
-    $view.querySelector("#schedule-note").textContent =
-      "Schedules are date-specific; dates without a published schedule are shown as unavailable.";
+    const shownSchedule = f.category === "dining" ? scheduleLocation?.serviceHours : scheduleLocation?.buildingHours;
+    $view.querySelector("#schedule-note").textContent = shownSchedule?.repeatsWeekly === false
+      ? "This schedule applies only to its published dates; other dates are shown as unavailable."
+      : "Dates outside the published week repeat its weekly hours and are marked “Assumed” until new hours are published. Special dates always override.";
   };
 
   $view.querySelector(".schedule-nav").addEventListener("click", (e) => {
