@@ -6,6 +6,7 @@ import { placeAvailability, zonedInstant } from "./availability.js";
 import { calendarView, DEFAULT_TZ, formatInstant, loadCalendarPrefs, MIN_OPTIONS } from "./calendar.js";
 import { findTimeCard } from "./findtime.js";
 import { hoursText, openSegments, periodAt } from "./recommend.js";
+import { clubBusy } from "./clubevents.js";
 import { busyOf, covers, loadSchedule } from "./schedule.js";
 import {
   addDays, buildingHoursSummary, campusDateTime, dateLabel, daySchedule, displaySchedule, formatClock, formatPeriod,
@@ -339,8 +340,8 @@ async function placesView() {
   function freeTimeTip() {
     const window = `${formatClock(freeFilter.from)} to ${formatClock(freeFilter.until)} in the ${esc(zone)} timezone`;
     return infoTip("About availability assumptions", schedule
-      ? `Using your uploaded schedule (${esc(schedule.fileName)}) between ${window}. <a href="#/calendar">Change it on the Calendar page</a>. Travel time is not included.`
-      : `No schedule uploaded. Availability assumes you're free from ${window}. <a href="#/calendar">Upload your class schedule (.ics)</a> to calculate availability using your actual events. Travel time is not included.`);
+      ? `Using your uploaded schedule (${esc(schedule.fileName)}) between ${window}, plus club events you added. <a href="#/calendar">Change it on the Calendar page</a>. Travel time is not included.`
+      : `No schedule uploaded. Availability assumes you're free from ${window}. <a href="#/calendar">Upload your class schedule (.ics)</a> to calculate availability using your actual events. Club events you added count as busy. Travel time is not included.`);
   }
   renderAvailControls();
 
@@ -369,7 +370,7 @@ async function placesView() {
       }
     }
     const context = calendarMode
-      ? { busy: schedule ? busyOf(schedule) : [], date: freeFilter.date, timezone: zone, from: freeFilter.from, until: freeFilter.until, minimum: freeFilter.minimum, now: Date.now() }
+      ? { busy: [...(schedule ? busyOf(schedule) : []), ...clubBusy()], date: freeFilter.date, timezone: zone, from: freeFilter.from, until: freeFilter.until, minimum: freeFilter.minimum, now: Date.now() }
       : { now: Date.now() };
     const kept = [];
     const windows = {};
