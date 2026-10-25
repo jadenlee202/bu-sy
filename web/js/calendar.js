@@ -6,6 +6,7 @@ import {
 import {
   busyOf, clearSchedule, covers, DEFAULT_TZ, eventsOf, importCalendarFile, ImportError, loadSchedule, saveSchedule, skippedText,
 } from "./schedule.js";
+import { clubBusy, clubEventItems, loadClubEvents, reconcile, removeClubEvent } from "./clubevents.js";
 import * as src from "./source.js";
 import { esc, failure, infoTip, loading } from "./ui.js";
 
@@ -105,6 +106,7 @@ export async function calendarView($view) {
   let facilities = [];
   let hours = null;
   let schedule = loadSchedule();
+  let clubEvents = loadClubEvents();   // club meetings added from the Clubs tab, stored apart from the file
   const events = new AbortController();
   const on = { signal: events.signal };
 
@@ -169,7 +171,7 @@ export async function calendarView($view) {
       <label class="check"><input type="checkbox" id="schedule-remember"${schedule.storedIn === "local" ? " checked" : ""}> Remember my schedule on this device</label>
       <div class="calendar-actions">
         <button class="btn" type="button" data-schedule="pick">Replace schedule</button>
-        <button class="btn btn-quiet" type="button" data-schedule="remove">Clear calendar</button></div>`;
+        <button class="btn btn-quiet" type="button" data-schedule="remove">Clear imported calendar</button></div>`;
   };
 
   // ---------- month grid + the selected day's events (reads the same stored schedule) ----------
@@ -177,8 +179,10 @@ export async function calendarView($view) {
   const renderMonth = () => {
     const zone = displayZone();
     const cells = monthCells(viewMonth, weekStart);
-    const events = schedule ? eventsOf(schedule) : null;
-    const byDay = events ? eventsByDay(events, cells[0].date, cells[cells.length - 1].date, zone) : new Map();
+    // Two sources, shown together but stored apart: the imported .ics file and saved club meetings.
+    const imported = schedule ? eventsOf(schedule) : null;   // null: no file, or one saved before event details
+    const events = [...(imported ?? []), ...clubEventItems(clubEvents)];
+    const byDay = eventsByDay(events, cells[0].date, cells[cells.length - 1].date, zone);
     const today = todayIn(zone);
     const selected = $date.value;
     const cell = ({ date, inMonth }) => {
@@ -188,7 +192,7 @@ export async function calendarView($view) {
         data-day="${date}" aria-pressed="${date === selected}" aria-label="${esc(label)}"${date === today ? ' aria-current="date"' : ""}>
         <span class="day-num num">${Number(date.slice(8))}</span>
         <span class="day-events" aria-hidden="true">${entries.slice(0, MAX_IN_CELL).map((entry) =>
-          `<span class="day-event${entry.event.allDay ? " is-allday" : ""}${entry.event.free ? " is-free" : ""}" data-event="${entry.index}">${entry.event.allDay
+          `<span class="day-event${entry.event.allDay ? " is-allday" : ""}${entry.event.free ? " is-free" : ""}${entry.event.source === "club" ? " is-club" : ""}" data-event="${entry.index}">${entry.event.allDay
             ? "" : `<span class="day-event-time num">${esc(compactTime(timeOnDay(entry, zone)))}</span> `}${esc(entry.event.title || "Untitled event")}</span>`).join("")}
           ${entries.length > MAX_IN_CELL ? `<span class="day-more">+${entries.length - MAX_IN_CELL} more</span>` : ""}</span>
         ${entries.length ? `<span class="day-count num" aria-hidden="true">${entries.length}</span>` : ""}
@@ -197,26 +201,31 @@ export async function calendarView($view) {
 
     // The selected day can be outside the month on screen after browsing other months.
     const shown = selected >= cells[0].date && selected <= cells[cells.length - 1].date;
-    const dayEntries = !events ? [] : (shown ? byDay : eventsByDay(events, selected, selected, zone)).get(selected) ?? [];
+    const dayEntries = (shown ? byDay : eventsByDay(events, selected, selected, zone)).get(selected) ?? [];
     // A few zones skip midnight on DST days; the day then starts at 1 AM.
     const dayStart = (date) => { try { return zonedInstant(date, "00:00", zone); } catch { return zonedInstant(date, "01:00", zone); } };
     const inRange = schedule && covers(schedule, dayStart(selected), dayStart(addDays(selected, 1)));
-    let dayList;
-    if (!schedule) {
-      dayList = `<div class="month-empty"><p>No schedule imported yet. Upload your ICS file to display your events.</p>
-        <button class="btn btn-primary" type="button" data-schedule="pick">Upload Calendar</button></div>`;
-    } else if (!events) {
-      dayList = `<p class="help">This schedule was saved before BU-sy kept event details, so only your busy times are known. Upload the file again to see your events here.</p>`;
-    } else if (!inRange) {
-      dayList = `<p class="help">This date is outside the dates your imported calendar covers (${esc(formatDay(schedule.coverage.start, DEFAULT_TZ))}–${esc(formatDay(schedule.coverage.end - 1, DEFAULT_TZ))}).</p>`;
-    } else if (!dayEntries.length) {
-      dayList = `<p class="muted">No events on this day.</p>`;
-    } else {
-      dayList = `<ul class="list day-list">${dayEntries.map(({ event, index }) => `<li class="row${index === focusEvent ? " is-featured" : ""}" id="event-${index}" tabindex="-1">
+    // About the imported file for this day (club meetings are listed either way).
+    const importNote = !schedule
+      ? `<div class="month-empty"><p>No schedule imported yet. Upload your ICS file to display your events.</p>
+        <button class="btn btn-primary" type="button" data-schedule="pick">Upload Calendar</button></div>`
+      : !imported ? `<p class="help">This schedule was saved before BU-sy kept event details, so only your busy times are known. Upload the file again to see your events here.</p>`
+      : !inRange ? `<p class="help">This date is outside the dates your imported calendar covers (${esc(formatDay(schedule.coverage.start, DEFAULT_TZ))}–${esc(formatDay(schedule.coverage.end - 1, DEFAULT_TZ))}).</p>`
+      : "";
+    const row = ({ event, index }) => {
+      const club = event.source === "club";
+      return `<li class="row${club ? " is-club" : ""}${index === focusEvent ? " is-featured" : ""}" id="event-${index}" tabindex="-1">
         <div class="row-main"><span class="row-name">${esc(event.title || "Untitled event")}</span>
-          <span class="row-sub num">${esc(rangeText(event, zone))}</span></div>
-        <div class="row-side"><span class="tag${event.free ? "" : " tag-busy"}">${event.free ? "Marked free · not counted as busy" : "Busy"}</span></div></li>`).join("")}</ul>`;
-    }
+          <span class="row-sub num">${esc(rangeText(event, zone))}</span>
+          ${club ? `<span class="row-sub">Club: <a href="#/club/${encodeURIComponent(event.clubId)}">${esc(event.clubName)}</a></span>
+          ${event.location ? `<span class="row-sub">${esc(event.location)}</span>` : ""}
+          <span class="row-sub">${esc(event.note)}</span>
+          ${event.issue ? `<span class="row-issue">${esc(event.issue)}</span>` : ""}` : ""}</div>
+        <div class="row-side">${club ? `<span class="tag tag-club">Club event</span>` : ""}<span class="tag${event.free ? "" : " tag-busy"}">${event.free ? "Marked free · not counted as busy" : "Busy"}</span>${club
+          ? `<button class="btn btn-small btn-quiet" type="button" data-remove-club="${esc(event.id)}" aria-label="Remove ${esc(event.title)} on ${esc(dateLabel(selected))} from your calendar">Remove</button>` : ""}</div></li>`;
+    };
+    const dayList = `${dayEntries.length ? `<ul class="list day-list">${dayEntries.map(row).join("")}</ul>`
+      : schedule && imported && inRange ? `<p class="muted">No events on this day.</p>` : ""}${importNote}`;
 
     $month.innerHTML = `<div class="month-head">
         <h2 id="month-title">${esc(monthTitle(viewMonth))}</h2>
@@ -258,6 +267,19 @@ export async function calendarView($view) {
     $month.querySelector("[data-week-start]")?.focus();
   }, on);
   $month.addEventListener("click", (event) => {
+    const remove = event.target.closest("[data-remove-club]");
+    if (remove) {
+      try {
+        const title = clubEvents.find((saved) => saved.id === remove.dataset.removeClub)?.clubName ?? "Club";
+        clubEvents = removeClubEvent(remove.dataset.removeClub);
+        $status.innerHTML = `<p class="calendar-ok">Removed the ${esc(title)} meeting from your calendar.</p>`;
+      } catch {
+        $status.innerHTML = `<p class="calendar-error">This browser couldn't save the change, so the club event is still in your calendar.</p>`;
+      }
+      renderMonth();
+      if (ready) renderResults();
+      return;
+    }
     const step = event.target.closest("[data-month]")?.dataset.month;
     if (step === "today") {
       selectDay(todayIn(displayZone()));
@@ -277,6 +299,13 @@ export async function calendarView($view) {
   let ready = false;
   renderCard();
   renderMonth();
+  // Saved club meetings are checked against the clubs' current data: a changed time is updated,
+  // a meeting the club no longer has is flagged. Offline, they're shown as saved.
+  src.clubs.list().then((clubs) => {
+    clubEvents = reconcile(clubEvents, clubs);
+    renderMonth();
+    if (ready) renderResults();
+  }).catch(() => {});
   let loadError = null;
   try {
     [facilities, hours] = await Promise.all([src.listFacilities(), src.getHours()]);
@@ -346,21 +375,27 @@ export async function calendarView($view) {
     }
 
     // No upload counts as an empty schedule: free for the whole preferred window.
-    const busy = schedule ? busyOf(schedule) : [];
+    // Busy = the imported file's busy times plus every saved club meeting; free time is what's
+    // left around both (overlaps merge). Each event is still listed on its own in "Your day".
+    const fileBusy = schedule ? busyOf(schedule) : [];
+    const busy = [...fileBusy, ...clubBusy(clubEvents)];
     const now = Date.now();
     const importedEvents = schedule ? eventsOf(schedule) : null;
-    const busyEvents = importedEvents ? importedEvents
+    const listed = [...(importedEvents ?? []), ...clubEventItems(clubEvents)]
       .filter((event) => !event.free && event.start < end && event.end > start)
       .map((event) => ({
         start: Math.max(event.start, start),
         end: Math.min(event.end, end),
         kind: "busy",
-        title: event.title || "Untitled event",
-      })) : [];
+        title: event.source === "club" ? `${event.title} (club event)` : event.title || "Untitled event",
+      }));
+    // A file saved before event details has busy times without titles: shown as merged blocks.
+    const untitled = schedule && importedEvents === null
+      ? daySegments(fileBusy, start, end, minimum, now).filter((interval) => interval.kind === "busy") : [];
     const segments = [
-      ...daySegments(busy, start, end, minimum, now).filter((interval) =>
-        interval.kind !== "busy" || importedEvents === null),
-      ...busyEvents,
+      ...daySegments(busy, start, end, minimum, now).filter((interval) => interval.kind !== "busy"),
+      ...untitled,
+      ...listed,
     ].sort((a, b) => a.start - b.start
       || (a.kind === "busy" && b.kind !== "busy" ? -1 : a.kind !== "busy" && b.kind === "busy" ? 1 : 0));
     const usable = usableWindows(freeWindows(busy, start, end), minimum, now);
@@ -411,8 +446,8 @@ export async function calendarView($view) {
     $results.innerHTML = `<h2>${esc(dateLabel($date.value))}</h2>
       <p class="calendar-total"><strong>${durationLabel(total) || "0 min"}</strong> available (free windows of ${minimum}+ min) during ${esc($from.value)}–${esc($until.value)} (${esc(zone)}).</p>
       <h3 class="with-info">Your day${infoTip("About availability assumptions", schedule
-        ? `From ${esc(schedule.fileName)}. Cancelled events, excluded occurrences and events marked free aren't counted as busy. Travel time is not included.`
-        : `No schedule uploaded. Availability assumes you're free from ${esc(formatClock($from.value))} to ${esc(formatClock($until.value))} in the ${esc(zone)} timezone. Upload your class schedule (.ics) above to calculate availability using your actual events. Travel time is not included.`)}</h3>${timelineHtml}${afterLastEvent}
+        ? `From ${esc(schedule.fileName)}. Cancelled events, excluded occurrences and events marked free aren't counted as busy; club events you added are. Travel time is not included.`
+        : `No schedule uploaded. Availability assumes you're free from ${esc(formatClock($from.value))} to ${esc(formatClock($until.value))} in the ${esc(zone)} timezone. Upload your class schedule (.ics) above to calculate availability using your actual events. Club events you added count as busy. Travel time is not included.`)}</h3>${timelineHtml}${afterLastEvent}
       <h3 class="with-info">Time at ${locationName}${infoTip("About these times",
         `Free windows that overlap ${isDining ? "a meal service while the building is open" : "the building's open hours"}, from the same verified hours as the place pages. Travel time isn't included. Confirm the trip fits your schedule. ${verifiedNote}`)}</h3>${matchesHtml}
       ${usable.length ? `<h3>Places that fit your free time</h3>${fitsHtml}` : ""}
@@ -443,11 +478,12 @@ export async function calendarView($view) {
     if (action === "pick") {
       $file.click();
     } else if (action === "remove") {
-      if (!confirm("Clear your calendar? Your imported events and busy times will be deleted from this browser.")) return;
+      if (!confirm(`Clear your imported calendar? Its events and busy times will be deleted from this browser.${clubEvents.length
+        ? ` The ${clubEvents.length} club event${clubEvents.length === 1 ? "" : "s"} you added stay; remove ${clubEvents.length === 1 ? "it" : "them"} one by one in the calendar.` : ""}`)) return;
       clearSchedule();
       schedule = null;
       renderCard();
-      showStatus(`<p class="calendar-ok">Calendar cleared. Your events and busy times were deleted from this browser.</p>`);
+      showStatus(`<p class="calendar-ok">Imported calendar cleared. Its events and busy times were deleted from this browser.${clubEvents.length ? " Club events you added are still in your calendar." : ""}</p>`);
       renderMonth();
       renderResults();
       $card.querySelector("[data-schedule]")?.focus();

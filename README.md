@@ -101,6 +101,13 @@ connection. The file is parsed **in the browser** with [ical.js](https://github.
 - **Free time** is the gap between merged busy blocks inside your preferred hours, at least your
   minimum length, intersected with the date-scoped building and meal-service hours in
   `web/data/hours.json`. No travel time is estimated.
+- **Club events:** a club's page lists its next four regular meetings (from its weekly day and
+  times; extra meetings have no time, so they're listed but can't be added) with *Add to Calendar*,
+  and the Clubs list offers the next one. Added meetings are stored apart from the .ics file
+  (`busy.clubEvents.v1` in this browser, keyed by club + date so they can't be added twice), show in
+  the calendar as club events, and count as busy everywhere free time is worked out. Uploading,
+  replacing or clearing the imported file never touches them; each is removed on its own. When a
+  club's schedule changes, saved meetings follow it (new times) or are flagged (dropped day or club).
 - **Calendar view:** the Calendar tab always shows a month grid (empty until a file is imported)
   with previous/next month and *Today*. Weeks start on Sunday; *Week starts* switches to Monday
   (saved in this browser). Imported events appear on every date they

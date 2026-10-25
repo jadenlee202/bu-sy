@@ -305,7 +305,10 @@ select { appearance: none; -webkit-appearance: none; background: var(--subtle) v
 :is(.pick, .preset-row) input:checked + span { background: var(--selected); border-color: var(--selected); color: var(--on-selected); }
 :is(.pick, .preset-row) input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
 .until { font-weight: 500; color: var(--muted); }
-.custom { margin-top: 12px; max-width: 180px; }
+.custom-time { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 12px; max-width: 360px; }
+.custom-time .custom { flex: 1 1 150px; min-width: 0; max-width: none; margin: 0; }
+.custom-time .custom-unit { flex: 1 1 120px; min-width: 0; max-width: 150px; }
+.custom-time .custom-help { flex-basis: 100%; margin: 0; }
 .checks { display: flex; flex-direction: column; }
 label.check { display: flex; flex-direction: row; align-items: center; gap: 12px; min-height: 44px; margin: 0; font-size: 15px; font-weight: 500; cursor: pointer; }
 .check input { width: 20px; height: 20px; margin: 0; accent-color: var(--red); flex: none; }
@@ -642,6 +645,9 @@ th { color: var(--muted); font-weight: 600; }
 .calendar-controls label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
 .calendar-date-controls { display: flex; align-items: center; gap: 4px; }
 .calendar-date-controls input { min-width: 0; flex: 1; }
+@container (max-width: 34rem) {
+  .calendar-controls-grid > label:has(.calendar-date-controls) { grid-column: 1 / -1; }   /* room for the date beside ‹ › */
+}
 .calendar-controls :is(input, select) { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--subtle); }
 .calendar-controls .help { margin: 10px 0 0; }
 .calendar-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
@@ -800,6 +806,14 @@ main > .hint, main > .form { max-width: 720px; }
 .app-pill[data-app="approved"] { background: var(--red-soft); }
 .app-pill[data-app="rejected"] { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
 .club-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+/* meetings that can go on the BU-sy calendar (clubevents.js) */
+.club-meetings { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; }
+.club-meetings h2 { margin: 0; }
+.club-meetings > p { margin: 0; }
+.club-next { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; font-size: 14px; }
+.club-cal { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.added { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--text); }
+.added .icon { color: var(--red); }
 @container (min-width: 52rem) { .club-layout { grid-template-columns: minmax(0, 1.8fr) minmax(240px, 1fr); } }
 .club-main { padding: 18px 20px; }
 .club-desc { margin: 0 0 14px; font-size: 15px; }
@@ -1047,3 +1061,9 @@ details > summary { transition: color var(--dur-fast) var(--ease); }
 .avail-panel { display: flex; flex-direction: column; gap: 10px; }
 .avail-panel:empty { display: none; }
 .avail-panel > .help { margin: 0; }
+
+/* club events in the calendar: same rows and chips, told apart from imported events */
+.tag-club { color: var(--text); background: var(--red-soft); border-color: transparent; }
+.row.is-club { border-left: 3px solid var(--red); }
+.row-issue { font-size: 13px; font-weight: 600; color: var(--red-text); }
+.day-event.is-club { background: color-mix(in srgb, var(--text) 12%, var(--surface)); box-shadow: inset 3px 0 0 var(--red); }

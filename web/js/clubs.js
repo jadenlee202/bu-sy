@@ -4,6 +4,7 @@
 // decides who gets a spot. Organizer gating is demo-grade (a device token, not a login).
 import { fmtHHMM } from "./clock.js";
 import { icon, terrier } from "./icons.js";
+import { addClubEvent, clubMeetings, loadClubEvents, removeClubEvent } from "./clubevents.js";
 import * as src from "./source.js";
 import { esc, failure, level, loading } from "./ui.js";
 
@@ -41,6 +42,40 @@ const spots = (c) => (c.capacity == null ? "No member limit"
   + (c.waitlist_count ? ` · ${c.waitlist_count} on the waitlist` : "");
 const myPill = (a) => (a ? `<span class="pill app-pill" data-app="${a.status}">${APP_STATUS[a.status]}${a.position ? ` · #${a.position}` : ""}</span>` : "");
 
+// ---------- adding meetings to the BU-sy calendar (clubevents.js) ----------
+const meetingWhen = (m) => `${fmtDate(m.date)} · ${fmtHHMM(m.start)}–${fmtHHMM(m.end)}`;
+/** "Add to Calendar", or the saved state with a way to remove it. */
+const calendarAction = (m, saved) => (saved.has(m.id)
+  ? `<span class="added">${icon("check", 14)} Added to Calendar</span>
+    <button class="btn btn-small btn-quiet" type="button" data-cal-remove="${esc(m.id)}" aria-label="Remove the ${esc(m.clubName)} meeting on ${esc(fmtDate(m.date))} from your calendar">Remove</button>`
+  : `<button class="btn btn-small" type="button" data-cal-add="${esc(m.id)}" aria-label="Add the ${esc(m.clubName)} meeting on ${esc(fmtDate(m.date))} to your calendar">Add to Calendar</button>`);
+const savedIds = () => new Set(loadClubEvents().map((e) => e.id));
+/**
+ * Handles Add / Remove clicks for the meetings in `offered`. Returns a message for the screen,
+ * or null when the click wasn't one of these. Never reports "added" unless it was saved.
+ */
+function calendarClick(target, offered) {
+  const add = target.closest("[data-cal-add]");
+  const remove = target.closest("[data-cal-remove]");
+  if (!add && !remove) return null;
+  const meeting = offered.find((m) => m.id === (add ?? remove).dataset[add ? "calAdd" : "calRemove"]);
+  if (!meeting) return { error: "That meeting is no longer on the club's schedule." };
+  try {
+    if (add) {
+      addClubEvent(meeting);
+      return { ok: `Added the ${meeting.clubName} meeting on ${fmtDate(meeting.date)} to your calendar.` };
+    }
+    removeClubEvent(meeting.id);
+    return { ok: `Removed the ${meeting.clubName} meeting on ${fmtDate(meeting.date)} from your calendar.` };
+  } catch (err) {
+    // Storage blocked or full is a DOMException; anything else is the meeting's own problem.
+    return { error: err instanceof DOMException ? "This browser couldn't save your calendar, so nothing was changed." : err.message };
+  }
+}
+const calendarNotice = (result) => (result.ok
+  ? `<p class="success" role="status">${esc(result.ok)} <a href="#/calendar">Open Calendar</a></p>`
+  : `<p class="calendar-error" role="alert">${esc(result.error)}</p>`);
+
 /** The busyness estimate for the meeting place and time, always labeled as an estimate. */
 function hint(c, { detail = false } = {}) {
   const h = c.busyness_hint;
@@ -75,6 +110,7 @@ export async function clubsView($main) {
     <label class="search">${icon("search")}<input type="search" placeholder="Search clubs" aria-label="Search clubs" value="${esc(f.query)}"></label>
     <div class="club-filters" id="club-filters"></div>
     <p class="sr-only" id="club-count" role="status"></p>
+    <div id="club-cal-notice" aria-live="polite"></div>
     <div id="clubs" aria-live="polite">${loading("Loading clubs…")}</div>`;
   const $list = $view.querySelector("#clubs");
   let all, o;
@@ -117,11 +153,20 @@ export async function clubsView($main) {
         <button class="btn" type="button" data-clear>Clear filters</button></div>`;
       return;
     }
-    $list.innerHTML = `<ul class="list clubs">${rows.map(card).join("")}</ul>`;
+    const saved = savedIds();
+    $list.innerHTML = `<ul class="list clubs">${rows.map((c) => card(c, saved)).join("")}</ul>`;
   };
 
   $view.querySelector(".search input").addEventListener("input", (e) => { f.query = e.target.value; save(); update(); });
   $view.addEventListener("click", (e) => {
+    const forId = e.target.closest("[data-cal-for]")?.dataset.calFor;
+    const result = calendarClick(e.target, all.flatMap((c) => clubMeetings(c).regular.slice(0, 1)));
+    if (result) {
+      $view.querySelector("#club-cal-notice").innerHTML = calendarNotice(result);
+      update();
+      $list.querySelector(`[data-cal-for="${CSS.escape(forId ?? "")}"] button`)?.focus();
+      return;
+    }
     const chip = e.target.closest(".chip");
     if (e.target.closest("[data-clear]")) {
       Object.assign(f, { query: "", category: "all", day: "all", openOnly: false });
@@ -143,7 +188,8 @@ export async function clubsView($main) {
   return {};
 }
 
-function card(c) {
+function card(c, saved = savedIds()) {
+  const next = clubMeetings(c).regular[0];
   const action = c.is_organizer ? `<a class="btn btn-small" href="#/club/${encodeURIComponent(c.id)}/manage">Manage</a>`
     : c.my_application ? myPill(c.my_application)
     : c.status === "Full" ? `<span class="muted">Not taking sign-ups</span>`
@@ -154,6 +200,7 @@ function card(c) {
       <h2 class="row-name"><a href="#/club/${encodeURIComponent(c.id)}">${esc(c.name)}</a></h2>
       <p class="club-line">${icon("clock", 14)}<span>${esc(schedule(c))}</span></p>
       <p class="club-line">${icon("pin", 14)}<span>${esc(place(c))}</span></p>
+      ${next ? `<div class="club-next"><span>Next meeting: <span class="num">${esc(meetingWhen(next))}</span></span><span class="club-cal" data-cal-for="${esc(next.id)}">${calendarAction(next, saved)}</span></div>` : ""}
       ${hint(c)}
     </div>
     <div class="row-side"><span class="muted">${esc(spots(c))}</span>${action}</div>
@@ -192,9 +239,38 @@ export async function clubView($main, id) {
           </dl>
         </section>
         <aside class="card club-side" aria-live="polite">${joinBox(c)}</aside>
+        ${meetingsCard()}
       </div>`;
   };
+  // Meetings from the club's own data that can go on the BU-sy calendar.
+  let notice = "";
+  const meetingsCard = () => {
+    const { regular, extra } = clubMeetings(c);
+    const saved = savedIds();
+    return `<section class="card club-meetings" aria-labelledby="club-meetings-title" aria-live="polite">
+      <h2 id="club-meetings-title">Meetings you can add to your calendar</h2>
+      ${notice}
+      ${regular.length ? `<ul class="list">${regular.map((m) => `<li class="row">
+        <div class="row-main"><span class="row-name num">${esc(meetingWhen(m))}</span>
+          <span class="row-sub">${esc(m.location || "Location TBD")} · Regular weekly meeting</span></div>
+        <div class="row-side" data-cal-for="${esc(m.id)}">${calendarAction(m, saved)}</div></li>`).join("")}</ul>`
+        : `<p class="muted">This club hasn't listed a weekly meeting day and time, so there's no meeting to add yet.</p>`}
+      ${extra.length ? `<ul class="list">${extra.map((m) => `<li class="row">
+        <div class="row-main"><span class="row-name">${esc(fmtDate(m.date))}${m.note ? ` · ${esc(m.note)}` : ""}</span>
+          <span class="row-sub">Extra meeting</span></div>
+        <div class="row-side"><span class="muted">Time not listed, so it can't be added</span></div></li>`).join("")}</ul>` : ""}
+      <p class="help">Added meetings appear in your Calendar and count as busy when BU-sy looks for free time. They're saved in this browser only.</p>
+    </section>`;
+  };
   $view.addEventListener("click", async (e) => {
+    const forId = e.target.closest("[data-cal-for]")?.dataset.calFor;
+    const result = calendarClick(e.target, clubMeetings(c).regular);
+    if (result) {
+      notice = calendarNotice(result);
+      $view.querySelector(".club-meetings").outerHTML = meetingsCard();
+      $view.querySelector(`.club-meetings [data-cal-for="${CSS.escape(forId ?? "")}"] button`)?.focus();
+      return;
+    }
     if (!e.target.closest("[data-withdraw]")) return;
     if (!confirm(`Withdraw from ${c.name}? Your application will be removed${c.my_application?.status === "approved" ? " and your spot given to the next person" : ""}.`)) return;
     try {

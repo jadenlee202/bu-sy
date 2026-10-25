@@ -181,6 +181,7 @@ The only console error in static mode is an expected 404: the app checking wheth
 | Planner, Places, playback, About | same data and results in both | same |
 | Clubs (created, signed up) | this browser only (localStorage) | shared via `server/clubs.json` (git-ignored) |
 | Uploaded schedule (.ics): event titles and times, busy times | this tab, or this browser if remembered; never sent to the server | same |
+| Club meetings added to the calendar | this browser (localStorage) until removed | same |
 | Planner inputs | this tab only; cleared on reload | same |
 | Light/dark choice | this browser (localStorage) | same |
 

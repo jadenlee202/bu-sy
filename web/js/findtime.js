@@ -4,6 +4,7 @@
 // student counts as free for their whole preferred window, and the card says so.
 import { findOpportunities } from "./availability.js";
 import { DEFAULT_TZ, durationLabel, formatInstant, loadCalendarPrefs, MIN_OPTIONS, saveCalendarPrefs } from "./calendar.js";
+import { clubBusy, loadClubEvents } from "./clubevents.js";
 import { busyOf, loadSchedule } from "./schedule.js";
 import { esc, infoTip } from "./ui.js";
 
@@ -41,8 +42,8 @@ export async function findTimeCard($card, facility, scheduleLocation) {
   const prefs = loadCalendarPrefs();
   const zone = prefs.timezone ?? DEFAULT_TZ;
   const head = `<h2 class="with-info">${dining ? "Find a time to eat" : "Find free time here"}${infoTip("About availability assumptions", schedule
-    ? `Using your schedule from ${esc(schedule.fileName)} (${esc(zone)}). <a href="#/calendar">Replace or remove it on the Calendar page</a>. Based on ${name}'s verified hours (campus time). Travel time is not included.`
-    : `No schedule uploaded. Availability assumes you're free for the whole window set by “Available from” and “Available until” in the ${esc(zone)} timezone. <a href="#/calendar">Upload your class schedule (.ics)</a> to calculate availability using your actual events; it's read in this browser and never uploaded. Based on ${name}'s verified hours (campus time). Travel time is not included.`)}</h2>`;
+    ? `Using your schedule from ${esc(schedule.fileName)} (${esc(zone)}). <a href="#/calendar">Replace or remove it on the Calendar page</a>. Club events you added count as busy too. Based on ${name}'s verified hours (campus time). Travel time is not included.`
+    : `No schedule uploaded. Availability assumes you're free for the whole window set by “Available from” and “Available until” in the ${esc(zone)} timezone. <a href="#/calendar">Upload your class schedule (.ics)</a> to calculate availability using your actual events; it's read in this browser and never uploaded. Club events you added count as busy. Based on ${name}'s verified hours (campus time). Travel time is not included.`)}</h2>`;
   const today = todayIn(zone);
   let { from = "08:00", until = "22:00", minimum = 30 } = prefs;
   let startDate = today;
@@ -65,7 +66,7 @@ export async function findTimeCard($card, facility, scheduleLocation) {
       return;
     }
     const { matches, outcomes } = findOpportunities(
-      schedule ? busyOf(schedule) : [], { ...scheduleLocation, category: facility.category }, startDate, DAYS,
+      [...(schedule ? busyOf(schedule) : []), ...clubBusy()], { ...scheduleLocation, category: facility.category }, startDate, DAYS,
       { timezone: zone, from, until, minimum, now: Date.now(), meal: meal || null, coverage: schedule?.coverage ?? null },
     );
     const what = dining ? `serving ${meal || "a meal"}` : "open";
