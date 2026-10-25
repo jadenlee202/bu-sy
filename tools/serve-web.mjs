@@ -7,7 +7,8 @@ const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/cs
 createServer(async (request, response) => {
   try {
     const pathname = decodeURIComponent(new URL(request.url, "http://localhost").pathname);
-    const file = resolve(root, `.${pathname === "/" ? "/index.html" : pathname}`);
+    // Like GitHub Pages, a directory URL serves its index.html (/ and /counter/).
+    const file = resolve(root, `.${pathname.endsWith("/") ? `${pathname}index.html` : pathname}`);
     if (!file.startsWith(root + sep)) { response.writeHead(403).end(); return; }
     const content = await readFile(file);
     response.writeHead(200, { "Content-Type": types[extname(file)] ?? "application/octet-stream", "Cache-Control": "no-store" });
