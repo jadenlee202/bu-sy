@@ -1,5 +1,5 @@
 import { daySegments, freeWindows, matchFreeWindows, usableWindows, zonedInstant } from "./availability.js";
-import { daySchedule, formatPeriod } from "./hours.js";
+import { daySchedule, formatClock, formatPeriod } from "./hours.js";
 import {
   addDays, eventsByDay, monthCells, monthTitle, rangeText, shiftMonth, timeOnDay, WEEK_STARTS, weekdayNames,
 } from "./monthview.js";
@@ -7,7 +7,7 @@ import {
   busyOf, clearSchedule, covers, DEFAULT_TZ, eventsOf, importCalendarFile, ImportError, loadSchedule, saveSchedule, skippedText,
 } from "./schedule.js";
 import * as src from "./source.js";
-import { esc, failure, loading } from "./ui.js";
+import { esc, failure, infoTip, loading } from "./ui.js";
 
 export { DEFAULT_TZ };
 export const MIN_OPTIONS = [15, 30, 45, 60];
@@ -118,17 +118,18 @@ export async function calendarView($view) {
     </section>
     <section class="card month-card" aria-labelledby="month-title"><div id="month"></div></section>
     <section class="card calendar-controls" aria-label="Availability settings">
+      <div class="avail-head"><span>Availability settings</span>${infoTip("About these settings",
+        "Your day and preferred hours are read in this timezone (Boston time by default; enter an IANA name such as America/Los_Angeles to change it). Event times keep the timezone written in your calendar file. These settings are saved in this browser only.")}</div>
       <div class="calendar-controls-grid">
         <label>Date<div class="calendar-date-controls"><button class="icon-btn" type="button" data-date-step="-1" aria-label="Previous day">‹</button>
           <input id="calendar-date" type="date" value="${todayIn(DEFAULT_TZ)}">
           <button class="icon-btn" type="button" data-date-step="1" aria-label="Next day">›</button></div></label>
-        <label>Timezone<input id="calendar-timezone" value="${esc(prefs.timezone ?? DEFAULT_TZ)}" autocomplete="off" aria-describedby="calendar-timezone-help"></label>
+        <label>Timezone<input id="calendar-timezone" value="${esc(prefs.timezone ?? DEFAULT_TZ)}" autocomplete="off"></label>
         <label>Minimum time<select id="calendar-minimum">${MIN_OPTIONS.map((minutes) => `<option value="${minutes}"${minutes === (prefs.minimum ?? 30) ? " selected" : ""}>${minutes} minutes</option>`).join("")}</select></label>
         <label>Available from<input id="calendar-from" type="time" value="${prefs.from ?? "08:00"}"></label>
         <label>Available until<input id="calendar-until" type="time" value="${prefs.until ?? "22:00"}"></label>
         <label>Campus location<select id="calendar-location"></select></label>
       </div>
-      <p class="help" id="calendar-timezone-help">Your day and preferred hours are read in this timezone (Boston time by default; enter an IANA name such as America/Los_Angeles to change it). Event times keep the timezone written in your calendar file. These settings are saved in this browser only.</p>
     </section>
     <section class="card calendar-results" aria-live="polite"><div id="calendar-results">${loading()}</div></section>`;
 
@@ -329,9 +330,9 @@ export async function calendarView($view) {
     const isDining = matchingLocation?.category === "dining";
     const verifiedNote = locationHours?.lastVerified ? `Location hours last verified ${esc(locationHours.lastVerified)}.` : "";
     const range = `${formatInstant(start, zone)}–${formatInstant(end, zone)}`;
-    const publishedHours = `<h3>Hours at ${locationName}</h3>
-      ${locationHours ? hoursSummary(locationHours, matchingLocation?.category, $date.value) : `<p class="help">Hours for this location are unverified.</p>`}
-      <p class="help">These are the location's published hours (campus time), not a recommendation for you. ${verifiedNote}</p>`;
+    const publishedHours = `<h3 class="with-info">Hours at ${locationName}${infoTip("About these hours",
+        `These are the location's published hours (campus time), not a recommendation for you. ${verifiedNote}`)}</h3>
+      ${locationHours ? hoursSummary(locationHours, matchingLocation?.category, $date.value) : `<p class="help">Hours for this location are unverified.</p>`}`;
 
     // Outside the dates an uploaded calendar covers, there's no claim that the day is free.
     if (schedule && !covers(schedule, start, end)) {
@@ -394,13 +395,13 @@ export async function calendarView($view) {
 
     $results.innerHTML = `<h2>${esc(dateLabel($date.value))}</h2>
       <p class="calendar-total"><strong>${durationLabel(total) || "0 min"}</strong> available (free windows of ${minimum}+ min) during ${esc($from.value)}–${esc($until.value)} (${esc(zone)}).</p>
-      <h3>Your day</h3>${timelineHtml}
-      <p class="help">${schedule
-        ? `From ${esc(schedule.fileName)}. Cancelled events, excluded occurrences and events marked free aren't counted as busy.`
-        : "No schedule uploaded, so you're treated as free for your whole preferred window. Upload your .ics file above to use your real schedule."}</p>${afterLastEvent}
-      <h3>Time at ${locationName}</h3>${matchesHtml}
+      <h3 class="with-info">Your day${infoTip("About availability assumptions", schedule
+        ? `From ${esc(schedule.fileName)}. Cancelled events, excluded occurrences and events marked free aren't counted as busy. Travel time is not included.`
+        : `No schedule uploaded. Availability assumes you're free from ${esc(formatClock($from.value))} to ${esc(formatClock($until.value))} in the ${esc(zone)} timezone. Upload your class schedule (.ics) above to calculate availability using your actual events. Travel time is not included.`)}</h3>${timelineHtml}${afterLastEvent}
+      <h3 class="with-info">Time at ${locationName}${infoTip("About these times",
+        `Free windows that overlap ${isDining ? "a meal service while the building is open" : "the building's open hours"}, from the same verified hours as the place pages. Travel time isn't included. Confirm the trip fits your schedule. ${verifiedNote}`)}</h3>${matchesHtml}
       ${usable.length ? `<h3>Places that fit your free time</h3>${fitsHtml}` : ""}
-      <p class="help">Travel time isn't included. Confirm the trip fits your schedule.${assumedNote} ${verifiedNote}</p>`;
+      ${assumedNote ? `<p class="help">${assumedNote.trim()}</p>` : ""}`;
   };
 
   const showStatus = (html) => { $status.innerHTML = html; };

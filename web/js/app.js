@@ -8,11 +8,12 @@ import { findTimeCard } from "./findtime.js";
 import { hoursText, openSegments, periodAt } from "./recommend.js";
 import { busyOf, covers, loadSchedule } from "./schedule.js";
 import {
-  addDays, buildingHoursSummary, campusDateTime, dateLabel, daySchedule, displaySchedule, formatPeriod,
-  selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekRangeLabel, weekStart,
+  addDays, buildingHoursSummary, campusDateTime, dateLabel, daySchedule, displaySchedule, formatClock, formatPeriod,
+  nowServiceLabel, nowStatus, nowText, selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel,
+  weekRangeLabel, weekStart,
 } from "./hours.js";
 import * as src from "./source.js";
-import { LEVEL, esc, failure, fmtCount, level, loading } from "./ui.js";
+import { LEVEL, esc, failure, fmtCount, infoTip, initInfoTips, level, loading } from "./ui.js";
 
 // ---------- constants ----------
 // One replay clock, shared by every screen, covering the whole day. Outside a place's
@@ -320,21 +321,27 @@ async function placesView() {
     $availChips.innerHTML = AVAIL_FILTERS.map(([id, label]) =>
       `<button class="chip" data-avail="${id}" aria-pressed="${state.avail === id}">${label}</button>`).join("");
     if (CALENDAR_FILTERS.has(state.avail)) {
-      $availPanel.innerHTML = `<div class="calendar-controls calendar-controls-grid">
+      $availPanel.innerHTML = `<div class="avail-head"><span>Your free time</span>${freeTimeTip()}</div>
+        <div class="calendar-controls calendar-controls-grid">
           <label>Date<input type="date" data-free="date" value="${freeFilter.date}"></label>
           <label>Free for at least<select data-free="minimum">${MIN_OPTIONS.map((minutes) =>
             `<option value="${minutes}"${minutes === freeFilter.minimum ? " selected" : ""}>${minutes} minutes</option>`).join("")}</select></label>
-        </div>
-        <p class="help">${schedule
-          ? `Using your uploaded schedule (${esc(schedule.fileName)}) within ${esc(freeFilter.from)}–${esc(freeFilter.until)} (${esc(zone)}). <a href="#/calendar">Change on the Calendar page</a>.`
-          : `No schedule uploaded, so you're treated as free for all of ${esc(freeFilter.from)}–${esc(freeFilter.until)} (${esc(zone)}). <a href="#/calendar">Upload your class schedule (.ics)</a> to use your real one.`} Travel time isn't included.</p>`;
+        </div>`;
     } else if (state.avail === "open_now") {
-      $availPanel.innerHTML = `<p class="help">Open right now by each place's published hours (campus time), not the replay slider.</p>`;
+      $availPanel.innerHTML = `<div class="avail-head"><span>Open right now, by the real time in Boston</span>${infoTip("About Open now",
+        "Uses the current time in Boston (not the replay slider) and each place's verified hours for today, including special and closed days. "
+        + "Dining halls count as open whenever the building is, even between meals. Places whose hours for today aren't verified are listed separately, never shown as open. Updates every minute.")}</div>`;
     } else {
-      $availPanel.innerHTML = schedule ? ""
-        : `<p class="help">Free-time filters treat you as free for your whole preferred window until you <a href="#/calendar">upload your class schedule (.ics)</a>. It's read in this browser and never uploaded.</p>`;
+      $availPanel.innerHTML = "";
     }
   };
+  // The assumption behind every free-time filter, for the information icon.
+  function freeTimeTip() {
+    const window = `${formatClock(freeFilter.from)} to ${formatClock(freeFilter.until)} in the ${esc(zone)} timezone`;
+    return infoTip("About availability assumptions", schedule
+      ? `Using your uploaded schedule (${esc(schedule.fileName)}) between ${window}. <a href="#/calendar">Change it on the Calendar page</a>. Travel time is not included.`
+      : `No schedule uploaded. Availability assumes you're free from ${window}. <a href="#/calendar">Upload your class schedule (.ics)</a> to calculate availability using your actual events. Travel time is not included.`);
+  }
   renderAvailControls();
 
   const visible = () => {
@@ -406,14 +413,16 @@ async function placesView() {
       const replaySchedule = locationHours ? daySchedule(locationHours, h.day) : null;
       const selectedStatus = locationHours && !replaySchedule.assumed ? selectedBuildingStatus(locationHours, h.day, state.minute) : null;
       const closed = !o && selectedStatus?.status === "closed";
+      const now = locationHours ? nowStatus(locationHours) : null;
       const facts = [
         fact("Category", `${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isStudyEligible(f) ? ` <span class="tag">Study space</span>` : ""}`),
         isHistorical(f) ? fact("Recorded day", esc(h.day_label)) : "",
         summary ? fact("Today", esc(TODAY_TEXT[summary] ?? summary), ' class="num"') : "",
+        now ? fact("Now", esc(nowText(now)), ` class="row-status" data-status="${now.status}"`)
+          : !isHistorical(f) ? fact("Now", "Hours unverified", ' class="row-status" data-status="unverified"') : "",
+        f.category === "dining" && locationHours ? fact("Meal service", esc(nowServiceLabel(locationHours))) : "",
         selectedStatus && ["open", "closed"].includes(selectedStatus.status)
-          ? fact("Replay status", selectedStatusLabel(selectedStatus), ` class="row-status" data-status="${selectedStatus.status}"`) : "",
-        f.category === "dining" && locationHours
-          ? fact("Meal service", esc(serviceStatusLabel(serviceAtTime(locationHours, currentDate, state.minute), selectedBuildingStatus(locationHours, currentDate, state.minute)))) : "",
+          ? fact("Replay status", `${selectedStatusLabel(selectedStatus)} at ${esc(fmtTime(state.minute))}`, ` class="row-status" data-status="${selectedStatus.status}"`) : "",
         windows[f.facility_id]
           ? fact("Fits your free time", `${formatInstant(windows[f.facility_id].start, zone)}–${formatInstant(windows[f.facility_id].end, zone)}`, ' class="num"') : "",
       ].join("");
@@ -463,7 +472,9 @@ async function placesView() {
     update();
   });
   update();
-  return { update };
+  // "Now", meal service and Open now follow the real clock, so refresh while this screen is open.
+  const clockTimer = setInterval(update, 30_000);
+  return { update, dispose() { clearInterval(clockTimer); } };
 }
 
 // ---------- screen: one place ----------
@@ -503,14 +514,15 @@ async function placeView(id) {
     ${verifiedInfoSection(f)}
     <section class="card schedule-card" id="location-hours" aria-label="Weekly operating hours">
       <div class="card-head">
-        <h2>Weekly operating hours</h2>
+        <h2 class="with-info">Weekly operating hours${infoTip("About these hours", (f.category === "dining" ? scheduleLocation?.serviceHours : scheduleLocation?.buildingHours)?.repeatsWeekly === false
+          ? "This schedule applies only to its published dates; other dates are shown as unavailable."
+          : "Dates outside the published week repeat its weekly hours and are marked “Assumed” until new hours are published. Special dates always override. “Right now” uses only verified hours for today.")}</h2>
         <div class="schedule-nav" role="group" aria-label="Navigate operating-hours weeks">
           <button class="icon-btn schedule-nav-btn" type="button" data-week="-7" aria-label="Previous week">‹</button>
           <span id="schedule-week" aria-live="polite"></span>
           <button class="icon-btn schedule-nav-btn" type="button" data-week="7" aria-label="Next week">›</button>
         </div>
       </div>
-      <p class="schedule-note" id="schedule-note"></p>
       <ul class="schedule-days" id="schedule-days"></ul>
       <div class="selected-hours" id="selected-hours" aria-live="polite"></div>
     </section>
@@ -573,12 +585,12 @@ async function placeView(id) {
       const service = serviceAtTime(scheduleLocation, selectedScheduleDate, state.minute);
       mealStatus = `<p><strong>${esc(serviceStatusLabel(service, buildingStatus))}</strong></p>`;
     }
+    // Right now (real Boston time) is a different question from the selected date and time above.
+    const now = !historical && scheduleLocation ? nowStatus(scheduleLocation) : null;
+    const rightNow = historical ? "" : `<p class="selected-now">Right now: <strong data-status="${now?.status ?? "unverified"}">${esc(now ? nowText(now) : "Hours unverified")}</strong>${
+      now && f.category === "dining" ? ` · ${esc(nowServiceLabel(scheduleLocation))}` : ""}</p>`;
     $view.querySelector("#selected-hours").innerHTML = `<p><strong>${esc(dateLabel(selectedScheduleDate))} · ${esc(fmtTime(state.minute))}</strong></p>
-      <p>Building status: <strong>${esc(statusText)}</strong></p>${mealStatus}`;
-    const shownSchedule = f.category === "dining" ? scheduleLocation?.serviceHours : scheduleLocation?.buildingHours;
-    $view.querySelector("#schedule-note").textContent = shownSchedule?.repeatsWeekly === false
-      ? "This schedule applies only to its published dates; other dates are shown as unavailable."
-      : "Dates outside the published week repeat its weekly hours and are marked “Assumed” until new hours are published. Special dates always override.";
+      <p>Building status: <strong>${esc(statusText)}</strong></p>${mealStatus}${rightNow}`;
   };
 
   $view.querySelector(".schedule-nav").addEventListener("click", (e) => {
@@ -666,7 +678,8 @@ async function placeView(id) {
 
   renderDay();
   update();
-  return { update, resize: () => { chart.draw(); chart.mark(Math.floor(state.minute / 60)); } };
+  const clockTimer = setInterval(renderSchedule, 30_000);   // keeps "Right now" current
+  return { update, resize: () => { chart.draw(); chart.mark(Math.floor(state.minute / 60)); }, dispose() { clearInterval(clockTimer); } };
 }
 
 function howItWorks(f, hist) {
@@ -981,16 +994,13 @@ function revealBelowFold() {
 }
 
 // ---------- theme ----------
+// The in-app theme toggle was removed with the desktop sidebar (phone-first shell).
+// We still honor a previously saved choice and otherwise follow the system theme.
 const root = document.documentElement;
 try {
   const saved = localStorage.getItem("busy.theme");
   if (saved) root.dataset.theme = saved;
 } catch { /* storage blocked: follow the system theme */ }
-document.getElementById("theme").addEventListener("click", () => {
-  const dark = (root.dataset.theme ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
-  root.dataset.theme = dark ? "light" : "dark";
-  try { localStorage.setItem("busy.theme", root.dataset.theme); } catch { /* ignore */ }
-});
 
 let resizeTimer;
 window.addEventListener("resize", () => {
@@ -998,6 +1008,7 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(() => view?.resize?.(), 150);
 });
 document.querySelector(".brand-mark").innerHTML = terrier({ size: 30 });
+initInfoTips();
 
 // Always say where the data came from. Both sources carry the same demo labels;
 // neither is live. If an API was asked for but can't be reached, say so.
