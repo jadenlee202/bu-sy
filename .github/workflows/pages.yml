@@ -17,7 +17,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  checks:
+    uses: ./.github/workflows/tests.yml
+    permissions:
+      contents: read
+
   deploy:
+    needs: checks
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

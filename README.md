@@ -30,7 +30,9 @@ Independent student project, **not affiliated with Boston University**.
 
 **Demo day?** Follow [`DEMO.md`](DEMO.md): exact startup, the demo sequence, checks and recovery steps.
 
-Requires **Python 3.12+**. Node 22+ is only needed for the JS tests. There are no accounts, keys or secrets.
+Requires **Python 3.12+**. Node 22+ is needed for the JS/CSS and browser tests; see
+[`LAYOUT_CHECKS.md`](LAYOUT_CHECKS.md) for setup and the enforced phone-frame contract.
+There are no accounts, keys or secrets.
 
 **Just the site (no install):**
 ```bash

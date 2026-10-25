@@ -1209,7 +1209,7 @@ details > summary { transition: color var(--dur-fast) var(--ease); }
    layout is intentionally disabled. The bottom tab bar is the only primary
    navigation, so the top-bar nav links and the theme toggle are removed.
    This block is last on purpose: it overrides the earlier responsive rules.
-   To restore the desktop/sidebar layout later, delete this block.
+   Keep this shell at every viewport width (see rule.md).
    ====================================================================== */
 
 /* The phone frame: a fixed, device-width column, centered on big screens. */
@@ -1268,6 +1268,8 @@ main {
   padding: 18px 16px calc(72px + env(safe-area-inset-bottom)) !important;  /* clear the tab bar */
 }
 .notice { margin: 12px 12px 0 !important; }
+/* Footer links also need to scroll clear of the fixed bottom navigation. */
+.foot { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 
 /* Planner: force a single stacked column in the phone frame. The desktop
    two-column grid and the sticky/scrolling form (triggered by viewport media
