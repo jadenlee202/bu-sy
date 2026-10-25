@@ -1320,7 +1320,6 @@ main {
 .tabbar a[aria-current] .icon { color: var(--blue); }
 .tabbar a[aria-current]::before { background: var(--blue-soft); }
 /* The "Simulated" honesty pill and sidebar accents pick up the navy top bar. */
-=======
 /* ---------- shared interactions: Places is the reference ---------- */
 /* Same neutral fill, stronger border, red link accent and short easing on every tab.
    Only actual controls/links get hover feedback; container cards keep their resting depth. */
