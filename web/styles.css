@@ -415,9 +415,14 @@ a.row-name, .row-name a { text-decoration: none; }
 .pb-toggle { background: var(--red); color: var(--on-red); width: 44px; height: 44px; }
 .pb-toggle:hover { background: color-mix(in srgb, var(--red) 86%, #000); }
 .pb-main { flex: 1; min-width: 0; }
-.pb-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .pb-time { font-weight: 650; font-size: 16px; }
-.pb-status { font-size: 13px; color: var(--muted); }
+.pb-status { margin-left: auto; font-size: 13px; color: var(--muted); }
+/* speed: small chips; selected = solid neutral fill, like the filter chips */
+.pb-speed { display: inline-flex; gap: 4px; }
+.pb-speed-btn { min-width: 36px; min-height: 30px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; font-weight: 600; color: var(--muted); }
+.pb-speed-btn:hover { border-color: var(--line-strong); color: var(--text); }
+.pb-speed-btn[aria-pressed="true"] { background: var(--selected); color: var(--on-selected); border-color: var(--selected); }
 .pb-range { width: 100%; margin: 4px 0 0; height: 24px; background: transparent; -webkit-appearance: none; appearance: none; }
 .pb-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: -2px; }
 .pb-range::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: var(--line-strong); }

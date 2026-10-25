@@ -21,7 +21,8 @@ const DAY_START = 0;
 const DAY_END = 24 * 60 - 1;       // 11:59 PM
 const FIRST_VIEW = 17 * 60 + 30;   // open on a busy moment instead of an empty morning
 const STEP_MIN = 5;                // each playback tick; the slider itself moves by the minute
-const TICK_MS = 300;
+const TICK_MS = 300;               // at 1×; faster speeds tick more often, so the step stays 5 minutes
+const SPEEDS = [1, 2, 4, 6];
 
 const CATEGORY = { fitness: "Fitness", dining: "Dining", library: "Library", office: "Office" };
 const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], ["library", "Library"], ["historical", "Historical"]];
@@ -31,7 +32,7 @@ const AVAIL_FILTERS = [["any", "Any time"], ["open_now", "Open now"], ["free", "
   ["lunch", "Serving lunch during my free time"], ["dinner", "Serving dinner during my free time"]];
 const CALENDAR_FILTERS = new Set(["free", "breakfast", "brunch", "lunch", "dinner"]);
 
-const state = { minute: FIRST_VIEW, playing: false, timer: null, filter: "all", query: "", avail: "any" };
+const state = { minute: FIRST_VIEW, playing: false, speed: 1, timer: null, filter: "all", query: "", avail: "any" };
 const $view = document.getElementById("view");
 let view = null; // the mounted screen: { update?(), resize?() }
 
@@ -96,7 +97,10 @@ function playbackBar() {
   return `<div class="playback" role="group" aria-label="Historical playback">
     <button class="icon-btn pb-toggle" data-pb="toggle"></button>
     <div class="pb-main">
-      <div class="pb-row"><span class="pb-time num"></span><span class="pb-status"></span></div>
+      <div class="pb-row"><span class="pb-time num"></span>
+        <span class="pb-speed" role="group" aria-label="Playback speed">${SPEEDS.map((x) =>
+          `<button class="pb-speed-btn num" type="button" data-pb-speed="${x}" aria-label="${x}× speed">${x}×</button>`).join("")}</span>
+        <span class="pb-status"></span></div>
       <input class="pb-range" type="range" min="${DAY_START}" max="${DAY_END}" step="1" aria-label="Playback time">
       <div class="pb-ends num" aria-hidden="true"><span>${fmtTime(DAY_START)}</span><span>${fmtTime(DAY_END)}</span></div>
     </div>
@@ -108,7 +112,10 @@ function syncPlayback() {
   const ended = state.minute >= DAY_END;
   for (const el of document.querySelectorAll(".pb-time")) el.textContent = fmtTime(state.minute);
   for (const el of document.querySelectorAll(".pb-status")) {
-    el.textContent = state.playing ? "Replay running" : ended ? "End of replay" : "Replay paused";
+    el.textContent = state.playing ? `Replay running${state.speed > 1 ? ` at ${state.speed}×` : ""}` : ended ? "End of replay" : "Replay paused";
+  }
+  for (const el of document.querySelectorAll("[data-pb-speed]")) {
+    el.setAttribute("aria-pressed", Number(el.dataset.pbSpeed) === state.speed);
   }
   for (const el of document.querySelectorAll(".pb-range")) {
     el.value = state.minute;
@@ -129,7 +136,7 @@ function setPlaying(on) {
     state.timer = setInterval(() => {
       state.minute = Math.min(DAY_END, state.minute + STEP_MIN);
       if (state.minute >= DAY_END) setPlaying(false); else syncPlayback();
-    }, TICK_MS);
+    }, TICK_MS / state.speed);
   }
   syncPlayback();
 }
@@ -138,6 +145,12 @@ document.addEventListener("click", (e) => {
   const action = e.target.closest("[data-pb]")?.dataset.pb;
   if (action === "toggle") setPlaying(!state.playing);
   if (action === "reset") { state.minute = DAY_START; setPlaying(false); }
+  const speed = e.target.closest("[data-pb-speed]")?.dataset.pbSpeed;
+  if (speed) {
+    state.speed = Number(speed);
+    // A running replay switches speed in place; a paused one keeps it for the next play.
+    if (state.playing) setPlaying(true); else syncPlayback();
+  }
 });
 document.addEventListener("input", (e) => {
   if (!e.target.matches(".pb-range")) return;
