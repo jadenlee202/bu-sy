@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { placeAvailability } from "../web/js/availability.js";
 import {
   buildingHoursSummary, campusDateTime, daySchedule, displaySchedule, nowServiceLabel, nowStatus, nowText,
-  selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekStart,
+  openStatus, selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekStart,
 } from "../web/js/hours.js";
 
 const hours = JSON.parse(readFileSync(new URL("../web/data/hours.json", import.meta.url), "utf8"));
@@ -53,7 +53,9 @@ test("weekly hours repeat beyond the published dates and are marked assumed", ()
   assert.deepEqual(nextWeek.periods, published.periods);
   assert.deepEqual(weekBefore.periods, published.periods);
   assert.equal(buildingHoursSummary(marciano, "2026-11-07"), "9:00 AM–9:00 PM (assumed)");
-  assert.equal(selectedBuildingStatus(marciano, "2026-11-07", 12 * 60).status, "open");
+  // An assumed (projected) day is never a definitive Open/Closed, only the summary is shown.
+  assert.equal(selectedBuildingStatus(marciano, "2026-11-07", 12 * 60).status, "unverified");
+  assert.equal(selectedBuildingStatus(marciano, "2026-11-07", 12 * 60).assumed, true);
   assert.deepEqual(displaySchedule(marciano, "2026-11-07", "dining").periods.map(({ label }) => label),
     ["Breakfast", "Lunch", "Dinner"]);
 });

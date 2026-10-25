@@ -95,6 +95,10 @@ function periodIsActive(period, minute) {
 
 function overnightPeriodFrom(scheduleLocation, date, minute, kind) {
   const previous = daySchedule(scheduleLocation, addDays(date, -1), kind);
+  // Yesterday's hours must be verified for this exact date to carry an open period past midnight.
+  // An `assumed` day (the weekly pattern projected outside the published range) is not verified,
+  // so it can never make a location "open"/"Open now" — outside verified hours stays closed.
+  if (previous.assumed) return undefined;
   return previous.periods.find((period) =>
     timeValue(period.end) <= timeValue(period.start) && minute < timeValue(period.end));
 }
@@ -116,6 +120,9 @@ export function openStatus(location, now = new Date()) {
 
 export function selectedBuildingStatus(location, date, minute) {
   const today = daySchedule(location, date);
+  // An assumed day (weekly pattern projected outside the published range) is not verified, so it
+  // yields no definitive Open/Closed — the same rule nowStatus() applies to the real current time.
+  if (today.assumed) return { status: "unverified", assumed: true };
   if (today.status === "closed") return { status: "closed" };
   if (today.status !== "scheduled") return { status: today.status };
   if (!today.special && overnightPeriodFrom(location, date, minute, "building")) return { status: "open" };
