@@ -1,8 +1,8 @@
 # BU-sy demo runbook
 
-Checks (October 25, 2026): 166 Python, 189 JavaScript and 18 Chromium browser tests pass locally,
+Checks (October 25, 2026): 166 Python, 192 JavaScript and 19 Chromium browser tests pass locally,
 and CI runs the same suites on every push; the Pages deploy waits for them. The browser tests cover
-the phone frame at 375–1280 px in both themes, motion, and the service worker. Calendar requires the
+the phone frame at 375–1280 px in both themes, motion, the custom-duration planner field and the service worker. Calendar requires the
 declared cryptography dependency and optional OAuth configuration described in README; no Google
 account was connected. Firefox, Safari and physical phones remain unverified.
 Historical browser reports in section 4 below belong to older builds and are not new verification.
@@ -22,7 +22,7 @@ python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
 .venv\Scripts\python -m pytest -q                           # expect 166 passed
 npm ci                                                      # dev tools for the JS checks
-npm test                                                    # expect 189 passed
+npm test                                                    # expect 192 passed
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 

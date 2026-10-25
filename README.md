@@ -159,7 +159,8 @@ The rules live in one file, [`web/js/recommend.js`](web/js/recommend.js). They a
 no randomness and no clock reads, and the same code runs in the browser and in the Node tests.
 
 **The window.** It starts at the selected time (the demo clock by default) and ends at your next commitment.
-Enter it either as **How long** (free minutes, `start + free minutes`) or **Until next class** (the time
+Enter it either as **How long** (a preset, or **Other** in minutes or decimal hours: 1.5 hours = 90 minutes,
+rounded to the nearest minute; `start + free minutes`) or **Until next class** (the time
 your next class or commitment starts; free minutes = that time − start). Both feed the same engine
 (`normalizeRequest` in `recommend.js`). The next-class time must be later the same day: a time at or before
 the start is rejected, never wrapped to tomorrow, because the demo models one day. Switching modes carries a
