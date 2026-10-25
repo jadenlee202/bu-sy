@@ -98,7 +98,7 @@ export function busynessAt(place, histories, minute) {
   const hist = histories[place.facility_id];
   const area = place.area_id ? hist?.areas.find((a) => a.area_id === place.area_id) : null;
   const series = place.area_id ? area?.observations : hist?.observations;
-  const o = series ? latestAt(series, minute, hist.coverage_end) : null;
+  const o = series ? latestAt(series, minute, hist.coverage_end, hist.max_hold_minutes) : null; // a value covers its slot only
   if (!o) return { level: "unknown", count: null, capacity: null, observedAt: null };
   return {
     level: o.busyness, count: o.occupancy_count,
@@ -327,7 +327,7 @@ export function busynessText(o, req) {
   const demo = o.place.data_mode === "synthetic";
   return {
     label: `${LEVEL_WORD[b.level]} at ${at}`,
-    basis: `${demo ? "Sample count" : "Count"} ${b.count.toLocaleString("en-US")} of ${b.capacity?.toLocaleString("en-US") ?? "?"}`
+    basis: `${demo ? "Simulated count" : "Count"} ${b.count.toLocaleString("en-US")} of ${b.capacity?.toLocaleString("en-US") ?? "?"}`
       + `${demo ? " (illustrative capacity)" : ""} at ${at}. Not a forecast for when you arrive.`,
   };
 }

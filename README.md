@@ -10,8 +10,10 @@ unofficial student meetups are still there as secondary screens.
 
 Independent student project, **not affiliated with Boston University**.
 
-> **Data honesty:** every campus place, count, capacity, opening hour, amenity and walking time is
-> **demo data** (labelled *Demo · Synthetic campus data*). Two real datasets appear as **historical
+> **Data honesty:** busyness at BU-named places is **simulated** (labelled *Simulated*): FitRec follows one
+> recorded day at a real campus gym elsewhere, rescaled; dining halls and Mugar follow documented models
+> because no usable dataset was found. Capacities, hours, amenities and walking times are illustrative. The
+> **Sources & Simulation** page (`#/sources`) maps every place to its source. Two real datasets appear as **historical
 > references** under Places: the *Clemente Room*, an office conference room from the public COD dataset, and
 > the *Campus Gym — Historical Reference*, 2015–2017 head counts from a non-BU university gym (Kaggle, ODbL).
 > They show the pipeline on real recordings, are never presented as live, and are **never** suggested as
@@ -128,7 +130,8 @@ preferShortTravel, needs}`.
 
 | File | What | Real? |
 |---|---|---|
-| `data/bu_campus_synthetic_occupancy.csv` | one sample Monday, hourly, FitRec areas, 4 dining halls, Mugar | **synthetic** |
+| `data/campus_simulation_occupancy.csv` | one demo Monday every 15 min: FitRec areas (from the campus gym), 4 dining halls and Mugar (modeled); made by `data/generate_campus_simulation.py` | **simulated** |
+| `data/simulation_provenance.json` | dataset-to-place mapping, steps, parameters, limits (also `/api/sources`) | — |
 | `data/campus_sample.json` | which place supports which activity, its location, illustrative hours and amenities, demo scenarios | **illustrative** |
 | `data/sample_travel_times.csv` | sample walking minutes between 6 demo locations (West↔Fenway intentionally missing) | **illustrative** |
 | `data/clean_cod_occupancy.csv` | COD Clemente Room, cleaned by `data/clean_cod.py` | real office data, not BU |
@@ -267,7 +270,8 @@ does **not** protect:
   Contains information from that database, available under the
   [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/) (contents: DbCL 1.0). The files
   BU-sy derives from it are shared under the same license.
-- Synthetic campus data and planner samples made by the team. Details: [`data/README.md`](data/README.md).
+- Simulation models, illustrative capacities and planner samples made by the team.
+  Details: [`data/README.md`](data/README.md#simulated-campus-places) and the app's Sources & Simulation page.
 - Interface font: Plus Jakarta Sans (Tokotype), bundled in `web/assets/fonts/` under the SIL Open Font
   License 1.1 ([`OFL.txt`](web/assets/fonts/OFL.txt)). It is served with the site, so nothing loads from
   another server; until it arrives, text shows in the system font.

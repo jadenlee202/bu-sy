@@ -5,13 +5,15 @@ Endpoint shapes follow the shared brief:
     GET  /api/facilities/{id}
     GET  /api/facilities/{id}/history
     GET  /api/campus                                   (planner data: places, sample hours + walking times)
+    GET  /api/sources                                  (how each campus place is simulated, with citations)
     GET  /api/schedule, /api/programs                  (sample official schedule)
     GET  /api/community-events                         (unofficial, student-run)
     POST /api/community-events, /{id}/join, /{id}/leave, /{id}/cancel
 
 How it works
-    1. sources.py loads data/bu_campus_synthetic_occupancy.csv (SYNTHETIC: one
-       sample Monday, hourly, FitRec by area + dining + Mugar) and
+    1. sources.py loads data/campus_simulation_occupancy.csv (SIMULATED: one demo
+       Monday every 15 min; FitRec by area driven by a real non-BU campus gym, dining
+       + Mugar modeled; provenance in data/simulation_provenance.json) and
        data/clean_cod_occupancy.csv (REAL office events from COD) and, when
        imported, data/clean_campus_gym_occupancy.csv (REAL counts from a non-BU
        campus gym, about every 10 minutes). Historical references are never
@@ -51,12 +53,13 @@ import community_events as ce
 from campus import Campus, load_campus
 from analytics import THRESHOLD_NOTE, latest_at
 from schedule_data import CLUB_SPORTS, INTRAMURALS, SCHEDULE
-from sources import Facility, load_all
+from sources import Facility, load_all, load_provenance
 
 app = FastAPI(title="BU-sy API (synthetic campus demo + COD historical playback)")
 LOCAL_TZ = ZoneInfo("America/New_York")  # demo clock for "now" when no `at` is given
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 FACILITIES = load_all()
+PROVENANCE = load_provenance()
 CAMPUS = load_campus(FACILITIES)
 
 # Lets a site on another origin use this API (`?api=https://host`). No cookies or
@@ -108,6 +111,12 @@ class AreaEstimate(BaseModel):
     current_event: Optional[Event]
 
 
+class SimulationRef(BaseModel):
+    id: str                                  # entry in /api/sources
+    basis: Literal["reference_dataset", "modeled"]
+    label: str
+
+
 class FacilitySummary(BaseModel):
     facility_id: str
     facility_name: str
@@ -120,6 +129,7 @@ class FacilitySummary(BaseModel):
     measurement_method: Literal["estimated", "measured", "synthetic", "unspecified"]
     data_mode: Literal["historical_playback", "synthetic", "live"]
     campus_eligible: bool             # false: never a planner suggestion
+    simulation: Optional[SimulationRef]  # how a campus place's values were simulated; None = recorded data
     source: str
     observed_at: Optional[datetime]   # source local time; keeps a supplied UTC offset, else naive
     timezone: Optional[str]
@@ -187,6 +197,7 @@ class DayHistory(BaseModel):
     # Historical references (empty/None for synthetic places)
     notice: Optional[str] = None
     busyness_label: Optional[str] = None
+    simulation: Optional[SimulationRef] = None
     source: str = ""
     measurement_note: str = ""
     max_hold_minutes: Optional[int] = None     # a count stands for at most this long (gap policy)
@@ -225,6 +236,9 @@ def day_label(f: Facility, day: date) -> str:
 
 def basis_text(f: Facility, count: Optional[int]) -> str:
     if count is None:
+        if f.simulation:
+            start, end = f.window
+            return f"No simulated value for this time (simulated {start}:00-{end}:00 only)"
         if f.max_hold:
             return (f"No data for this time: no recording in the previous "
                     f"{f.max_hold.total_seconds() / 60:.0f} minutes on this day")
@@ -267,6 +281,7 @@ def facility_fields(f: Facility, tod: time) -> dict:
         measurement_method=f.measurement_method,
         data_mode=f.data_mode,
         campus_eligible=f.campus_eligible,
+        simulation=f.simulation,
         source=f.source,
         observed_at=obs[0] if obs else None,
         timezone=f.timezone,
@@ -281,7 +296,7 @@ def build_areas(f: Facility, playback_at: datetime) -> list[AreaEstimate]:
     end = f.coverage_end(playback_at.date())
     areas = []
     for a in f.areas:
-        obs = latest_at(a.series, playback_at, end)
+        obs = latest_at(a.series, playback_at, end, f.max_hold)
         occ = obs[1] if obs else None
         event = active_event(a.area_id, playback_at)
         ratio = occ / a.capacity if occ is not None else None
@@ -395,6 +410,7 @@ def get_history(facility_id: str, on: Optional[date] = Query(None, alias="date")
         ],
         notice=f.notice,
         busyness_label=f.busyness_label,
+        simulation=f.simulation,
         source=f.source,
         measurement_note=f.measurement_note,
         max_hold_minutes=int(f.max_hold.total_seconds() // 60) if f.max_hold else None,
@@ -408,6 +424,12 @@ def get_history(facility_id: str, on: Optional[date] = Query(None, alias="date")
 def get_campus():
     """Planner data for web/js/recommend.js. Everything here is illustrative demo data."""
     return CAMPUS
+
+
+@app.get("/api/sources")
+def get_sources():
+    """Datasets, dataset-to-place mappings, transformations and limits behind the simulated campus places."""
+    return PROVENANCE
 
 
 @app.get("/api/schedule", response_model=list[Event])

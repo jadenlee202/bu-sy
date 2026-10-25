@@ -113,6 +113,12 @@ button { cursor: pointer; }
 .theme-btn:hover { background: var(--side-hover); }
 .theme-label { display: none; }
 @media (min-width: 30rem) { .nav-extra { display: flex !important; } }
+.brand-name { white-space: nowrap; }
+@media (max-width: 26rem) {
+  .nav a { padding: 8px 9px; }
+  .demo-pill { padding: 0 8px; }
+  .demo-pill::before { margin-right: 5px; }
+}
 
 .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 main {
@@ -209,6 +215,10 @@ main:focus { outline: none; }
 .going .link { color: var(--muted); }
 .tag { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
 .tag-real { color: var(--text); border-color: var(--red); }
+.tag-sim { color: var(--text); border-style: dashed; border-color: var(--line-strong); }
+a.chip-link { text-decoration: none; }
+a.chip-link:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+.sub-link { font-weight: 600; color: var(--text); text-underline-offset: 3px; }
 .tag-soft, .chip-mode { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--subtle); padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
 
 /* ---------- forms ---------- */
@@ -490,6 +500,30 @@ th { color: var(--muted); font-weight: 600; }
 .heat-key i, .heat-none-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
 .table-scroll { overflow-x: auto; }
 .place-week .help { margin: 10px 0 0; }
+
+/* ---------- sources & simulation ---------- */
+.src-card h2 { font-size: 16px; font-weight: 650; margin: 0 0 8px; }
+.src-card ul { margin: 0 0 8px; padding-left: 18px; font-size: 14px; }
+.src-card .help { margin: 8px 0 4px; }
+.map-table { min-width: 560px; font-size: 14px; }
+.map-table td { vertical-align: top; padding: 8px 6px; }
+.map-table td:last-child a { font-weight: 600; }
+.basis { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; background: var(--subtle); color: var(--muted); }
+.basis-reference_dataset, .status-used { background: var(--selected); color: var(--on-selected); }
+.status-evaluated_not_used { border: 1px dashed var(--line-strong); background: transparent; }
+.inline-more summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.inline-more ul { margin: 4px 0 0; padding-left: 16px; font-size: 13px; color: var(--muted); }
+.src-section { display: flex; flex-direction: column; gap: 8px; }
+.src-item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0 16px; }
+.src-item > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; cursor: pointer; font-weight: 600; }
+.src-body { padding: 0 0 16px; font-size: 14px; max-width: 80ch; }
+.src-body h3 { font-size: 14px; margin: 14px 0 4px; }
+.src-body ol, .src-body ul { margin: 0; padding-left: 20px; }
+.src-body li + li { margin-top: 4px; }
+.src-body code, .code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.code { white-space: pre-wrap; background: var(--subtle); border-radius: 10px; padding: 12px; margin: 0 0 8px; }
+.src-grid { display: grid; gap: 12px; }
+@container (min-width: 44rem) { .src-grid { grid-template-columns: 1fr 1fr; } }
 
 /* ---------- about this data ---------- */
 .about-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }

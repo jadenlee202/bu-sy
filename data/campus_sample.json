@@ -1,6 +1,6 @@
 {
   "_about": "ILLUSTRATIVE planner metadata for the demo, made by the team. Hours, amenities and locations are not verified BU facts. Walking times live in sample_travel_times.csv. Loaded and validated by server/campus.py.",
-  "label": "Demo · Synthetic campus data",
+  "label": "Demo · Simulated campus data",
   "demo_day": "Monday",
   "default_buffer": 10,
   "activities": [

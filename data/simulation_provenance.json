@@ -1,0 +1,465 @@
+{
+  "generated_by": "data/generate_campus_simulation.py",
+  "demo_day": "2026-10-19",
+  "demo_clock": "Sample Monday on an America/New_York demo clock. Moving a source's time of day onto it is a relabelling, not a timezone conversion.",
+  "grid_minutes": 15,
+  "summary": "Busyness at BU-named places is simulated. FitRec follows one recorded day at a real campus gym elsewhere, rescaled; dining halls and Mugar Library follow documented model profiles because no usable dataset was found. None of it measures BU.",
+  "datasets": [
+    {
+      "id": "campus-gym",
+      "status": "used",
+      "title": "Crowdedness at the Campus Gym",
+      "creators": "Nick Rose",
+      "publisher": "Kaggle",
+      "url": "https://www.kaggle.com/datasets/nsrose7224/crowdedness-at-the-campus-gym",
+      "version": "version 2, updated 2017-03-19",
+      "retrieved": "2026-10-25T00:56:42+00:00",
+      "license": "ODbL 1.0 (database), DbCL 1.0 (contents)",
+      "license_url": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "obligations": "Attribute; share derived databases under ODbL; keep the notices.",
+      "original_location": "An unnamed US university's campus gym (not BU)",
+      "metric": "number_people: people in the gym, a count (0-145)",
+      "sampling": "about every 10 minutes, 2015-08-14 to 2017-03-18",
+      "timezone": "local time with UTC offsets (-07:00, -08:00); no named timezone",
+      "measurement": "Not documented. The author says counts were 'measured' about every 10 minutes with the consent of the university and the gym; the method (sensor, card swipes, staff count) is not stated.",
+      "notes": "Also shown unchanged as the 'Campus Gym — Historical Reference'. See data/campus_gym_quality.md."
+    },
+    {
+      "id": "chapel-hill-library",
+      "status": "evaluated_not_used",
+      "title": "Chapel Hill Public Library Foot Traffic",
+      "creators": "Town of Chapel Hill",
+      "publisher": "Town of Chapel Hill open data (ArcGIS)",
+      "url": "https://opendata-townofchapelhill.hub.arcgis.com/datasets/townofchapelhill::chapel-hill-public-library-foot-traffic-june-30-2020",
+      "version": "feature service last edited 2020-06-30",
+      "retrieved": "2026-10-25 (inspection only)",
+      "license": "ODbL (link in the publisher's metadata)",
+      "license_url": "https://opendatacommons.org/licenses/odbl/",
+      "obligations": "Would require attribution and ODbL share-alike if used.",
+      "original_location": "Chapel Hill Public Library, North Carolina (public library, not BU)",
+      "metric": "Total_Occupancy, Children_s_Room_Occupancy, Lobby_Occupancy (hourly occupancy from people counters)",
+      "sampling": "documented as hourly",
+      "timezone": "service reports UTC",
+      "measurement": "People-counter sensors at four entrances; occupancy calculated hourly.",
+      "notes": "Not used: all 5,365 rows (REST service and Hub CSV, checked 2026-10-25) are dated 1899-12-30 to 1901-02-19 at 00:00 UTC, so the time of day is lost and rows aren't in time order; Children's Room occupancy also exceeds Total Building occupancy. Recovering hours would mean inventing timestamps. Re-check with `python data/inspect_chapel_hill_library.py`."
+    },
+    {
+      "id": "uci-room-occupancy",
+      "status": "evaluated_not_used",
+      "title": "Room Occupancy Estimation",
+      "creators": "Adarsh Pal Singh, Sachin Chaudhari",
+      "publisher": "UCI Machine Learning Repository",
+      "url": "https://doi.org/10.24432/C5P605",
+      "version": "donated 2023-08-15",
+      "retrieved": "2026-10-25 (inspection only)",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "obligations": "Would require attribution if used.",
+      "original_location": "One 6 m x 4.6 m test room (controlled experiment)",
+      "metric": "Room_Occupancy_Count: 0-3 people, noted manually as ground truth",
+      "sampling": "every ~30 s; 2017-12-22 to 2018-01-11 with a 15-day gap",
+      "timezone": "not stated",
+      "measurement": "Manual ground truth alongside environmental sensors.",
+      "notes": "Not used for dining: people were present on only three days, on an experimenter-chosen schedule of 0-3 people. Shaping that into meal times would make the model, not the data, decide the curve, so citing it would mislead."
+    },
+    {
+      "id": "cod",
+      "status": "reference_only",
+      "title": "COD: A Dataset of Commercial Building Occupancy Traces",
+      "creators": "Kin Sum Liu, Elvin Vindel Pinto, Sirajum Munir, Jonathan Francis, Charles Shelton, Mario Bergés, Shan Lin",
+      "publisher": "Zenodo",
+      "url": "https://doi.org/10.5281/zenodo.996587",
+      "version": "2017",
+      "retrieved": "see data/README.md",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "obligations": "Attribute; share adaptations under CC BY-SA 4.0.",
+      "original_location": "Clemente conference room, Bosch office (not BU)",
+      "metric": "occupancy count per entry/exit event",
+      "sampling": "event-based",
+      "timezone": "unverified; kept as written",
+      "measurement": "Doorway depth sensors (estimated counts).",
+      "notes": "Shown only as a historical reference; drives no simulation."
+    }
+  ],
+  "simulations": [
+    {
+      "id": "fitrec-from-campus-gym",
+      "basis": "reference_dataset",
+      "dataset_id": "campus-gym",
+      "label": "Simulated from a real campus gym (not BU)",
+      "targets": [
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": null,
+          "name": "FitRec (building total)",
+          "capacity": 870
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "weight-room-floor-1",
+          "name": "Weight Room · Floor 1",
+          "capacity": 160
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "weight-room-floor-2",
+          "name": "Weight Room · Floor 2",
+          "capacity": 140
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "basketball-court-floor-2",
+          "name": "Basketball · Floor 2 (4 courts)",
+          "capacity": 60
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "basketball-court-basement",
+          "name": "Basketball · Basement (3 courts)",
+          "capacity": 45
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "competition-pool",
+          "name": "Competition Pool",
+          "capacity": 50
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "recreation-pool-hot-tub",
+          "name": "Rec Pool & Hot Tub",
+          "capacity": 45
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "biking-area",
+          "name": "Biking Area",
+          "capacity": 35
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "squash-court-1",
+          "name": "Squash Court 1",
+          "capacity": 4
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "squash-court-2",
+          "name": "Squash Court 2",
+          "capacity": 4
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "racquetball-room-1",
+          "name": "Racquetball 1",
+          "capacity": 4
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "racquetball-room-2",
+          "name": "Racquetball 2",
+          "capacity": 4
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "racquetball-room-3",
+          "name": "Racquetball 3",
+          "capacity": 4
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "climbing-wall",
+          "name": "Climbing Wall",
+          "capacity": 30
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "multipurpose-room-1",
+          "name": "Multipurpose Room 1",
+          "capacity": 35
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "multipurpose-room-2",
+          "name": "Multipurpose Room 2",
+          "capacity": 35
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "multipurpose-room-3",
+          "name": "Multipurpose Room 3",
+          "capacity": 35
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "multipurpose-room-4",
+          "name": "Multipurpose Room 4",
+          "capacity": 35
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "multipurpose-room-5",
+          "name": "Multipurpose Room 5",
+          "capacity": 35
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "multipurpose-room-6",
+          "name": "Multipurpose Room 6",
+          "capacity": 35
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "multipurpose-room-7",
+          "name": "Multipurpose Room 7",
+          "capacity": 35
+        },
+        {
+          "facility_id": "fitrec-synthetic",
+          "area_id": "dance-theatre",
+          "name": "Dance Theatre",
+          "capacity": 40
+        }
+      ],
+      "window": [
+        6,
+        24
+      ],
+      "source_fields": [
+        "number_people",
+        "date"
+      ],
+      "source_period": "2016-12-05, a Monday (-08:00), the gym's default playback day",
+      "parameters": {
+        "scale": 9.0625,
+        "gym_typical_high": 72,
+        "fitrec_illustrative_capacity": 870,
+        "busy_share": 0.75,
+        "grid_minutes": 15,
+        "max_hold_minutes": 30,
+        "values": 72
+      },
+      "transformations": [
+        "Take the gym's readings for 2016-12-05 (source local time, offset kept in the source file).",
+        "Every 15 minutes from 6:00 to 24:00 (FitRec's sample hours), take the latest reading at or before that time if it is at most 30 minutes old; otherwise leave the slot empty (never zero).",
+        "Place each slot at the same clock time on the demo Monday (a relabelling, not a timezone conversion).",
+        "Multiply by 9.0625: the gym's typical high (72 people, its 95% time-weighted percentile) becomes 75% of FitRec's illustrative capacity (870). Round to whole people.",
+        "Split each FitRec total across the 21 areas in proportion to their illustrative capacities (largest-remainder rounding), so the areas always add up to the building total."
+      ],
+      "assumptions": [
+        "FitRec's time-of-day pattern resembles this gym's on one in-semester Monday.",
+        "Area differences are modeled: every area gets the same share of the total all day, so areas don't have independent patterns and never differ in relative busyness except through crowd tolerance.",
+        "The scale is a design choice for the demo, not FitRec's real size or capacity."
+      ],
+      "units": "people (simulated)",
+      "limits": [
+        "Not a measurement of FitRec or any area; no queue, equipment or court availability can be read from it.",
+        "One source day: it shows a plausible pattern, not BU's typical traffic or a forecast.",
+        "The source gym's counting method isn't documented."
+      ]
+    },
+    {
+      "id": "dining-meal-model",
+      "basis": "modeled",
+      "dataset_id": null,
+      "label": "Modeled (no dataset)",
+      "targets": [
+        {
+          "facility_id": "warren-dining-synthetic",
+          "area_id": null,
+          "name": "Warren Towers Dining",
+          "capacity": 400,
+          "hours": "07:00-23:00 (illustrative sample hours)"
+        },
+        {
+          "facility_id": "marciano-dining-synthetic",
+          "area_id": null,
+          "name": "Marciano Commons",
+          "capacity": 400,
+          "hours": "07:00-23:00 (illustrative sample hours)"
+        },
+        {
+          "facility_id": "west-dining-synthetic",
+          "area_id": null,
+          "name": "West Campus Dining",
+          "capacity": 400,
+          "hours": "07:00-23:00 (illustrative sample hours)"
+        },
+        {
+          "facility_id": "fenway-dining-synthetic",
+          "area_id": null,
+          "name": "Fenway Dining",
+          "capacity": 200,
+          "hours": "no sample hours; simulated 07:00-23:00 like the other halls"
+        }
+      ],
+      "window": [
+        7,
+        23
+      ],
+      "source_fields": [],
+      "source_period": null,
+      "parameters": {
+        "knots": [
+          [
+            7,
+            0.05
+          ],
+          [
+            8,
+            0.35
+          ],
+          [
+            9,
+            0.25
+          ],
+          [
+            10.5,
+            0.1
+          ],
+          [
+            12,
+            0.75
+          ],
+          [
+            13,
+            0.65
+          ],
+          [
+            14.5,
+            0.15
+          ],
+          [
+            16.5,
+            0.1
+          ],
+          [
+            18,
+            0.85
+          ],
+          [
+            19.5,
+            0.55
+          ],
+          [
+            21,
+            0.15
+          ],
+          [
+            23,
+            0.05
+          ]
+        ],
+        "grid_minutes": 15
+      },
+      "transformations": [
+        "Interpolate linearly between the (hour, share of illustrative capacity) knots: breakfast around 8 AM, lunch around noon, dinner around 6 PM.",
+        "Every 15 minutes within each hall's sample hours, multiply by that hall's illustrative capacity and round to whole people."
+      ],
+      "assumptions": [
+        "Meal peaks at 8 AM, noon and 6 PM, with dinner the busiest: a modeling choice, not observed behaviour.",
+        "All halls share one shape; only their illustrative sizes differ."
+      ],
+      "units": "people (modeled)",
+      "limits": [
+        "No dining dataset was found that could be used; this is a model, not data, and it does not validate real dining patterns.",
+        "No seat availability or queue times can be read from it."
+      ]
+    },
+    {
+      "id": "mugar-library-model",
+      "basis": "modeled",
+      "dataset_id": null,
+      "label": "Modeled (no dataset)",
+      "targets": [
+        {
+          "facility_id": "mugar-synthetic",
+          "area_id": null,
+          "name": "Mugar Library",
+          "capacity": 600,
+          "hours": "08:00-24:00 (illustrative sample hours)"
+        }
+      ],
+      "window": [
+        8,
+        24
+      ],
+      "source_fields": [],
+      "source_period": null,
+      "parameters": {
+        "knots": [
+          [
+            8,
+            0.1
+          ],
+          [
+            10,
+            0.3
+          ],
+          [
+            13,
+            0.6
+          ],
+          [
+            16,
+            0.7
+          ],
+          [
+            19,
+            0.85
+          ],
+          [
+            21,
+            0.8
+          ],
+          [
+            23,
+            0.45
+          ],
+          [
+            24,
+            0.25
+          ]
+        ],
+        "grid_minutes": 15
+      },
+      "transformations": [
+        "Interpolate linearly between the (hour, share of illustrative capacity) knots: a slow morning, a busy afternoon and an evening peak around 7 PM.",
+        "Every 15 minutes within the sample hours, multiply by the illustrative capacity and round."
+      ],
+      "assumptions": [
+        "A study-day shape typical of a university library: a modeling choice, not observed behaviour."
+      ],
+      "units": "people (modeled)",
+      "limits": [
+        "The library dataset considered (Chapel Hill Public Library) couldn't be used; see its entry.",
+        "No seat or quiet-space availability can be read from it."
+      ]
+    }
+  ],
+  "illustrative": [
+    "Capacities (FitRec areas, dining halls, Mugar) and the busyness thresholds (quiet under 40%, busy from 75%).",
+    "Opening hours, closures and reservations (sample schedule), and study amenities.",
+    "Walking times between demo locations (not routed).",
+    "The demo Monday and its clock."
+  ],
+  "historical_references": [
+    {
+      "facility_id": "COD_Bosch_Office_1_Clemente",
+      "dataset_id": "cod",
+      "note": "Shown as recorded; never a campus suggestion."
+    },
+    {
+      "facility_id": "CAMPUS_GYM_HISTORICAL_REFERENCE",
+      "dataset_id": "campus-gym",
+      "note": "Shown as recorded; never a campus suggestion. Its observations stay separate from the FitRec simulation."
+    }
+  ],
+  "reproduce": [
+    "python data/import_campus_gym.py            # re-import the stored gym original (add --download to fetch it)",
+    "python data/generate_campus_simulation.py   # simulated campus occupancy + this provenance",
+    "python server/export_static.py              # web/data/ for static mode",
+    "python data/inspect_chapel_hill_library.py  # optional: re-check the library source's timestamps"
+  ]
+}

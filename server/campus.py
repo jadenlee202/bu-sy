@@ -213,8 +213,9 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
         travel=load_travel(travel_path, location_ids),
         scenarios=scenarios,
         notes=[
-            "Places, counts, capacities, hours and amenities are demo data, not BU measurements.",
+            "Counts are simulated (FitRec from a real non-BU campus gym, dining and Mugar modeled); "
+            "capacities, hours and amenities are illustrative. None of it measures BU.",
             "Busyness is read at the selected demo time. It is not a forecast for when you arrive.",
-            "The COD Clemente Room is an office dataset and is never suggested as a campus place.",
+            "Historical references (the COD Clemente Room, the campus gym) are never suggested as campus places.",
         ],
     )

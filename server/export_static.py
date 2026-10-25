@@ -30,4 +30,5 @@ if __name__ == "__main__":
         for day in facility.playback_days:
             write(OUT / "history" / facility_id / f"{day}.json", dump(main.get_history(facility_id, on=day)))
     write(OUT / "campus.json", dump(main.get_campus()))
+    write(OUT / "sources.json", main.get_sources())
     write(OUT / "community_events_seed.json", SEED_EVENTS)

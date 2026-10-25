@@ -67,6 +67,18 @@ export async function getHistory(id, day = null) {
   return historyCache.get(key);
 }
 
+// ---------- simulation provenance (Sources & Simulation page) ----------
+let sourcesPromise;
+export function getSources() {
+  sourcesPromise ??= getMode()
+    .then((mode) => getJSON(mode === "api" ? `${API_BASE}/sources` : "data/sources.json"))
+    .catch((e) => {
+      sourcesPromise = null;
+      throw e;
+    });
+  return sourcesPromise;
+}
+
 // ---------- planner data ----------
 // Same normalized payload in both modes (server/campus.py), so the planner
 // engine (recommend.js) sees identical input with or without a server.

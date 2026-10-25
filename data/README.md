@@ -1,10 +1,11 @@
 # Data
 
-Three occupancy inputs. Nothing here is live, and nothing here measures BU.
+Occupancy inputs and the simulation built from them. Nothing here is live, and nothing here measures BU.
 
 | File | What it is | Real? |
 |---|---|---|
-| `bu_campus_synthetic_occupancy.csv` | One made-up Monday (2026-10-19), hourly 08:00–22:00: 21 FitRec areas, 4 dining halls, Mugar Library. 390 rows. | **No, synthetic** |
+| `campus_simulation_occupancy.csv` | Simulated campus places on one demo Monday (2026-10-19), every 15 min: FitRec's 21 areas (from the campus gym), 4 dining halls and Mugar (modeled). Made by `generate_campus_simulation.py`. | **No, simulated** |
+| `simulation_provenance.json` | Which data drives each simulated place, every step and parameter, limits, citations. | — |
 | `clean_cod_occupancy.csv` | Every valid event from the Clemente conference room in COD, cleaned by `clean_cod.py`. | **Yes**, but an office room, not BU |
 | `sample_10_records.csv` | The first 10 rows of the cleaned COD file (chronological, not random). | Yes |
 | `clean_campus_gym_occupancy.csv` | Every valid reading from *Crowdedness at the Campus Gym* (a non-BU university gym, 2015–2017), made by `import_campus_gym.py`. Optional: the app runs without it. | **Yes**, but not BU |
@@ -113,8 +114,41 @@ Sample-schedule reservations in `server/schedule_data.py` (e.g. intramural baske
 basement courts) become closures. None of this is verified BU information; replace each file with a
 verified source before a pilot.
 
-## Synthetic campus data
+## Simulated campus places
 
-Made by the team for the demo. Capacities used for busyness (in `server/sources.py`) are illustrative too.
-The FitRec building total is the sum of its 21 areas. The `Hackathon.pdf` notes also contain this same table,
-plus an older sample (FitRec / Howard Thurman / Mugar / Agganis) that this CSV replaces, so it isn't used.
+`generate_campus_simulation.py` writes `campus_simulation_occupancy.csv` (one demo Monday, every 15 minutes,
+1,832 rows, same series IDs as before) and `simulation_provenance.json` (every target, source, transformation,
+parameter and limit; served at `/api/sources`, exported to `web/data/sources.json`, shown on the app's
+**Sources & Simulation** page). It reads only local files and never downloads. The hand-authored
+`bu_campus_synthetic_occupancy.csv` it replaces is retired (still in git history).
+
+| Place | Basis | Source |
+|---|---|---|
+| FitRec (total) and its 21 areas | **Reference dataset** | Campus gym, 2016-12-05 (a Monday), rescaled |
+| Warren, Marciano, West Campus, Fenway dining | **Modeled, no dataset** | Meal-window profile |
+| Mugar Library | **Modeled, no dataset** | Study-day profile |
+
+**FitRec, step by step.** Take the gym's readings for 2016-12-05 (source local time, −08:00, kept in the
+source file). Every 15 minutes from 6 AM to midnight (FitRec's sample hours) take the latest reading at or
+before that time if it is at most 30 minutes old, else leave the slot empty (never zero). Put each slot at
+the same clock time on the demo Monday: a relabelling, not a timezone conversion. Multiply by 9.0625, which
+maps the gym's typical high (72 people) to 75% of FitRec's illustrative capacity (870), the busy threshold.
+Split each total across the 21 areas by illustrative capacity (largest-remainder rounding), so the areas
+always add up to the building. Area differences are therefore modeled, not measured.
+
+**Dining and Mugar** use documented (hour, share of illustrative capacity) knots, linearly interpolated,
+times each place's illustrative capacity. They carry no dataset citation because none was used.
+
+**Datasets considered and not used** (checked 2026-10-25):
+
+- *Chapel Hill Public Library Foot Traffic* (Town of Chapel Hill, ODbL). Reachable and openly licensed, but all
+  5,365 rows (REST service and Hub CSV) are dated 1899-12-30 to 1901-02-19 at 00:00 UTC: the time of day is gone
+  and rows aren't in time order, and Children's Room occupancy exceeds the building total in 3,567 rows.
+  Recovering hours would mean inventing timestamps. `python data/inspect_chapel_hill_library.py` re-checks it.
+- *Room Occupancy Estimation* (Singh & Chaudhari, UCI, CC BY 4.0,
+  [doi:10.24432/C5P605](https://doi.org/10.24432/C5P605)). Manually recorded 0–3 people in one test room; people
+  were present on only three days, on an experimenter-chosen schedule. As a dining proxy, the meal shaping would
+  decide the curve, so citing it would mislead.
+- No openly licensed dining-hall occupancy dataset was found in a time-boxed search.
+
+Capacities (in `server/sources.py`), hours, amenities and walking times remain illustrative.

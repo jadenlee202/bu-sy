@@ -144,7 +144,7 @@ test("zero occupancy is quiet; missing occupancy is unavailable", () => {
   assert.equal(zero.busy.level, "quiet");
   assert.equal(zero.busy.count, 0);
   assert.equal(busynessText(zero, req()).label, "Quiet at 3:00 PM");
-  assert.match(busynessText(zero, req()).basis, /Sample count 0 of 100 \(illustrative capacity\) at 3:00 PM\. Not a forecast/);
+  assert.match(busynessText(zero, req()).basis, /Simulated count 0 of 100 \(illustrative capacity\) at 3:00 PM\. Not a forecast/);
 
   const missing = one({}, {}, hist(null)).options[0];
   assert.equal(missing.busy.level, "unknown");
