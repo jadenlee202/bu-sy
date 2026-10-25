@@ -733,3 +733,13 @@ main > .hint, main > .form, main > #events { max-width: 720px; }
 /* Place-detail building photo (real BU places only; references never get one). */
 .place-photo { margin: 4px 0 0; }
 .place-photo .campus-photo { border-radius: var(--radius); }
+/* Selected plan uses existing typography, theme tokens and brand red. */
+.selected-plan { padding: 1.25rem; min-width: 0; }
+.selected-plan .timeline { margin-block: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
+.selected-plan .timeline strong { white-space: normal; }
+.selected-plan .title { font-size: 1.6rem; }
+.selected-plan p, .facts dd { overflow-wrap: anywhere; }
+.plan-layout > *, .rec, .results { min-width: 0; }
+.rec > .btn { margin-block: .75rem; }
+.seg-preparation, .seg-cleanup { background: var(--muted); }
+.is-stale [data-choose] { pointer-events: none; opacity: .5; }

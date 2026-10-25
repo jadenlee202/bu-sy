@@ -1,7 +1,7 @@
 import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obsOffset } from "./clock.js";
 import { icon, paw, terrier } from "./icons.js";
 import { campusImage, getImages } from "./image.js";
-import { planView } from "./plan.js";
+import { planView, metadataHTML } from "./plan.js";
 import { hoursText, openSegments, periodAt } from "./recommend.js";
 import {
   addDays, campusDateTime, dateLabel, daySchedule, displaySchedule, formatPeriod,
@@ -31,7 +31,7 @@ const isHistorical = (f) => f.data_mode === "historical_playback";
 const tag = (f) => (isHistorical(f)
   ? `<span class="tag tag-real" title="Real recorded data from elsewhere, replayed. Not live, not BU.">Historical</span>`
   : `<span class="tag tag-sim" title="${esc(f.simulation?.label ?? "Simulated")}. Not a BU measurement.">Simulated</span>`);
-const backToPlaces = `<a class="back" href="#/">${icon("back", 16)} All places</a>`;
+const backToPlaces = `<a class="back" href="#/places">${icon("back", 16)} All places</a>`;
 const offsetText = (o) => (obsOffset(o) ? `UTC${obsOffset(o).replace("-", "−")}` : "timezone unverified");
 
 /**
@@ -339,6 +339,7 @@ async function placeView(id) {
         <select id="day">${days.map((d) => `<option value="${esc(d)}"${d === hist.day ? " selected" : ""}>${esc(dayName(d))}</option>`).join("")}</select></label>` : ""}
       ${playbackBar()}
     </div>
+    ${metadataHTML(campus.places.find(p => p.facility_id === id) ?? {})}
     <section class="card schedule-card" id="location-hours" aria-label="Weekly operating hours">
       <div class="card-head">
         <h2>Weekly operating hours</h2>
@@ -908,8 +909,9 @@ const clock = {
 async function route() {
   const hash = location.hash.replace(/^#\/?/, "");
   const [section, id] = hash.split("/");
-  const current = section === "" || section === "place" ? "places" : section;
+  const current = section === "" ? "plan" : section === "place" ? "places" : section;
   for (const a of document.querySelectorAll("[data-section]")) a.toggleAttribute("aria-current", a.dataset.section === current);
+  view?.dispose?.();
   view = null;
   window.scrollTo(0, 0);
   const next =
@@ -918,7 +920,7 @@ async function route() {
     : section === "events" ? eventsView()
     : section === "about" ? aboutView()
     : section === "sources" ? sourcesView(id ? decodeURIComponent(id) : null)
-    : section === "plan" ? planView($view, clock)
+    : section === "plan" || section === "" ? planView($view, clock)
     : placesView();
   const mounted = await next;
   if (location.hash.replace(/^#\/?/, "") === hash) view = mounted;

@@ -33,6 +33,8 @@ const hist = (count, busyness = "quiet") => ({
   observations: count == null ? [] : [{ observed_at: "2026-10-19T08:00:00", occupancy_count: count, busyness }],
 });
 const req = (over = {}) => ({
+  // Explicit zero allowances preserve the original arithmetic regression fixtures.
+  preparation: 0, cleanup: 0,
   activity: "workout", start: "15:00", minutes: 70, source: "manual", from: "a", to: "c",
   minActivity: 35, buffer: 10, preferQuiet: true, preferShortTravel: false, needs: [], ...over,
 });
@@ -217,7 +219,7 @@ test("preferences change the order: quieter vs shorter walk", () => {
   assert.match(quiet.featured.why, /Quieter/);
   const short = recommend(req({ ...base, preferQuiet: false, preferShortTravel: true }), makeCampus(places), histories);
   assert.equal(short.options[0].place.name, "near-busy");
-  assert.match(short.featured.why, /Shorter sample walk/);
+  assert.match(short.featured.why, /minutes less walking/);
 });
 
 test("COD-style historical places are never campus suggestions", () => {
@@ -276,7 +278,7 @@ test("rankReason names the first factor that puts an option below the top one", 
   const [top, tie, busy] = r.options;
   assert.equal(rankReason(top, top), null);
   assert.equal(rankReason(tie, top), "Tied with the top option; listed by name");
-  assert.equal(rankReason(busy, top), "Busier than the top option");
+  assert.equal(rankReason(busy, top), "Busier in the simulation at the selected time than the top option");
 });
 
 // ---------- the real exported sample data (what static mode serves) ----------
@@ -287,12 +289,12 @@ const histories = Object.fromEntries(
 );
 const scenario = (id) => requestFromScenario(campus.scenarios.find((s) => s.id === id));
 
-test("sample scenario: 70-minute workout before class fits through the real engine", () => {
+test("sample scenario: explicitly changed 80-minute workout window includes changing and cleanup", () => {
   const r = recommend(scenario("workout-between-classes"), campus, histories);
   assert.ok(r.options.length >= 1);
   for (const o of [...r.options, ...r.more]) {
-    assert.equal(sum(o), 70);
-    assert.ok(o.there + o.activity + o.onward + 10 <= 70 && o.activity >= 35);
+    assert.equal(sum(o), 80);
+    assert.ok(o.there + o.preparation + o.activity + o.cleanup + o.onward + 10 <= 80 && o.activity >= 35);
   }
 });
 

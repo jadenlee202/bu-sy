@@ -2,8 +2,9 @@
 
 **Make the most of your time between classes.** Tell BU-sy what you want to do (study, eat or work out),
 how long you're free, where you are and where you're heading next. It suggests campus places that actually
-fit, and shows the arithmetic: *"Fits your 70-minute window: 10 min there + 36-minute workout + 14 min
-onward + 10-minute buffer."*
+fit, and shows the arithmetic: *"Fits your 80-minute window: 10 min there + 5 min preparation +
+36-minute workout + 5 min cleanup + 14 min onward + 10-minute buffer."* Choose a feasible option to
+see when to depart, prepare, do the activity, pack up and reach the next destination.
 
 Occupancy supports the decision; it isn't the product. Browsing places, the replayable traffic charts and
 unofficial student meetups are still there as secondary screens.
@@ -48,8 +49,9 @@ open/closed uses the verified hours for the **replayed day** (the sample Monday,
 so the count and the status describe the same day; when those hours say closed, the place shows Closed
 instead of a simulated count. Without verified hours for that date, the illustrative sample hours decide
 Closed only when there is no count. Dates outside a published schedule are marked unavailable; unverified
-locations remain explicit. Source and verification metadata remain in the hours data file and are not
-linked in the UI.
+locations remain explicit. The facility-details disclosure links field-level official sources,
+independently of occupancy provenance. The current home
+screen is the planner; Places and Meetups remain secondary navigation destinations.
 
 **With the API** (meetups shared between everyone using the server):
 ```bash
@@ -67,7 +69,7 @@ reached, a notice says so and the built-in demo files are used. Both modes give 
 (see *Static and API modes* below).
 
 **Try it:** choose an activity and how long you're free; options appear right away. Everything else has
-a visible default under **Preferences**. Or open **Try a sample** (70 free minutes at 3 PM, work out, from
+a visible default under **Preferences**. Or open **Try a sample** (80 free minutes at 3 PM, work out, from
 Mugar to a class at Warren Towers). The other samples show a best match chosen on evidence (*study, outlets needed*) and a
 window where nothing fits, with a one-tap fix the engine has checked.
 
@@ -88,7 +90,8 @@ no randomness and no clock reads, and the same code runs in the browser and in t
 `start + free minutes`. The buffer is kept free just before that boundary.
 
 **Fit rule.** A place fits only if
-`free minutes ≥ walk there + activity time + walk onward + buffer` and `activity time ≥ your minimum`.
+`free minutes ≥ walk there + preparation + activity time + cleanup + walk onward + buffer`
+and `activity time ≥ your minimum`.
 Each part is counted once, and the parts shown always add up to the window. With no next stop, onward travel
 isn't counted, and the app says so.
 
@@ -98,7 +101,10 @@ isn't counted, and the app says so.
 - the sample walking time is missing (unknown, never zero; the same location is zero);
 - there isn't enough time;
 - it is closed during any part of the visit (illustrative hours). If a place opens a little later, the
-  visit waits for opening; if it closes early, the unused minutes are shown.
+  visit waits for opening; if it closes early, the unused minutes are shown. Preparation and cleanup
+  must both occur inside the visit's opening interval.
+- the student says they do not meet the listed access requirements. Unknown eligibility appears under
+  **Check access**, with no choose action until the student confirms it for this session.
 
 **Unknown hours.** A place that fits on time but has no hours is never shown as confirmed. It appears under
 **Hours unknown**.
@@ -110,11 +116,27 @@ fit" fixes, and doesn't compare walks when ranking.
 
 **Quick start and remembered settings.** Only the activity and free time are required. The rest has visible
 defaults under **Preferences**: start time (the demo clock), next stop (none), minimum (per activity), buffer,
-ranking and study needs. Values you change by hand, and your last chosen starting point, are kept in this
+ranking, preparation, cleanup and study needs. Values you change by hand, and your last chosen starting point, are kept in this
 browser (`localStorage`, see [`web/js/prefs.js`](web/js/prefs.js)) and shown as *Last selected*, never as your
 current location. The next stop isn't kept, so a stale one can't silently add an onward walk. **Reset
 preferences** restores every default. Sample scenarios never change what's remembered. Results update after
 each choice; typed numbers update after a short pause, and errors appear only once you leave the field.
+
+Preparation/cleanup defaults are editable allowances: study **3 + 2**, eat **5 + 2**, work out **5 + 5**
+minutes. These are not measured service or queue times. A 35-minute workout means 35 minutes of activity.
+They are stored per activity in the existing `busy.plan.prefs.v1` key as `preparationByActivity` and
+`cleanupByActivity`; older saved settings receive the new defaults. Access responses and selected plans
+are session-only. No identities or new backend persistence are introduced.
+
+**Choose and follow a plan.** For a confirmed illustrative time fit, **Choose this plan** shows the
+engine's evaluated preparation/activity/cleanup intervals, latest departure, onward arrival (if supplied),
+and protected buffer. **Change plan** returns to options; **Edit inputs** opens settings while preserving
+inputs. Any input edit immediately invalidates the selection, including during the typing debounce.
+There is no reservation, guaranteed access, countdown, notification or calendar write.
+
+**Directions.** An external walking-directions link is offered only for a separately verified address.
+The starting point in BU-sy is manually chosen; the mapping service can use a different origin or route.
+It does not validate the app's sample walking allowances. No automatic location permission is requested.
 
 **Ranking.** Comparisons are lexicographic and documented in the code:
 1. Your preference: busyness level if you chose *quieter*; total sample walking if you chose *shorter walks*;
@@ -137,8 +159,9 @@ longer window, a shorter minimum, another activity or dropping a requirement. It
 after re-running the engine to confirm it would really fit. The form keeps your inputs.
 
 ### Inputs designed for later
-A request is `{activity, start, minutes, source, from, to, minActivity, buffer, preferQuiet,
-preferShortTravel, needs}`.
+A request is `{activity, start, minutes, source, from, to, minActivity, buffer, preparation, cleanup,
+access, preferQuiet, preferShortTravel, needs}`. Missing allowances receive activity defaults;
+`access` records session-only self-confirmation for library, fitness and dining requirements.
 - **`source`** is `"manual"` today. A future calendar integration would set `source: "calendar"` and fill
   `start`/`minutes` from the gap before the next event, and `to` from that event's location.
 - **`from`** is always chosen by the student. A calendar event is never taken as proof of where someone is,
@@ -166,6 +189,43 @@ preferShortTravel, needs}`.
 
 The engine reads only this normalized shape. Verified hours, a routing service or an authorized live feed
 can each replace one file without touching the rules.
+
+### Facility checks for actionable plans (October 25, 2026)
+
+Each place now carries field-level `metadata` in the existing campus payload/export: name, address,
+access, payment, study amenities and current schedule each have their own status, checked date and
+official URL. Verifying an address never marks occupancy, amenities or the whole facility verified.
+
+- **FitRec:** [fall building hours](https://www.bu.edu/fitrec/visit-us/hours/),
+  [student access, waiver and card](https://www.bu.edu/fitrec/about-us/fitrec-welcomes-new-terriers/frequently-asked-questions-and-things-you-need-to-know/),
+  [address](https://www.bu.edu/fitrec/visit-us/directions-parking/). One building, no areas or queues.
+- **Mugar:** [name, address and exhibition visitor restrictions](https://www.bu.edu/library/news-events/news-updates/),
+  [documented computing lab](https://www.bu.edu/summer/summer-sessions/campus-resources/computing-resources/).
+  General entry eligibility and current building hours remain checks, not inferred dining privileges.
+- **Warren** and **Marciano:** current names, published meal periods and payment methods from the
+  [Warren](https://www.bu.edu/dining/location/warren/) and
+  [Marciano](https://www.bu.edu/dining/location/marciano/) pages. Warren's retrieved date range is
+  October 23–29; Marciano's is October 24–30. Addresses are supported by
+  [BU Housing](https://www.bu.edu/housing/living/moving/check-in-locations/) and
+  [BU's dining guide](https://www.bu.edu/articles/2026/where-to-eat-when-youre-hungry-at-bu/).
+- **West:** [name, address and Claflin entrance](https://www.bu.edu/cpo/project/west-campus-dining-expansion/).
+  The large dining page could not be retrieved again; its prior October 24 schedule remains dated as
+  before. Current payment and entry details need checking.
+- **Fenway:** [BU's directory](https://www.bu.edu/dining/where-to-eat/) still lists Fenway Campus Center
+  Dining Room; [BU's location link](https://www.bu.edu/dining/location/fenway/) leads to the operator.
+  Current entrance and hours could not be independently confirmed. No directions button is offered.
+  The stable `fenway-dining-synthetic` identifier is retained. No closure or relocation is inferred.
+
+Current schedules in `hours.json` remain date-scoped and separate from the October 19 historical/demo
+simulation. The planner deliberately continues to label its Monday hours, walking allowances and amenity
+flags illustrative. The chosen view repeats this limitation; a real visit requires checking current hours.
+No occupancy-to-queue inference or forecast has been added.
+
+The ordering rules are unchanged: preference keys, then busyness level, total walking, activity time,
+study amenities, name and stable ID. Numeric comparison explanations use actual evaluated differences;
+busyness comparisons explicitly say **in the simulation**. Unknown occupancy remains useful for planning
+but never receives a best-match badge. See [DEMO.md](DEMO.md) for the complete walkthrough and actual checks,
+and [the five-task usability protocol](team/usability/test_script.md) for the pending student study.
 
 **What COD demonstrates.** Event-based sensor data handled honestly:
 - time-weighted averages rather than plain row averages;

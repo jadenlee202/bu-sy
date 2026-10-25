@@ -4,7 +4,7 @@
 // (recommend.js) and renders the engine's result.
 import { fmtHHMM, fmtShort, fmtTime, toHHMM, toMin } from "./clock.js";
 import { icon, terrier } from "./icons.js";
-import { campusImage, getImages } from "./image.js";
+import { createPlanSession } from "./plan-session.js";
 import * as prefs from "./prefs.js";
 import * as engine from "./recommend.js";
 import * as src from "./source.js";
@@ -13,46 +13,23 @@ import { esc, failure, level, loading } from "./ui.js";
 const PRESETS = [30, 45, 60, 90];
 const PLAYBACK = [0, 24 * 60 - 1];  // range the demo clock can show (12 AM-11:59 PM)
 const TYPING_MS = 600;              // wait this long after typing before updating
-const TYPED = new Set(["custom", "start", "minActivity", "buffer"]);
+const TYPED = new Set(["custom", "start", "minActivity", "buffer", "preparation", "cleanup"]);
 
 // Kept for the session, so going to a place and back keeps the inputs.
 const draft = { req: null, startEdited: false, lastSelected: false };
 
-// A welcoming campus hero over the planner. `images` is the campus-image
-// manifest (or null before it loads); the photo falls back to an illustration.
-const hero = (images) => {
-  const featured = images?.images?.fitrec ?? null;
-  return `<section class="hero-banner">
-    ${campusImage(featured, "Boston University campus")}
-    <div class="hero-body">
-      <span class="hero-eyebrow">${icon("clock", 13)} Campus time, well spent</span>
-      <h1 class="hero-title">Find a spot for your free time</h1>
-      <p class="hero-lede">Tell BU-sy your activity and how long you're free. It suggests campus places that fit the walk and your schedule, on a simulated demo day.</p>
-      <div class="hero-actions">
-        <a class="btn btn-primary" href="#/places">Browse places</a>
-        <a class="btn" href="#/events">Student meetups</a>
-      </div>
-      <p class="hero-note">Student prototype · busyness is simulated, not live BU data · not affiliated with Boston University</p>
-    </div>
-  </section>`;
-};
-
-const header = (images) => `
-  ${hero(images)}
-  <div class="page-head">
-    <h1 class="title">What fits now?</h1>
-    <p class="tagline">Find a spot for your free time.</p>
-  </div>`;
+const header = () => `<div class="page-head"><h1 class="title">What fits now?</h1>
+  <p class="tagline">I have a free window. Make it a plan.</p></div>`;
 
 export async function planView($view, clock) {
-  $view.innerHTML = header(null) + loading("Loading campus data…");
-  let campus, histories, images;
+  $view.innerHTML = header() + loading("Loading campus data…");
+  let campus, histories;
   try {
-    [campus, images] = await Promise.all([src.getCampus(), getImages()]);
+    campus = await src.getCampus();
     const ids = [...new Set(campus.places.map((p) => p.facility_id))];
     histories = Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await src.getHistory(id)])));
   } catch (err) {
-    $view.innerHTML = header(null) + failure(err);
+    $view.innerHTML = header() + failure(err);
     return {};
   }
 
@@ -63,7 +40,7 @@ export async function planView($view, clock) {
   }
   if (!draft.startEdited) draft.req.start = toHHMM(clock.minute);
 
-  $view.innerHTML = `${header(images)}
+  $view.innerHTML = `${header()}
     <div class="plan-layout">
       ${formHTML(campus)}
       <section id="results" class="results" tabindex="-1" aria-label="Options"></section>
@@ -75,6 +52,7 @@ export async function planView($view, clock) {
   const $status = $view.querySelector("#plan-status");
   const $err = $form.querySelector(".form-error");
   const $go = $form.querySelector('[type="submit"]');
+  const session = createPlanSession(campus, histories);
   fill($form, draft.req, campus);
 
   /** showErrors: false while someone is still typing, so nothing flashes red mid-entry. */
@@ -99,7 +77,7 @@ export async function planView($view, clock) {
       return;
     }
 
-    const result = engine.recommend(req, campus, histories);
+    const result = session.update(req);
     if (!result.ok) {
       if (!showErrors) {                       // mid-entry: keep the last results, marked out of date
         if ($results.querySelector(".recs, .empty")) $results.classList.add("is-stale");
@@ -127,9 +105,18 @@ export async function planView($view, clock) {
     }
   }
 
+  function invalidate() {
+    session.invalidate();
+    if ($results.querySelector(".selected-plan")) {
+      $results.innerHTML = `<p class="stale-note" role="status">Inputs changed. Updating your options…</p>`;
+    }
+    $results.querySelectorAll("[data-choose]").forEach(b => b.disabled = true);
+    $results.classList.add("is-stale");
+  }
   let typing;
   $form.addEventListener("submit", (e) => { e.preventDefault(); run({ focus: true }); });
   $form.addEventListener("input", (e) => {
+    invalidate();
     if (!TYPED.has(e.target.name)) return;          // choices update on "change" instead
     if (e.target.name === "start") draft.startEdited = true;
     syncForm($form, campus);
@@ -137,9 +124,13 @@ export async function planView($view, clock) {
     typing = setTimeout(() => run({ showErrors: false }), TYPING_MS);
   });
   $form.addEventListener("change", (e) => {
+    invalidate();
     const { name } = e.target;
     if (!name) return;
     if (name === "activity") {
+      const d = prefs.defaults(campus, prefs.loadPrefs(campus), e.target.value);
+      $form.elements.preparation.value = d.preparation;
+      $form.elements.cleanup.value = d.cleanup;
       const remembered = prefs.loadPrefs(campus).minByActivity?.[e.target.value];
       $form.elements.minActivity.value = remembered ?? engine.activityInfo(campus, e.target.value).default_min;
     }
@@ -154,7 +145,30 @@ export async function planView($view, clock) {
     fill($form, req, campus);
     run();
   };
-  $view.addEventListener("click", (e) => {
+  $view.querySelector(".plan-layout").addEventListener("click", (e) => {
+    const choose = e.target.closest("[data-choose]");
+    if (choose && !choose.disabled) {
+      const chosen = session.choose(choose.dataset.choose);
+      if (chosen) {
+        $results.innerHTML = selectedPlanHTML(chosen.option, chosen.request, campus);
+        $status.textContent = `Chosen plan: ${chosen.option.place.name}. ${chosen.option.activity} minutes of activity.`;
+        $results.focus();
+        $results.scrollIntoView({ block: "start" });
+      }
+    }
+    if (e.target.closest("[data-change-plan]")) { run(); $results.focus(); }
+    if (e.target.closest("[data-edit-inputs]")) {
+      run();
+      $form.querySelector("#prefs").open = true;
+      $form.elements.to.focus();
+      $form.scrollIntoView({ block: "start" });
+    }
+    const accessCheck = e.target.closest("[data-check-access]");
+    if (accessCheck) {
+      $form.querySelector("#prefs").open = true;
+      $form.elements[`access-${accessCheck.dataset.checkAccess}`]?.focus();
+      $form.scrollIntoView({ block: "start" });
+    }
     const scenario = e.target.closest("[data-scenario]");
     if (scenario) {                                  // samples are demos, so nothing is remembered
       draft.startEdited = true;
@@ -179,12 +193,15 @@ export async function planView($view, clock) {
   });
 
   run({ showErrors: false });
-  return {};
+  return { dispose() { clearTimeout(typing); session.invalidate(); } };
 }
 
 /** Only values changed by hand are remembered (see prefs.js). */
 function remember(f, name, campus) {
   const req = readForm(f);
+  if (["preparation", "cleanup"].includes(name) && req.activity && Number.isInteger(req[name])) {
+    prefs.savePrefs({ [`${name}ByActivity`]: { [req.activity]: req[name] } }, campus);
+  }
   const int = (v) => Number.isInteger(v);
   if (name === "from") {
     prefs.savePrefs({ from: req.from }, campus);
@@ -205,7 +222,7 @@ function formHTML(campus) {
   const options = (blank) => `<option value="">${blank}</option>`
     + campus.locations.map((l) => `<option value="${esc(l.id)}">${esc(l.name)}</option>`).join("");
   return `<form class="panel plan" id="plan" novalidate aria-label="Your free time">
-    <fieldset class="pick"><legend>Activity</legend>
+    <p class="field-label">I have time to…</p><fieldset class="pick"><legend>Activity</legend>
       ${campus.activities.map((a) => `<label><input type="radio" name="activity" value="${esc(a.id)}"><span>${icon(a.id, 20)}${esc(a.label)}</span></label>`).join("")}
     </fieldset>
 
@@ -236,10 +253,19 @@ function formHTML(campus) {
           <label class="field"><span class="field-label">Buffer <span class="opt">min</span></span>
             <input name="buffer" type="number" min="0" max="120" inputmode="numeric" enterkeyhint="done" aria-describedby="buffer-help"></label>
         </div>
-        <p class="help" id="buffer-help">Minimum: time you want there. Buffer: kept free before your next commitment.</p>
-        <fieldset class="checks"><legend>Rank by</legend>
-          <label class="check"><input type="checkbox" name="preferQuiet"><span>Quieter first</span></label>
-          <label class="check"><input type="checkbox" name="preferShortTravel"><span>Shorter walk first</span></label>
+        <p class="help" id="buffer-help">Minimum: activity time, excluding preparation, cleanup and walking. Buffer: kept free before your next commitment.</p>
+        <div class="field-pair">
+          <label class="field"><span class="field-label">Preparation (min)</span><input name="preparation" type="number" min="0" max="120" inputmode="numeric"></label>
+          <label class="field"><span class="field-label">Cleanup (min)</span><input name="cleanup" type="number" min="0" max="120" inputmode="numeric"></label>
+        </div>
+        <p class="help">Editable planning allowances: study 3 + 2, eat 5 + 2, work out 5 + 5 minutes. Food preparation includes getting food; these are not measured queues or service times.</p>
+        <fieldset class="checks"><legend>Access for this visit</legend>
+          ${[["library", "Mugar: I meet the library entry requirements"], ["fitness", "FitRec: membership/eligible student, waiver and Terrier Card"], ["dining", "Dining: I have an accepted meal/payment method and can enter"]].map(([id,label]) => `<label class="field"><span class="field-label">${label}</span><select name="access-${id}"><option value="">Check access</option><option value="yes">Yes, checked</option><option value="no">No</option></select></label>`).join("")}
+          <p class="help">Check the facility sources below. No identity collected; access choices stay in this session. Dining access does not establish library access.</p>
+        </fieldset>
+        <fieldset class="checks"><legend>Rank by (otherwise: More activity time)</legend>
+          <label class="check"><input type="checkbox" name="preferQuiet"><span>Prefer quieter</span></label>
+          <label class="check"><input type="checkbox" name="preferShortTravel"><span>Less walking</span></label>
         </fieldset>
         <fieldset class="checks study-needs"><legend>Study needs</legend>
           ${Object.entries(campus.amenity_labels).map(([id, label]) => `<label class="check"><input type="checkbox" name="needs" value="${esc(id)}"><span>${esc(label)}</span></label>`).join("")}
@@ -265,6 +291,8 @@ function readForm(f) {
     activity, start: d.get("start") || "",
     minutes: preset === "custom" ? num("custom") : preset ? Number(preset) : NaN,
     source: "manual", from: d.get("from") || "", to: d.get("to") || null,
+    preparation: num("preparation"), cleanup: num("cleanup"),
+    access: Object.fromEntries(["library", "fitness", "dining"].map(k => [k, d.get(`access-${k}`)])),
     minActivity: num("minActivity"), buffer: num("buffer"),
     preferQuiet: d.has("preferQuiet"), preferShortTravel: d.has("preferShortTravel"),
     needs: activity === "study" ? d.getAll("needs") : [],
@@ -281,6 +309,10 @@ function fill(f, req, campus) {
   el.custom.value = preset === "custom" && Number.isFinite(req.minutes) ? req.minutes : "";
   el.from.value = req.from ?? "";
   el.to.value = req.to ?? "";
+  const allowance = engine.allowances(req);
+  el.preparation.value = allowance.preparation ?? 0;
+  el.cleanup.value = allowance.cleanup ?? 0;
+  for (const k of ["library", "fitness", "dining"]) el[`access-${k}`].value = req.access?.[k] ?? "";
   el.minActivity.value = Number.isFinite(req.minActivity) ? req.minActivity : "";
   el.buffer.value = Number.isFinite(req.buffer) ? req.buffer : campus.default_buffer;
   el.preferQuiet.checked = req.preferQuiet;
@@ -311,7 +343,7 @@ function syncForm(f, campus) {
 function fieldFor(f, field) {
   const el = f.elements;
   return {
-    activity: el.activity[0], start: el.start, from: el.from, to: el.to, buffer: el.buffer, minActivity: el.minActivity,
+    preparation: el.preparation, cleanup: el.cleanup, activity: el.activity[0], start: el.start, from: el.from, to: el.to, buffer: el.buffer, minActivity: el.minActivity,
     minutes: el.preset.value === "custom" ? el.custom : el.preset[0],
   }[field];
 }
@@ -328,6 +360,7 @@ function statusText(r) {
   const fits = r.options.length + r.more.length;
   if (fits) return `${fits} ${fits === 1 ? "place fits" : "places fit"}.`;
   if (r.browse.length) return `${r.browse.length} could work. Travel not checked.`;
+  if (r.checkAccess.length || r.checkHours.length) return "Complete access or operating-hours checks before choosing a plan.";
   return "Nothing fits this window.";
 }
 
@@ -335,6 +368,7 @@ function buttonText(r) {
   const fits = r.options.length + r.more.length;
   if (fits) return `See ${plural(fits, "option", "options")}`;
   if (r.browse.length) return `See ${r.browse.length} that could work`;
+  if (r.checkAccess.length || r.checkHours.length) return "See checks to complete";
   return "See why nothing fits";
 }
 
@@ -373,7 +407,7 @@ function resultsHTML(r, campus) {
         ${card(top, { req, campus, hero: true, featured: r.featured, reason: r.featured?.why ?? tie })}
         ${rest.map((o) => card(o, { req, campus, reason: engine.rankReason(o, top) })).join("")}
       </ol>
-      ${r.more.length ? moreList(`${r.more.length} more also fit`, r.more, (o) => `${o.activity} min · ${o.there + o.onward} min walking`) : ""}`;
+      ${r.more.length ? `<details class="more"><summary>${r.more.length} more also fit</summary><ol class="recs">${r.more.map(o => card(o, { req, campus, reason: engine.rankReason(o, top) })).join("")}</ol></details>` : ""}`;
   } else if (r.browse.length) {
     const shown = r.browse.slice(0, engine.MAX_SHOWN);
     body = `${head(plural(r.browse.length, "place could work", "places could work"))}
@@ -383,12 +417,12 @@ function resultsHTML(r, campus) {
       ${r.browse.length > shown.length ? moreList(`${r.browse.length - shown.length} more could work`, r.browse.slice(shown.length), (o) => `Up to ${o.activity} min before walking`) : ""}`;
   } else {
     const considered = r.excluded.length + r.checkHours.length;
-    body = `${head("Nothing fits this window")}
+    body = `${head(r.checkAccess.length || r.checkHours.length ? "Complete the checks below" : "Nothing fits this window")}
       <div class="empty">
         ${r.reasons.length ? `<p>Of ${plural(considered, "place", "places")} for ${esc(act.verb)}: ${r.reasons.map((x) => `${x.count} ${esc(x.text)}`).join("; ")}.</p>` : ""}
         ${r.suggestions.length
           ? `<p class="muted">These changes would fit:</p><div class="fixes">${r.suggestions.map((s) => `<button class="btn" type="button" data-patch="${esc(JSON.stringify(s.patch))}">${esc(s.label)}<span>${esc(s.detail)}</span></button>`).join("")}</div>`
-          : `<p class="muted">Try more time, a shorter minimum, or another activity.</p>`}
+          : `<p class="muted">${r.checkAccess.length || r.checkHours.length ? "Time alone is not confirmation. Complete the checks below before choosing." : "Try more time, a shorter minimum, or another activity."}</p>`}
       </div>
       ${r.excluded.length ? `<ul class="list why-not">${r.excluded.map(excludedRow).join("")}</ul>` : ""}`;
   }
@@ -396,17 +430,18 @@ function resultsHTML(r, campus) {
   const check = r.checkHours.length ? `<section class="check-hours"><h3 class="section-title">Hours unknown</h3>
     <p class="help">Enough time, but no hours in the data. Check before going.</p>
     <ul class="list">${r.checkHours.map((o) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(o.place.name)}</span>
-      <span class="row-sub">${o.upTo ? `Up to ${o.activity} min · walk not checked` : `${o.activity} min · ${o.there + o.onward} min walking`}</span></span>${level(o.busy.level)}</li>`).join("")}</ul></section>` : "";
+      <span class="row-sub">${o.upTo ? `Up to ${o.activity} min · walk not checked` : `${o.activity} min · ${o.there + o.onward} min walking`}</span></span>${level(o.busy.level)}<a class="btn" href="#/place/${encodeURIComponent(o.place.facility_id)}">Check details</a></li>`).join("")}</ul></section>` : "";
   const excluded = r.excluded.length && (fits || r.browse.length)
     ? `<details class="more"><summary>Why ${plural(r.excluded.length, "other place doesn't", "other places don't")} fit</summary>
       <ul class="list">${r.excluded.map(excludedRow).join("")}</ul></details>` : "";
 
-  return `${body}${check}${excluded}
+  const access = r.checkAccess.length ? `<section><h3>Check access</h3><p class="help">These visits fit the illustrative time budget. Confirm eligibility under Preferences before choosing.</p><ol class="recs">${r.checkAccess.map(o => card(o, { req, campus })).join("")}</ol></section>` : "";
+  return `${body}${check}${access}${excluded}
     <p class="fineprint">${icon("info", 14)} Suggestions, not reservations. Busyness is simulated: <a href="#/sources">Sources &amp; Simulation</a></p>`;
 }
 
 const excludedRow = (e) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(e.place.name)}</span>
-  <span class="row-sub">${esc(e.reason)}</span></span></li>`;
+  <span class="row-sub">${esc(e.reason)}</span></span>${e.code === "route" ? `<a class="btn" href="#/place/${encodeURIComponent(e.place.facility_id)}">Check details</a>` : ""}</li>`;
 
 const moreList = (title, list, sub) => `<details class="more"><summary>${title}</summary><ul class="list">
   ${list.map((o) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(o.place.name)}</span>
@@ -442,6 +477,8 @@ function card(o, { req, campus, hero = false, featured = null, reason = null }) 
     <div class="stats">${time}${walk}</div>
     <div class="rec-busy">${level(o.busy.level, busy.label)}</div>
     ${why ? `<p class="rec-reason">${esc(why)}</p>` : ""}
+    ${o.status === "fit" ? `<button type="button" class="btn btn-primary" data-choose="${esc(o.place.place_id)}">Choose this plan</button>` : o.status === "unchecked" ? `<button type="button" class="btn" data-focus-from>Complete travel details</button>` : `<button type="button" class="btn" data-check-access="${esc(o.place.metadata?.access?.group)}">Check access</button>`}
+    ${metadataHTML(o.place)}
     <details class="why"><summary>${checked ? "Why this fits" : "Details"} ${icon("down", 14)}</summary>
       <div class="why-body">
         ${checked ? `<div class="budget" aria-hidden="true">${o.budget.filter((b) => b.minutes > 0)
@@ -459,4 +496,50 @@ function card(o, { req, campus, hero = false, featured = null, reason = null }) 
       </div>
     </details>
   </li>`;
+}
+
+export function metadataHTML(place) {
+  const m = place.metadata;
+  if (!m) return "";
+  const labels = { identity: "Name", address: "Address", access: "Access", payment: "Payment", currentHours: "Current operating schedule", plannerHours: "Demo schedule", studyAmenities: "Study amenities" };
+  return `<details class="why"><summary>Facility details &amp; sources</summary><dl class="facts">${Object.entries(m).filter(([,v]) => v && typeof v === "object" && v.text).map(([k,v]) => `<dt>${esc(labels[k] ?? k)}</dt><dd>${esc(v.text)} <span class="help">${esc((v.status ?? "unknown").replaceAll("_", " "))}${v.checked ? ` · checked ${esc(v.checked)}` : ""}${v.effectiveFrom ? ` · applies ${esc(v.effectiveFrom)} through ${esc(v.effectiveThrough)}` : ""}</span>${v.url ? ` <a href="${esc(v.url)}" target="_blank" rel="noopener">Official source</a>` : ""}</dd>`).join("")}</dl></details>`;
+}
+
+export function directionsURL(place) {
+  const a = place.metadata?.address;
+  return a?.status === "verified" && a.text ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(a.text)}&travelmode=walking` : null;
+}
+
+export function selectedPlanHTML(o, req, campus) {
+  if (o.status !== "fit") return "";
+  const act = engine.activityInfo(campus, req.activity);
+  const interval = (a,b) => `${fmtTime(a)}–${fmtTime(b)}`;
+  const steps = [
+    ["Window starts", fmtTime(o.windowStart)],
+    ["Depart", fmtTime(o.depart)], ["Arrive at facility", fmtTime(o.arrive)],
+    ["Preparation (allowance)", interval(o.arrive,o.activityStart)],
+    [act.label, interval(o.activityStart,o.activityEnd)],
+    ["Cleanup (allowance)", interval(o.activityEnd,o.leaveBy)],
+    ["Latest departure from facility", fmtTime(o.leaveBy)],
+    ...(req.to ? [[`Arrive at ${engine.locationName(campus,req.to)}`,fmtTime(o.arriveNext)]] : [["Onward travel", "Not counted: no next destination"]]),
+    ["Protected buffer", interval(o.bufferStart,o.bufferEnd)],
+    ["Commitment boundary", fmtTime(o.windowEnd)],
+  ];
+  const directions = directionsURL(o.place);
+  const official = o.place.metadata?.identity?.url;
+  return `<article class="panel selected-plan" aria-label="Chosen plan">
+    <p class="help">Chosen plan · historical demo Monday, October 19, 2026</p>
+    <p class="help">Time fit uses illustrative demo hours and sample walks; access is self-confirmed. Verify current hours before a real visit.</p>
+    <h2>${esc(o.place.name)}</h2><p class="title">${o.activity} minutes to ${esc(act.verb)}</p>
+    <ol class="timeline">${steps.map(([label,time]) => `<li><span>${esc(label)}</span><strong>${esc(time)}</strong></li>`).join("")}</ol>
+    ${o.free ? `<p class="help">${o.free} minutes free before departure while waiting for opening.</p>` : ""}
+    ${o.spare ? `<p class="help">${o.spare} minutes unused after leaving early for closing; the buffer stays protected.</p>` : ""}
+    <p>${esc(engine.budgetSentence(o,req,campus))}</p>
+    <p class="help">${esc(campus.travel_note)} Starting point manually selected: ${esc(engine.locationName(campus,req.from))}. External directions may use a different origin and route; they do not validate these walking allowances.</p>
+    ${directions ? `<a class="btn" href="${esc(directions)}" target="_blank" rel="noopener">Open directions</a>` : official ? `<a class="btn" href="${esc(official)}" target="_blank" rel="noopener">Official facility page</a>` : `<a class="btn" href="#/place/${encodeURIComponent(o.place.facility_id)}">Facility details</a>`}
+    ${metadataHTML(o.place)}
+    <p class="fineprint">No reservation, guaranteed availability or calendar event. Busyness is simulated, not a prediction for arrival. <a href="#/sources">Sources &amp; Simulation</a></p>
+    <button class="btn" type="button" data-change-plan>Change plan</button>
+    <button class="btn btn-primary" type="button" data-edit-inputs>Edit inputs</button>
+  </article>`;
 }
