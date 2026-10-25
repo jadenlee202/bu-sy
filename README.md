@@ -57,7 +57,7 @@ time (`schedule.js`, `availability.js`), saved club meetings (`clubevents.js`) a
 |---|---|
 | **Plan** | One sentence, *"I have [1 hr] to [study]."* Each red word opens a sheet. If your schedule shows you're free now, the time is filled in from it. |
 | **Answer** | One place, a time bar (walk, activity), two timed steps, *Open directions*, *See all options*. Nothing fits → the reasons and the engine's checked fixes (*Extend to 55 minutes*). |
-| **Schedule** | Free now and later today from your `.ics` file and saved club meetings; classes and clubs fold away; import, replace, clear. |
+| **Schedule** | A week strip (free hours per day) and a day map from your `.ics` file and saved club meetings: busy blocks, a now line, and a suggestion for each gap (walk + one session, the same engine as Plan); **Plan this** plans that gap. Import, replace, clear. |
 | **Explore** | Places with live open status and a busyness meter; clubs; one search box. |
 | **Place** | Live status and meal, busyness now, the sample day hour by hour, this week's building hours, today's meals, facility details with official sources, directions. |
 | **Club** | Details, the next four meetings (*Add to calendar*: they count as busy), join with name, school email (`@bu.edu`) and year, withdraw. |

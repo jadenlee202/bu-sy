@@ -7,7 +7,7 @@ import { addClubEvent, clubBusy, clubEventItems, clubMeetings, loadClubEvents, r
 import { addDays, campusDateTime, daySchedule, formatPeriod, nowServiceLabel, nowStatus, nowText } from "../js/hours.js";
 import * as prefs from "../js/prefs.js";
 import * as engine from "../js/recommend.js";
-import { busyOf, clearSchedule, eventsOf, importCalendarFile, loadSchedule } from "../js/schedule.js";
+import { busyOf, clearSchedule, covers, eventsOf, importCalendarFile, loadSchedule } from "../js/schedule.js";
 import * as src from "../js/source.js";
 import { esc } from "../js/ui.js";
 import * as L from "./logic.js";
@@ -30,8 +30,8 @@ const loc = { here: null, status: "idle", near: "" };
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { /* storage blocked */ } };
 
 // The sentence for this visit. minutes/start come from the schedule until someone picks a time.
-const sentence = { activity: "study", minutes: 60, start: null, fromSchedule: false, picked: false, patch: {}, chosen: null };
-const ui = { exploreTab: 0, showEvents: false, scheduleMsg: "" };
+const sentence = { activity: "study", minutes: 60, start: null, date: null, fromSchedule: false, picked: false, patch: {}, chosen: null };
+const ui = { exploreTab: 0, showEvents: false, scheduleMsg: "", day: null };
 
 let data = null, dataLoading = null;
 /** Loads everything once; every caller (including a route that starts mid-load) shares the same load. */
@@ -77,9 +77,9 @@ const icon = {
 };
 
 // ---------- today's schedule (shared with the main app's Calendar) ----------
-function today() {
+/** One campus day (8 AM–10 PM) from the imported calendar and saved club meetings. */
+function dayData(date) {
   const now = Date.now();
-  const date = campusDateTime().date;
   const start = zonedInstant(date, DAY[0], TZ), end = zonedInstant(date, DAY[1], TZ);
   const schedule = loadSchedule();
   const clubs = loadClubEvents();
@@ -87,8 +87,11 @@ function today() {
   const segments = daySegments(busy, start, end, 15, now);
   const events = [...(schedule ? eventsOf(schedule) ?? [] : []), ...clubEventItems(clubs)]
     .filter((e) => e.end > start && e.start < end).sort((a, b) => a.start - b.start);
-  return { now, date, start, end, schedule, clubs, segments, events, hasAny: Boolean(schedule || clubs.length) };
+  // a day the calendar file doesn't reach is unknown, not free
+  const covered = !schedule || covers(schedule, start, end);
+  return { now, date, start, end, schedule, clubs, segments, events, covered, hasAny: Boolean(schedule || clubs.length) };
 }
+const today = () => dayData(campusDateTime().date);
 
 /** Before someone picks a time, a schedule says how long they're free right now. */
 function syncFromSchedule() {
@@ -106,7 +109,38 @@ function syncFromSchedule() {
 function request() {
   const d = prefs.defaults(data.campus, prefs.loadPrefs(data.campus), sentence.activity);
   const start = sentence.start ?? toHHMM(L.roundUp5(campusDateTime().minute));
-  return L.buildRequest({ ...sentence, from: loc.here ? L.HERE : loc.near, access: settings.access }, d, start, data.planDate);
+  return L.buildRequest({ ...sentence, from: loc.here ? L.HERE : loc.near, access: settings.access }, d, start, sentence.date ?? data.planDate);
+}
+
+// ---------- the day map: a suggestion for every free gap ----------
+const bostonFmt = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const bostonMin = (ms) => toMin(bostonFmt.format(new Date(ms)));
+const ui2 = { gapAct: {} };                           // activity picked per gap (keyed by its start), this visit only
+
+/**
+ * What to do in a free gap: the shared engine, from where you are, for the gap's activity order
+ * (a meal over lunch or dinner, otherwise study, then a workout), or the one the student picked.
+ * Returns the top place, or the best unchecked one when walks can't be timed, or null when nothing fits.
+ */
+function suggestGap(seg, date) {
+  const startMin = L.roundUp5(bostonMin(Math.max(seg.start, Date.now())));
+  const gapMinutes = Math.min(L.MAX_MINUTES, bostonMin(seg.end) - startMin);
+  if (gapMinutes < 15) return null;
+  const picked = ui2.gapAct[seg.start];
+  const order = picked ? [picked] : L.gapOrder(bostonMin(seg.start), bostonMin(seg.end));
+  for (const act of order) {
+    const minutes = L.gapPlanMinutes(gapMinutes, 30, act);   // one session plus up to a 30-minute walk
+    const d = prefs.defaults(data.campus, prefs.loadPrefs(data.campus), act);
+    const req = L.buildRequest({ activity: act, minutes, from: loc.here ? L.HERE : loc.near, access: settings.access }, d, toHHMM(startMin), date ?? data.planDate);
+    const r = engine.recommend(req, tripCampus(), data.histories, { hours: data.hours, suggest: false });
+    if (!r.ok) continue;
+    const o = r.options[0] ?? r.browse[0];
+    if (o) {
+      const planMinutes = L.gapPlanMinutes(gapMinutes, o.there, act);
+      return { act, o, checked: Boolean(r.options[0]), minutes: planMinutes, session: Math.min(o.activity, L.SESSION_CAP[act] ?? o.activity), start: toHHMM(startMin) };
+    }
+  }
+  return { act: order[0], o: null, minutes: gapMinutes, start: toHHMM(startMin) };
 }
 
 // ---------- router + transitions ----------
@@ -292,7 +326,7 @@ const SCREENS = {
     syncFromSchedule();
     const act = actInfo(sentence.activity);
     const chip = sentence.start
-      ? `<span class="chip free">${icon.cal}Planning ${fmtTime(toMin(sentence.start))}–${fmtTime(toMin(sentence.start) + sentence.minutes)} · from your schedule</span>`
+      ? `<span class="chip free">${icon.cal}Planning ${sentence.date ? `${esc(dayFmt.format(new Date(`${sentence.date}T12:00:00Z`)))}, ` : ""}${fmtTime(toMin(sentence.start))}–${fmtTime(toMin(sentence.start) + sentence.minutes)} · <button type="button" data-use-now class="linkish">Use now</button></span>`
       : sentence.fromSchedule && !sentence.picked
         ? `<span class="chip free">${icon.cal}Free until ${at(sentence.fromSchedule.until)} · from your schedule</span>` : "";
     const access = Object.entries(settings.access).filter(([, v]) => v === "yes").map(([k]) => ({ library: "library", fitness: "FitRec", dining: "dining" })[k]);
@@ -308,6 +342,9 @@ const SCREENS = {
     </section>
     ${settings.tipSeen ? "" : `<div class="coach" role="dialog" aria-label="Tip"><p>Tap a <b>red word</b> to change it. That's all BU-sy needs.</p><button class="btn" type="button" data-tip>Got it</button></div>`}`;
 
+    $view.querySelector("[data-use-now]")?.addEventListener("click", () => {
+      Object.assign(sentence, { start: null, date: null, picked: false, chosen: null }); SCREENS.plan();
+    });
     $view.querySelector("[data-tip]")?.addEventListener("click", (e) => {
       settings.tipSeen = true; persist(); e.target.closest(".coach").remove(); $view.querySelector('[data-pick="time"]').focus();
     });
@@ -358,7 +395,10 @@ const SCREENS = {
   },
 
   schedule() {
-    const t = today();
+    const todayIso = campusDateTime().date;
+    const week = Array.from({ length: 7 }, (_, i) => addDays(todayIso, i));
+    if (!week.includes(ui.day)) ui.day = todayIso;
+    const t = dayData(ui.day), isToday = ui.day === todayIso;
     const input = `<input type="file" id="ics" accept=".ics,text/calendar" hidden>`;
     if (!t.hasAny) {
       $view.innerHTML = `<div class="head"><h1>Schedule</h1></div>
@@ -385,38 +425,60 @@ const SCREENS = {
           <button class="btn primary" type="button" data-plan-now>Plan this time</button></div>`
       : busyNow ? `<div class="card now-card"><span class="when">Busy until ${at(busyNow.end)}</span><span class="then">${esc(busyNow.title)}</span></div>`
       : `<div class="card now-card"><span class="then">No more free windows today between 8 AM and 10 PM.</span></div>`;
-    $view.innerHTML = `<div class="head"><h1>Today</h1><span class="fine" style="margin-right:12px">${esc(dateFmt.format(new Date(t.now)))}</span></div>
+    const strip = week.map((d) => { const dd = dayData(d);
+      const freeMin = dd.covered ? dd.segments.filter((x) => x.kind === "available").reduce((n, x) => n + (x.end - Math.max(x.start, dd.now)) / 60000, 0) : null;
+      const dt = new Date(`${d}T12:00:00Z`);
+      return `<button type="button" class="day" data-day="${d}" aria-pressed="${d === ui.day}" aria-label="${esc(dayFmt.format(dt))}${freeMin == null ? ", not covered" : `, ${Math.round(freeMin / 60)} hours free`}">
+        <span>${d === todayIso ? "Today" : dt.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" })}</span><b>${dt.getUTCDate()}</b>
+        <i>${freeMin == null ? "—" : `${Math.round(freeMin / 60)}h free`}</i></button>`; }).join("");
+    $view.innerHTML = `<div class="head"><h1>This week</h1></div>
       <section class="stack stagger">
-        <div><p class="label">${free ? "Free now" : "Right now"}</p>${nowCard}</div>
-        <div><p class="label">Later today</p>
-          <ul class="list">${later.map((s) => `<li><button class="row" type="button" data-plan-at="${s.start}" data-plan-end="${s.end}">
-            <span class="main"><span class="title">${at(s.start)} – ${at(s.end)}</span><span class="sub">${esc(L.durationText(L.minutesBetween(s.start, s.end)))}</span></span><span class="go">Plan</span></button></li>`).join("")
-            || `<li class="empty">No more free windows today.</li>`}</ul></div>
-        <div>
-          <button class="btn quiet" type="button" data-toggle aria-expanded="${ui.showEvents}" aria-controls="events" style="padding:0;justify-content:flex-start">${icon.chev}${ui.showEvents ? "Hide" : "Show"} classes and clubs (${t.events.length})</button>
-          <div class="collapse ${ui.showEvents ? "open" : ""}" id="events"${ui.showEvents ? "" : " inert"}><div><ul class="list events">${t.events.map((e) => `<li class="row"><span class="main"><span class="title">${esc(e.title)}</span>
-            <span class="sub">${e.allDay ? "All day" : `${at(e.start)} – ${at(e.end)}`}${e.location ? ` · ${esc(e.location)}` : ""}</span></span>${e.source === "club" ? `<span class="tag">Club</span>` : ""}</li>`).join("") || `<li class="empty">Nothing scheduled today.</li>`}</ul></div></div>
-        </div>
+        <div class="week" role="group" aria-label="Pick a day">${strip}</div>
+        ${isToday ? `<div><p class="label">${free ? "Free now" : "Right now"}</p>${nowCard}</div>` : ""}
+        <div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+            <p class="label" style="margin:0">${isToday ? "Your day" : esc(dayFmt.format(new Date(`${ui.day}T12:00:00Z`)))}</p>
+            ${loc.here || loc.near ? "" : `<button class="btn quiet" type="button" data-locate style="min-height:32px;padding:0;font-size:13px">Use my location for walks</button>`}</div>
+          ${t.covered ? "" : `<p class="chip warn">Your calendar file doesn't cover this day, so its free time is unknown.</p>`}
+          <ol class="daymap">${(t.covered ? L.dayBlocks(t.segments, t.events, t.now) : []).map((blk) => {
+            const time = `<time>${at(blk.start)}</time>`;
+            const nowLine = blk.nowAt != null ? `<span class="now-line" style="top:${(blk.nowAt * 100).toFixed(1)}%"><b>now</b></span>` : "";
+            if (blk.kind === "busy") return `<li class="blk is-busy${blk.club ? " is-club" : ""}${blk.over ? " over" : ""}" style="min-height:${blk.height}px">${time}
+              <div class="body"><span class="title">${esc(blk.titles.join(" · ") || "Busy")}</span><span class="sub">${at(blk.start)} – ${at(blk.end)}${blk.club ? " · club" : ""}</span></div>${nowLine}</li>`;
+            if (blk.kind !== "free" || blk.over) return `<li class="blk is-${blk.kind} over" style="min-height:${blk.height}px">${time}
+              <div class="body"><span class="sub">${blk.kind === "short" ? `${blk.minutes} min break` : `Free · ${esc(L.durationText(blk.minutes))}`}</span></div>${nowLine}</li>`;
+            const g = suggestGap(blk, isToday ? null : ui.day);
+            const acts = data.campus.activities.map((x) => `<button type="button" class="chip-btn" data-gap="${blk.start}" data-act="${x.id}" aria-pressed="${g?.act === x.id}">${esc(x.label)}</button>`).join("");
+            const what = !g ? "" : g.o
+              ? `<span class="title">${esc(actInfo(g.act).label)} at ${esc(g.o.place.name)}</span>
+                 <span class="sub">${g.session} min${g.checked ? ` · ${g.o.there ? `${g.o.there} min walk` : "you're there"}` : " · walk not timed"} · ${meter(L.visitWords(g.o).peak, true)}</span>`
+              : `<span class="sub">Nothing fits for ${esc(actInfo(g.act).verb)} in this gap.</span>`;
+            return `<li class="blk is-free" style="min-height:${blk.height}px">${time}
+              <div class="body"><span class="free-len">Free · ${esc(L.durationText(blk.minutes))}</span>${what}
+                <div class="acts" role="group" aria-label="Suggest for">${acts}</div>
+                ${g?.o ? `<button class="btn primary" type="button" data-plan-gap="${blk.start}" data-act="${g.act}" data-minutes="${g.minutes}" data-start="${g.start}" data-place="${esc(g.o.place.place_id)}">Plan this</button>` : ""}</div>${nowLine}</li>`;
+          }).join("")}</ol>
+          <p class="fine">Suggestions use the same planner: the walk from where you are, then the activity. Busyness is simulated.</p></div>
         <p class="fine">${t.schedule ? `From ${esc(t.schedule.fileName)} · ` : "Only club meetings so far · "}${input}<label for="ics" style="cursor:pointer;color:var(--accent);font-weight:600">${t.schedule ? "Replace" : "Add your class calendar"}</label>${t.schedule ? ` · <button type="button" data-clear style="border:none;background:none;padding:0;color:var(--accent);font-weight:600;cursor:pointer">Clear</button>` : ""}</p>
         ${ui.scheduleMsg ? `<p class="chip warn" role="alert">${esc(ui.scheduleMsg)}</p>` : ""}
       </section>`;
     wireImport();
     $view.querySelector("[data-plan-now]")?.addEventListener("click", () => {
-      Object.assign(sentence, { start: null, picked: false, chosen: null });
+      Object.assign(sentence, { start: null, date: null, picked: false, chosen: null });
       go("#/");
     });
-    for (const b of $view.querySelectorAll("[data-plan-at]")) b.addEventListener("click", () => {
-      const s = Number(b.dataset.planAt), e = Number(b.dataset.planEnd);
-      const startMin = toMin(new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(s)));
-      Object.assign(sentence, { start: toHHMM(startMin), minutes: L.minutesBetween(s, e), picked: true, chosen: null });
-      go("#/");
+    for (const b of $view.querySelectorAll("[data-act][data-gap]")) b.addEventListener("click", () => {
+      ui2.gapAct[b.dataset.gap] = b.dataset.act; SCREENS.schedule();
+      $view.querySelector(`[data-gap="${b.dataset.gap}"][data-act="${b.dataset.act}"]`)?.focus();
     });
-    $view.querySelector("[data-toggle]").addEventListener("click", (e) => {
-      ui.showEvents = !ui.showEvents;
-      e.currentTarget.setAttribute("aria-expanded", ui.showEvents);
-      e.currentTarget.lastChild.textContent = `${ui.showEvents ? "Hide" : "Show"} classes and clubs (${t.events.length})`;
-      $view.querySelector("#events").toggleAttribute("inert", !ui.showEvents);
-      $view.querySelector("#events").classList.toggle("open", ui.showEvents);
+    for (const b of $view.querySelectorAll("[data-plan-gap]")) b.addEventListener("click", () => {
+      Object.assign(sentence, { start: b.dataset.start, date: isToday ? null : ui.day, minutes: Number(b.dataset.minutes), activity: b.dataset.act, picked: true, patch: {}, chosen: b.dataset.place });
+      go("#/answer");
+    });
+    for (const b of $view.querySelectorAll("[data-day]")) b.addEventListener("click", () => {
+      ui.day = b.dataset.day; SCREENS.schedule(); $view.querySelector(`[data-day="${ui.day}"]`)?.focus();
+    });
+    $view.querySelector("[data-locate]")?.addEventListener("click", async () => {
+      showLoader("Finding where you are"); await locate(); hideLoader(); SCREENS.schedule();
     });
     $view.querySelector("[data-clear]")?.addEventListener("click", () => {
       if (!confirm("Clear your imported calendar from this browser? Saved club meetings stay.")) return;

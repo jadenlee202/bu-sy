@@ -136,3 +136,35 @@ export function hoursText(day, formatPeriod) {
   if (day.status === "scheduled") return day.periods.map(formatPeriod).join(", ") + (day.assumed ? " (assumed)" : "");
   return { closed: "Closed", unpublished: "Not published yet", not_applicable: "—" }[day.status] ?? "Unverified";
 }
+
+// ---------- the day map (Schedule) ----------
+/** A suggestion fills a gap with one sensible session, not the whole gap: nobody eats for three hours. */
+export const SESSION_CAP = { eat: 45, workout: 75, study: 120 };
+/** Minutes to plan for a gap: the walk there plus at most one session, never more than the gap. */
+export const gapPlanMinutes = (gapMinutes, walk, activity) => Math.min(gapMinutes, (walk ?? 0) + (SESSION_CAP[activity] ?? gapMinutes));
+export const MEALS = [[11 * 60, 14 * 60], [17 * 60, 20 * 60]];   // lunch and dinner, campus minutes of the day
+/** What to suggest first for a gap: a meal when it overlaps lunch or dinner, otherwise study, then a workout. */
+export function gapOrder(startMin, endMin) {
+  return MEALS.some(([a, b]) => startMin < b && endMin > a) ? ["eat", "study", "workout"] : ["study", "workout", "eat"];
+}
+
+/**
+ * The day as blocks in time order, from availability.daySegments() plus the day's events:
+ * busy blocks carry the titles of the events inside them (and whether any is a club meeting),
+ * free ones say whether they're long enough to plan ("free"), too short ("short") or already over ("past").
+ * Heights follow the length (1 px per minute) with a floor so short blocks stay readable.
+ */
+export function dayBlocks(segments, events, now, { pxPerMin = 1, floor = { busy: 48, free: 132, short: 30, past: 30 } } = {}) {
+  return segments.map((s) => {
+    const minutes = Math.round((s.end - s.start) / 60000);
+    const over = s.end <= now;
+    const kind = s.kind === "busy" ? "busy" : s.kind === "available" ? "free" : s.kind === "short" ? "short" : "past";
+    const inside = kind === "busy" ? events.filter((e) => !e.free && e.start < s.end && e.end > s.start) : [];
+    return {
+      kind, start: s.start, end: s.end, minutes, over: over || kind === "past",
+      titles: [...new Set(inside.map((e) => e.title))], club: inside.some((e) => e.source === "club"),
+      height: Math.max(floor[kind] ?? 30, Math.round(minutes * pxPerMin)),
+      nowAt: now >= s.start && now < s.end ? (now - s.start) / (s.end - s.start) : null,
+    };
+  });
+}

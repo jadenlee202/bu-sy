@@ -83,11 +83,11 @@ test("an imported schedule fills in free time; a bad file keeps the old one", as
   await expect(page.locator(".now-card")).toContainText("3:00 PM – 4:00 PM");
   await expect(page.locator(".now-card")).toContainText("then CS 111 Lecture");
 
-  const toggle = page.getByRole("button", { name: /classes and clubs \(2\)/ });
-  await expect(page.locator("#events")).toHaveAttribute("inert", "");
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(page.locator("#events")).not.toHaveAttribute("inert", "");
+  // the day map: classes as busy blocks, a suggestion in every free gap
+  await expect(page.locator(".blk.is-busy")).toHaveCount(2);
+  await expect(page.locator(".blk.is-busy").first()).toContainText("BI 108 Lab");
+  await expect(page.locator(".blk.is-free").first()).toContainText(/at (Mugar Library|Marciano Commons|West Campus Dining|Warren Towers Dining|FitRec)/);
+  await expect(page.locator(".now-line")).toHaveCount(1);
 
   await page.locator("#ics").setInputFiles({ name: "notes.ics", mimeType: "text/calendar", buffer: Buffer.from("not a calendar") });
   await expect(page.getByRole("alert")).toContainText("previous schedule is unchanged");
@@ -209,5 +209,41 @@ test("navigating faster than the page transitions raises no errors", async ({ pa
   }
   await expect(page.locator(".sentence")).toBeVisible();
   await page.waitForTimeout(600);
+  expect(errors).toEqual([]);
+});
+
+
+test("the week strip shows seven days; a later day's gaps get suggestions you can plan", async ({ page }) => {
+  const errors = browserErrors(page);
+  await onboard(page);
+  await page.locator('.tabs a[data-tab="schedule"]').click();
+  await page.locator("#ics").setInputFiles({ name: "week.ics", mimeType: "text/calendar", buffer: ics([
+    ["m", "CS 111 Lecture", "20261026T160000", "20261026T171500"],
+    ["t1", "PS 101 Lecture", "20261027T093000", "20261027T104500"],
+    ["t2", "MA 123 Discussion", "20261027T140000", "20261027T150000"]]) });
+  await expect(page.locator(".week .day")).toHaveCount(7);
+  await expect(page.locator('.week .day[aria-pressed="true"]')).toContainText("Today");
+  await page.getByRole("button", { name: "Use my location for walks" }).click();
+  await expect(page.locator(".blk.is-free").first()).toContainText("min walk");
+  await page.locator('.week .day[data-day="2026-10-27"]').click();
+  await expect(page.locator(".blk.is-busy")).toHaveCount(2);
+  await expect(page.locator(".blk.is-busy").nth(0)).toContainText("PS 101 Lecture");
+  await expect(page.locator(".now-line")).toHaveCount(0);                     // not today
+  await expect(page.locator(".now-card")).toHaveCount(0);
+  // the gap over lunch suggests eating first; switching it to study re-plans just that gap
+  const lunch = page.locator(".blk.is-free").nth(1);                             // 10:45 AM – 2:00 PM
+  await expect(lunch).toContainText("Eat at");
+  await expect(lunch).toContainText(/\b45 min\b/);                            // one meal, not the whole gap
+  await lunch.getByRole("button", { name: "Study" }).click();
+  await expect(page.locator(".blk.is-free").nth(1)).toContainText("Study at");
+  await page.locator(".blk.is-free").nth(1).getByRole("button", { name: "Plan this" }).click();
+  await expect(page.locator(".place")).toBeVisible();
+  await expect(page.locator(".steps")).toContainText("Study until");
+  await expect(page.locator(".what")).toContainText("120 min");             // a two-hour study block inside the gap
+  await page.getByRole("link", { name: "Change" }).click();
+  await expect(page.locator(".chip.free")).toContainText("Planning Tue, Oct 27");
+  await page.getByRole("button", { name: "Use now" }).click();
+  await expect(page.locator(".chip.free")).not.toContainText("Planning");
+  await expect(page.locator(".chip.free")).toContainText("Free until 4:00 PM");   // back to now: Monday 3 PM is free until CS 111
   expect(errors).toEqual([]);
 });

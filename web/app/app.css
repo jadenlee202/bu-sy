@@ -125,6 +125,39 @@ button.row { width: calc(100% + 16px); border: none; background: none; text-alig
 .lvl[data-level="quiet"] { color: var(--free); }
 .lvl[data-level="moderate"] { color: #8A4B00; }
 .lvl[data-level="busy"] { color: var(--accent); }
+/* schedule: the week strip */
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.day { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 0; border: 1px solid transparent; border-radius: 14px;
+  background: none; cursor: pointer; color: var(--ink); min-width: 0; transition: background-color var(--fast) ease, transform var(--fast) var(--ease); }
+.day span { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.day b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.day i { font-style: normal; font-size: 10.5px; font-weight: 600; color: var(--free); white-space: nowrap; }
+.day:hover { background: var(--surface); }
+.day:active { transform: scale(0.95); }
+.day[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.day[aria-pressed="true"] span, .day[aria-pressed="true"] i { color: #fff; }
+.linkish { border: none; background: none; padding: 0; font: inherit; font-weight: 700; color: inherit; text-decoration: underline; cursor: pointer; }
+
+/* schedule: the day map — your calendar in time order, a suggestion in every free gap */
+.daymap { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.blk { position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
+.blk > time { font-size: 12px; font-weight: 600; color: var(--muted); padding-top: 10px; font-variant-numeric: tabular-nums; }
+.blk .body { display: flex; flex-direction: column; gap: 4px; border-radius: 14px; padding: 10px 12px; min-width: 0; }
+.blk .title { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.blk .sub { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.blk.is-busy .body { background: var(--busy); }
+.blk.is-club .body { background: var(--accent-soft); }
+.blk.is-free .body { background: var(--surface); border: 1.5px dashed #BFD3CA; gap: 6px; }
+.blk.is-free .free-len { font-size: 12px; font-weight: 700; color: var(--free); letter-spacing: 0.02em; text-transform: uppercase; }
+.blk.is-short .body, .blk.is-past .body { padding: 6px 12px; background: transparent; border: 1px dashed var(--line); }
+.blk.over { opacity: 0.55; }
+.blk .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.chip-btn { min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--ground); font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.chip-btn[aria-pressed="true"] { background: var(--free-soft); border-color: #BFD3CA; color: var(--free); }
+.blk .btn.primary { min-height: 44px; font-size: 15px; margin-top: 4px; }
+.now-line { position: absolute; left: 54px; right: 0; height: 0; border-top: 2px solid var(--accent); pointer-events: none; z-index: 1; }
+.now-line b { position: absolute; left: -54px; top: -9px; font-size: 11px; font-weight: 700; color: var(--accent); background: var(--ground); padding-right: 4px; text-transform: uppercase; }
+
 /* place page: busyness through the sample day, one bar per hour */
 .day-chart { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; height: 120px; align-items: end; padding: 8px 0 18px; }
 .day-chart .col { position: relative; height: 100%; display: flex; align-items: flex-end; }

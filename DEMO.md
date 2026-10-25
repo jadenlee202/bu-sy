@@ -1,6 +1,6 @@
 # BU-sy demo runbook
 
-Checks (October 25, 2026): 167 Python, 199 JavaScript and 14 Chromium browser tests pass locally,
+Checks (October 25, 2026): 167 Python, 202 JavaScript and 16 Chromium browser tests pass locally,
 and CI runs the same suites on every push; the Pages deploy waits for them. The browser tests drive the app's
 flows (onboarding, planning from a simulated location, location refused, nothing fits, schedule import, Explore,
 place and club pages, About, directions), check that no screen scrolls sideways from 320 to 1280 px, and test the
@@ -22,7 +22,7 @@ python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
 .venv\Scripts\python -m pytest -q                           # expect 167 passed
 npm ci                                                      # dev tools for the JS checks
-npm test                                                    # expect 199 passed
+npm test                                                    # expect 202 passed
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 
@@ -61,7 +61,8 @@ Location → *Other…* → **42.351012, -71.107992** (Mugar), or deny location 
 4. **Open directions**: the pin drops and bursts, then Google Maps opens the walking route.
 5. Nothing fits: change to **30 min** to **eat** from far away (or set the Sensors location off campus). BU-sy says
    why and offers a fix the engine has checked (*Extend to N minutes*).
-6. **Schedule**: upload an `.ics` file. *Free now* and *Later today* appear; **Plan this time** fills the sentence.
+6. **Schedule**: upload an `.ics` file. A week strip shows free hours per day; tap a day to see its map: classes and
+   clubs as blocks, each gap with a suggestion (Study / Eat / Work out). **Plan this** plans that gap on that day.
 7. **Explore** → **Mugar Library**: open status, the busyness meter, the sample day hour by hour, this week's hours,
    official sources. Back → **Clubs** → a club: **Add to calendar**, then join with an `@bu.edu` email.
 8. **About the data**: every dataset with its licence, what's illustrative, how location is used.

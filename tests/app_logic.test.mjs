@@ -113,3 +113,38 @@ test("hours read in words, never guessed", () => {
   assert.equal(L.hoursText({ status: "unpublished", periods: [] }, fmt), "Not published yet");
   assert.equal(L.hoursText({ status: "unverified", periods: [] }, fmt), "Unverified");
 });
+
+test("a gap over lunch or dinner suggests a meal first; others suggest study, then a workout", () => {
+  assert.deepEqual(L.gapOrder(12 * 60, 13 * 60), ["eat", "study", "workout"]);
+  assert.deepEqual(L.gapOrder(10 * 60 + 15, 11 * 60 + 30), ["eat", "study", "workout"]);   // overlaps lunch
+  assert.deepEqual(L.gapOrder(15 * 60, 16 * 60), ["study", "workout", "eat"]);
+  assert.deepEqual(L.gapOrder(20 * 60, 22 * 60), ["study", "workout", "eat"]);             // after dinner
+});
+
+test("the day map keeps events inside busy blocks and marks now", () => {
+  const M = 60000, H = 60 * M;
+  const segs = [
+    { start: 8 * H, end: 9 * H, kind: "past" },
+    { start: 9 * H, end: 10.25 * H, kind: "busy" },
+    { start: 10.25 * H, end: 13 * H, kind: "available" },
+    { start: 13 * H, end: 13 * H + 10 * M, kind: "short" },
+  ];
+  const events = [{ start: 9 * H, end: 10.25 * H, title: "WR 120" }, { start: 9.5 * H, end: 10 * H, title: "Club call", source: "club" },
+    { start: 9 * H, end: 10 * H, title: "Free hold", free: true }];
+  const b = L.dayBlocks(segs, events, 11 * H);
+  assert.deepEqual(b.map((x) => x.kind), ["past", "busy", "free", "short"]);
+  assert.deepEqual(b[1].titles, ["WR 120", "Club call"]);       // free events aren't busy
+  assert.equal(b[1].club, true);
+  assert.equal(b[1].over, true);                                // already finished
+  assert.equal(b[2].minutes, 165);
+  assert.ok(Math.abs(b[2].nowAt - (0.75 / 2.75)) < 1e-9);        // the now line sits inside the gap
+  assert.equal(b[3].height, 30);                                // short blocks keep a readable floor
+  assert.equal(b[2].height, 165);
+});
+
+test("a gap is filled with one sensible session plus the walk, never more than the gap", () => {
+  assert.equal(L.gapPlanMinutes(195, 12, "eat"), 57);       // 12 min walk + a 45-minute meal
+  assert.equal(L.gapPlanMinutes(195, 12, "study"), 132);
+  assert.equal(L.gapPlanMinutes(50, 12, "workout"), 50);    // the gap is shorter than a full session
+  assert.equal(L.gapPlanMinutes(90, null, "eat"), 45);      // walk unknown: just the session
+});
