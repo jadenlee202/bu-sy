@@ -40,7 +40,53 @@ export function visitWords(o) {
   const ordered = levels.filter((l, i) => l !== levels[i - 1]);
   if (ordered.every((l) => l === "unknown")) return { level: "unknown", text: "no busyness data" };
   const known = ordered.filter((l) => l !== "unknown");
-  return { level: known[0], text: known.length === 1 ? known[0] : known.join(", then ") };
+  return { level: known[0], text: known.length === 1 ? known[0] : known.join(", then "), peak: peakLevel(known) };
+}
+
+// ---------- busyness icon: a small crowd, one more person per level ----------
+export const BARS = { quiet: 1, moderate: 2, busy: 3 };
+/** The busiest known level in a list (the icon shows the worst part of a visit). */
+export const peakLevel = (levels) => levels.reduce((a, l) => ((BARS[l] ?? 0) > (BARS[a] ?? 0) ? l : a), "unknown");
+
+/**
+ * A crowd of three people: 1 filled for quiet, 2 for moderate, 3 for busy, none for closed or no
+ * data. Never colour alone: the word sits beside it, and the label names the level for screen readers.
+ */
+export function busyIcon(level, label = level) {
+  const n = BARS[level] ?? 0;
+  const people = [0, 1, 2].map((i) => {
+    const x = 5 + i * 10;
+    return `<g class="${i < n ? "on" : ""}" style="--i:${i}"><circle cx="${x}" cy="3.4" r="2.6"/><path d="M${x - 4.2} 14v-1.6a4.2 4.2 0 0 1 8.4 0V14z"/></g>`;
+  }).join("");
+  return `<svg class="busy-icon" data-level="${level}" viewBox="0 0 30 14" width="30" height="14" role="img" aria-label="Busyness: ${label}">${people}</svg>`;
+}
+
+/** Share of the illustrative capacity, as a whole percent from 0 to 100; null without both numbers. */
+export function percentFull(count, capacity) {
+  if (count == null || !capacity) return null;
+  return Math.max(0, Math.min(100, Math.round((count / capacity) * 100)));
+}
+
+/** The words for a level: "quiet", "moderate", "busy", "closed", or "no data". */
+export const levelWord = (level) => (level === "unknown" ? "no data" : level);
+
+/**
+ * The busyness badge: crowd icon, the level in words and, when known, how full it is.
+ * `size` "lg" is the headline version on a place's page.
+ */
+export function busyBadge(level, { pct = null, text = levelWord(level), label = text, size = "" } = {}) {
+  const full = pct != null && BARS[level] ? `<span class="pct">${pct}% full</span>` : "";
+  const word = text.charAt(0).toUpperCase() + text.slice(1);
+  return `<span class="busy-badge${size ? ` ${size}` : ""}" data-level="${level}">${busyIcon(level, label)}<span class="lvl" data-level="${level}">${word}</span>${full}</span>`;
+}
+
+/**
+ * The quietest open hour from `fromMinute` on, from hourly slots { minute, level, pct, open }.
+ * Ties go to the earliest; null when nothing open is left today.
+ */
+export function quietestFrom(slots, fromMinute) {
+  return slots.filter((s) => s.open && BARS[s.level] && s.minute + 60 > fromMinute)
+    .reduce((best, s) => (!best || BARS[s.level] < BARS[best.level] || (BARS[s.level] === BARS[best.level] && s.pct < best.pct) ? s : best), null);
 }
 
 /** The request the shared engine evaluates, built from the sentence plus remembered defaults. */
