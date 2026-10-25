@@ -14,10 +14,11 @@ Occupancy inputs and the simulation built from them. Nothing here is live, and n
 | `robod_import.json`, `robod_quality.md` | That import's source record, statistics, gaps and gap policy. | — |
 | `clean_novanimal_transactions.csv` | Purchases per canteen per 15 minutes (`source_location,interval_start,transaction_count`) at two ZHAW canteens (2017), made by `import_novanimal.py`. Purchases, **not** people. Reference input for dining lunch. | **Yes**, but not BU |
 | `novanimal_import.json`, `novanimal_quality.md` | That import's source record, transaction grouping, timestamp evidence and statistics. | — |
-| `raw/robod/`, `raw/novanimal/` | The publishers' original files, unchanged, with `SOURCE.json` (checksums, retrieval) and a licence README. | — |
+| `raw/robod/`, `raw/novanimal/` | The publishers' original files, unchanged, with `SOURCE.json` (checksums, retrieval) and a license README. | — |
 | `raw/campus_gym/` | The publisher's `data.csv`, unchanged, with `SOURCE.json` (URL, version, retrieval time, checksums). | Yes |
 
-Columns everywhere: `facility_id,timestamp,occupancy_count`.
+Columns in every occupancy CSV: `facility_id,timestamp,occupancy_count`. The NOVANIMAL file counts
+purchases instead, so its columns differ (above).
 
 ## COD (real historical data)
 
@@ -39,7 +40,7 @@ files in this folder are shared under the same license with this attribution.
 | Days | 165, weekdays only (Mon 34, Tue 34, Wed 35, Thu 30, Fri 32) |
 | Counts | 0–22 people |
 
-**Things to know before analysing it**
+**Things to know before analyzing it**
 
 - **Event-based, not hourly.** A row is written when someone enters or leaves, so busy periods have many
   rows and quiet ones have few. Averaging rows would overweight busy periods; we use time-weighted
@@ -80,9 +81,9 @@ If Kaggle asks you to sign in, download `data.csv` from the dataset page yoursel
 | Cadence | median 10 min; 4,862 gaps of 15–25 min (one missed reading); 495 gaps over 30 min, 39 over 6 h, the longest 25 days (Jan–Feb 2017) |
 | Nights | on most nights nothing is recorded from about 1:00 to 5:20 AM |
 | Field checks | `timestamp`, `day_of_week`, `hour`, `month`, `is_weekend` all agree with `date` |
-| Order | 1 row out of order (2016-11-06, the repeated 1 AM hour labelled −08:00 twice) |
+| Order | 1 row out of order (2016-11-06, the repeated 1 AM hour labeled −08:00 twice) |
 
-**Things to know before analysing it**
+**Things to know before analyzing it**
 
 - **Timestamps.** `date` is the full local datetime with a UTC offset (−07:00 or −08:00, switching on US
   daylight-saving dates). BU-sy keeps that offset, assigns no named timezone, never converts to Boston time,
@@ -136,7 +137,7 @@ period, transformation, parameter and limit; served at `/api/sources`, exported 
 **FitRec, step by step.** Take the gym's readings for 2016-12-05 (source local time, −08:00, kept in the
 source file). Every 15 minutes from 6 AM to midnight (FitRec's sample hours) take the latest reading at or
 before that time if it is at most 30 minutes old, else leave the slot empty (never zero). Put each slot at
-the same clock time on the demo Monday: a relabelling, not a timezone conversion. Multiply by 9.0625, which
+the same clock time on the demo Monday: a relabeling, not a timezone conversion. Multiply by 9.0625, which
 maps the gym's typical high (72 people) to 75% of FitRec's illustrative capacity (870), the busy threshold.
 FitRec is one building-level count: there are no per-area series (courts, pools, rooms), because nothing
 in the data could say where in the building people are.
@@ -215,3 +216,7 @@ day and the Nov 26–28 Thanksgiving closure as separate `holiday` entries). Mug
 halls have known **access** but their full weekly hours were not pinned to exact dates, so those
 days stay `null` (unknown) rather than guessed. Remaining gaps are listed per-facility in
 `open_questions` and surfaced in the app's "Facility info" section.
+
+This module was last checked on 2026-10-24. The schedules the app shows now come from
+`web/data/hours.json`, checked 2026-10-25, which also has verified, date-bounded hours for Mugar
+(October 25–31) and the dining halls' meal periods (see the main README).

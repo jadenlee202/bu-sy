@@ -16,7 +16,8 @@ On Windows PowerShell use `npm.cmd` / `npx.cmd` if execution policy blocks
 the PowerShell shims. On Linux CI, install browser system dependencies with
 `npx playwright install --with-deps chromium`. Playwright starts and stops its
 own static server on 127.0.0.1:4173; leave that port free. Service workers are
-blocked in tests so a cached release cannot hide a checkout regression.
+blocked in the layout and motion tests so a cached release cannot hide a checkout
+regression; `tests/browser/service-worker.spec.js` turns the worker on to test it.
 
 ## Intentional contract
 
@@ -95,5 +96,5 @@ errors fail the layout checks. Test output directories are gitignored.
 `pages.yml` calls it on the same revision; its deploy job `needs: checks`
 waits for Python, JS/CSS and Chromium smoke tests. A failed check prevents
 deployment, including manual main deployments. Pages retains its normal
-permissions and `github-pages` environment. This branch prepares the workflow
-only; it does not run CI, publish the site or change repository protections.
+permissions and `github-pages` environment. Repository branch protections are
+unchanged.

@@ -13,7 +13,7 @@ a student club directory are still there as secondary screens.
 
 Independent student project, **not affiliated with Boston University**.
 
-> **Data honesty:** busyness at BU-named places is **simulated** (labelled *Simulated*): FitRec follows one
+> **Data honesty:** busyness at BU-named places is **simulated** (labeled *Simulated*): FitRec follows one
 > recorded day at a real campus gym elsewhere; Mugar follows people counts in one small library room in
 > Singapore (ROBOD); dining halls follow canteen purchases in Switzerland at lunch (NOVANIMAL), turned into
 > diners with an assumed 30-minute meal, while breakfast and dinner stay modeled. All of it is rescaled to
@@ -71,7 +71,7 @@ The API allows cross-origin requests (`BUSY_CORS_ORIGINS` restricts them). Cooki
 allowed across origins for the exact origins listed there, which the Google Calendar session needs
 when the site and API are on different origins.
 
-Current operating-hour cards may repeat a published weekly pattern outside its dates, labelled Assumed. Fenway opts out. These assumptions do not establish historical operating hours for the replay.
+Current operating-hour cards may repeat a published weekly pattern outside its dates, labeled Assumed. Fenway opts out. These assumptions do not establish historical operating hours for the replay.
 
 ### Calendar: your .ics schedule
 
@@ -93,7 +93,7 @@ connection. The file is parsed **in the browser** with [ical.js](https://github.
   names such as Outlook's `Eastern Standard Time` via the file's own `VTIMEZONE`), UTC stays UTC,
   and floating times and all-day dates use America/New_York. Weekly classes keep their local time
   across daylight-saving changes. Recurrence rules, `EXDATE`, moved occurrences (`RECURRENCE-ID`)
-  and cancellations are honoured; events marked free (`TRANSP:TRANSPARENT`, Outlook *Free*) and
+  and cancellations are honored; events marked free (`TRANSP:TRANSPARENT`, Outlook *Free*) and
   cancelled events aren't busy. Occurrences are expanded from 31 days before the import to 366 days
   after it; dates outside that range are shown as unknown, never as free.
 - **No upload = empty schedule:** without an uploaded file, the Calendar page, the place cards and
@@ -124,8 +124,7 @@ file, handled in the browser.
 
 Each place's detail page has a *Find a time to eat* (dining) or *Find free time here* card that
 searches 7 days from a chosen date. On Places, *Open now* uses published hours; with a schedule
-uploaded, *Open during my free time* and *Serving breakfast/brunch/lunch/dinner during my free
-time* filter by date and minimum length. Places whose hours can't be checked are listed as
+uploaded, *Open during my free time* filters by date and minimum length. Places whose hours can't be checked are listed as
 unchecked rather than hidden, and historical references are never suggested.
 
 The footer always names the data source (*built-in demo files* or *BU-sy API*). If a requested API can't be
@@ -145,9 +144,14 @@ Setup, model download and how it works: [`web/counter/README.md`](web/counter/RE
 
 ```bash
 python -m pytest                        # API, clubs, hours, calendar OAuth/freebusy, data loaders + gym import, analytics
-node --test "tests/*.test.mjs"          # planner engine, static clubs, .ics import + free time, people counter (Node 22+, no packages; or: npm test)
+npm ci                                  # dev tools only (PostCSS, Playwright); Node 22+
+npm run check:css                       # strict CSS parse + merge-conflict markers
+npm test                                # planner engine, static clubs, .ics import + free time, CSS validator, people counter
+npx playwright install chromium
+npm run test:browser                    # phone-frame layout, motion and service worker in Chromium
 ```
-CI runs both (`.github/workflows/tests.yml`).
+CI runs all of them (`.github/workflows/tests.yml`), and the Pages deploy waits for them.
+`npm test` needs `npm ci` first: the CSS validator test runs PostCSS.
 
 ## How "What fits now?" works
 
@@ -186,7 +190,7 @@ replays (Mon, Oct 19, 2026, read from the histories), and looks hours up for tha
   `effectiveThrough`, or is a listed special date (special closures and adjusted hours win). Weekly hours
   alone never count as verified. Eating at a dining hall uses the **meal-service** periods (kept inside
   verified building hours); studying or working out uses **building** hours.
-- Otherwise the **illustrative** demo hours from the campus data, labelled as not official, with the reason
+- Otherwise the **illustrative** demo hours from the campus data, labeled as not official, with the reason
   (for example *BU hours not published for Monday, Oct 19*).
 - With neither, hours are **unknown** and the place goes to *Hours unknown*, never a confirmed fit.
 
@@ -344,7 +348,7 @@ It lives in **Places** as a data demo and is excluded from campus suggestions.
   capacity is unknown; no "% full";
 - a week of selectable days (also in static mode) with replay time and observation time shown separately.
 
-It is labelled "Historical gym data — not live and not BU FitRec." To set it up or refresh it:
+It is labeled "Historical gym data — not live and not BU FitRec." To set it up or refresh it:
 `python data/import_campus_gym.py --download`, then `python server/export_static.py`
 (details, statistics and license in [`data/README.md`](data/README.md#campus-gym-real-historical-reference-not-bu)).
 The app runs normally without it.
@@ -369,9 +373,9 @@ If the data can't load, the planner shows an error with a retry. It never falls 
 
 ## Publish on GitHub Pages
 
-1. Push to `main`.
-2. **Settings → Pages → Source: GitHub Actions.** Free accounts need a public repo for Pages.
-3. Every push to `main` deploys `web/` (`.github/workflows/pages.yml`).
+1. **Settings → Pages → Source: GitHub Actions.** Free accounts need a public repo for Pages.
+2. Push to `main`.
+3. Every push to `main` deploys `web/` (`.github/workflows/pages.yml`) once the checks in `tests.yml` pass.
 4. Each deploy also writes `web/version.json` from `main`'s history (`server/write_version.py`), so the
    **version note** in the page's corner (bottom right on wide screens, under the footer on phones) shows the
    new version and opens the full history. Every merge or direct commit on `main` is one version. The file is
@@ -393,8 +397,12 @@ web/       the site: index.html, styles.css, js/
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
            counter/      on-device people counter (detector, tracker, line crossing)
-tests/     test_api.py, test_campus_gym.py, test_clubs.py (pytest); recommend / planner_features / plan_prefs / clock / hours / clubs_static / ics / counter .test.mjs (node --test)
+           sw.js, manifest.webmanifest  offline support and install metadata
+           vendor/       ical.js (unmodified)
+tests/     test_*.py (pytest), *.test.mjs (node --test), browser/*.spec.js (Playwright)
+tools/     check-css.mjs, serve-web.mjs (test server), manual-counting/ pilot tool
 DEMO.md    demo runbook: startup, demo sequence, checks, recovery
+LAYOUT_CHECKS.md  phone-frame contract and browser regression checks
 ```
 
 ### API
@@ -410,7 +418,7 @@ DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 ## Clubs (secondary)
 
 A directory of student clubs: browse and filter, view details, sign up, see *My clubs*, and (for a
-club's creator) edit it and approve, decline or waitlist applications. Sample clubs are labelled and
+club's creator) edit it and approve, decline or waitlist applications. Sample clubs are labeled and
 aren't real BU organizations. What it does **not** protect:
 
 - **No accounts.** A device is a random ID kept in the browser: *identification, not authentication*.
@@ -432,7 +440,7 @@ aren't real BU organizations. What it does **not** protect:
    but neither says anything about BU: a pilot needs BU's own data, a documented counting method and an
    agreed capacity or reference.
 2. **Verified hours**, from published schedules, with `hours_basis: "verified"`. FitRec is tracked as one
-   building: per-court, pool or room occupancy, classes and reservations aren't modelled, because no data
+   building: per-court, pool or room occupancy, classes and reservations aren't modeled, because no data
    could support them.
 3. **Real walking estimates**, from campus routing data or a maps service, replacing `sample_travel_times.csv`.
 4. **Verified amenities** (outlets, quiet floors) from the facilities themselves.
