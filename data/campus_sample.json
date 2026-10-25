@@ -1,53 +1,483 @@
 {
-  "_about": "ILLUSTRATIVE planner metadata for the demo, made by the team. Hours, amenities and locations are not verified BU facts. Walking times live in sample_travel_times.csv. Loaded and validated by server/campus.py.",
+  "_about": "Planner hours, amenity flags and walking allowances are illustrative. Each metadata field carries its own official source and check status; current operating schedules are separate from the historical/demo Monday. Walking times live in sample_travel_times.csv. Loaded by server/campus.py.",
   "label": "Demo · Simulated campus data",
   "demo_day": "Monday",
   "default_buffer": 10,
   "activities": [
-    { "id": "study", "label": "Study", "verb": "study", "noun": "study session", "default_min": 30 },
-    { "id": "eat", "label": "Eat", "verb": "eat", "noun": "meal", "default_min": 20 },
-    { "id": "workout", "label": "Work out", "verb": "work out", "noun": "workout", "default_min": 35 }
+    {
+      "id": "study",
+      "label": "Study",
+      "verb": "study",
+      "noun": "study session",
+      "default_min": 30
+    },
+    {
+      "id": "eat",
+      "label": "Eat",
+      "verb": "eat",
+      "noun": "meal",
+      "default_min": 20
+    },
+    {
+      "id": "workout",
+      "label": "Work out",
+      "verb": "work out",
+      "noun": "workout",
+      "default_min": 35
+    }
   ],
-  "amenity_labels": { "outlets": "Outlets", "quiet_space": "Quiet space" },
+  "amenity_labels": {
+    "outlets": "Outlets",
+    "quiet_space": "Quiet space"
+  },
   "locations": [
-    { "id": "mugar", "name": "Mugar Library" },
-    { "id": "warren", "name": "Warren Towers" },
-    { "id": "marciano", "name": "Marciano Commons" },
-    { "id": "fitrec", "name": "FitRec" },
-    { "id": "west", "name": "West Campus" },
-    { "id": "fenway", "name": "Fenway Campus" }
+    {
+      "id": "mugar",
+      "name": "Mugar Library"
+    },
+    {
+      "id": "warren",
+      "name": "Warren Towers"
+    },
+    {
+      "id": "marciano",
+      "name": "Marciano Commons"
+    },
+    {
+      "id": "fitrec",
+      "name": "FitRec"
+    },
+    {
+      "id": "west",
+      "name": "West Campus"
+    },
+    {
+      "id": "fenway",
+      "name": "Fenway Campus"
+    }
   ],
   "facilities": {
-    "mugar-synthetic": { "location": "mugar", "hours": [["08:00", "24:00"]] },
-    "warren-dining-synthetic": { "location": "warren", "hours": [["07:00", "23:00"]] },
-    "marciano-dining-synthetic": { "location": "marciano", "hours": [["07:00", "23:00"]] },
-    "west-dining-synthetic": { "location": "west", "hours": [["07:00", "23:00"]] },
-    "fenway-dining-synthetic": { "location": "fenway", "hours": null },
-    "fitrec-synthetic": { "location": "fitrec", "hours": [["06:00", "24:00"]] }
+    "mugar-synthetic": {
+      "location": "mugar",
+      "hours": [
+        [
+          "08:00",
+          "24:00"
+        ]
+      ],
+      "metadata": {
+        "identity": {
+          "text": "Mugar Memorial Library",
+          "url": "https://www.bu.edu/library/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        },
+        "plannerHours": {
+          "text": "Illustrative Monday schedule for the October 19, 2026 simulation. Current operating hours are separate; check the dated schedule before a real visit.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "studyAmenities": {
+          "text": "BU documents a computing lab in Mugar. Outlets and quiet-space flags in this planner remain illustrative; no available-seat claim.",
+          "url": "https://www.bu.edu/summer/summer-sessions/campus-resources/computing-resources/",
+          "status": "partial",
+          "checked": "2026-10-25"
+        },
+        "access": {
+          "text": "Check current library entry requirements. Public exhibition visitors need prior approval, photo ID and check-in; dining eligibility does not establish library access.",
+          "url": "https://www.bu.edu/library/news-events/news-updates/",
+          "status": "partial",
+          "checked": "2026-10-25",
+          "group": "library"
+        },
+        "address": {
+          "text": "771 Commonwealth Avenue, Boston, MA 02215",
+          "url": "https://www.bu.edu/library/news-events/news-updates/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        },
+        "currentHours": {
+          "text": "Current weekday library schedule not independently confirmed in this time-boxed check. See the dated weekly hours on the place page; do not transfer term hours to the demo.",
+          "url": "https://www.bu.edu/library/",
+          "status": "unknown",
+          "checked": "2026-10-25"
+        }
+      }
+    },
+    "warren-dining-synthetic": {
+      "location": "warren",
+      "hours": [
+        [
+          "07:00",
+          "23:00"
+        ]
+      ],
+      "metadata": {
+        "identity": {
+          "text": "The Fresh Food Co. at Warren Towers",
+          "url": "https://www.bu.edu/dining/location/warren/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        },
+        "plannerHours": {
+          "text": "Illustrative Monday schedule for the October 19, 2026 simulation. Current operating hours are separate; check the dated schedule before a real visit.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "studyAmenities": {
+          "text": "Planner amenities are illustrative; no seat or room availability is known.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "access": {
+          "text": "Check entry requirements for this visit and have an accepted meal or payment method. Payment acceptance alone does not verify unrestricted building or study access.",
+          "url": "https://www.bu.edu/dining/location/warren/",
+          "status": "partial",
+          "checked": "2026-10-25",
+          "group": "dining"
+        },
+        "payment": {
+          "text": "BU lists meals, guest meals, dining and convenience points, cash and credit cards.",
+          "url": "https://www.bu.edu/dining/location/warren/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        },
+        "currentHours": {
+          "text": "Published upcoming week: Mon–Thu breakfast 07:00–11:00, lunch 11:00–17:00, dinner 17:00–22:00. Fri dinner ends 21:00; Sat breakfast starts 09:00, lunch 11:00–17:00, dinner 17:00–21:00; Sun brunch 10:00–16:00, dinner 16:00–21:00. These dated meal periods are not October 19 historical hours.",
+          "url": "https://www.bu.edu/dining/location/warren/",
+          "status": "verified",
+          "checked": "2026-10-25",
+          "effectiveFrom": "2026-10-23",
+          "effectiveThrough": "2026-10-29"
+        },
+        "address": {
+          "text": "700 Commonwealth Avenue, Boston, MA 02215",
+          "url": "https://www.bu.edu/housing/living/moving/check-in-locations/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        }
+      }
+    },
+    "marciano-dining-synthetic": {
+      "location": "marciano",
+      "hours": [
+        [
+          "07:00",
+          "23:00"
+        ]
+      ],
+      "metadata": {
+        "identity": {
+          "text": "The Fresh Food Co. at Marciano Commons",
+          "url": "https://www.bu.edu/dining/location/marciano/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        },
+        "plannerHours": {
+          "text": "Illustrative Monday schedule for the October 19, 2026 simulation. Current operating hours are separate; check the dated schedule before a real visit.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "studyAmenities": {
+          "text": "Planner amenities are illustrative; no seat or room availability is known.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "access": {
+          "text": "Check entry requirements for this visit and have an accepted meal or payment method. Payment acceptance alone does not verify unrestricted building or study access.",
+          "url": "https://www.bu.edu/dining/location/marciano/",
+          "status": "partial",
+          "checked": "2026-10-25",
+          "group": "dining"
+        },
+        "payment": {
+          "text": "BU lists meals, guest meals, dining and convenience points, cash and credit cards.",
+          "url": "https://www.bu.edu/dining/location/marciano/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        },
+        "currentHours": {
+          "text": "Published upcoming week: Mon–Thu breakfast 07:00–11:00, lunch 11:00–17:00, dinner 17:00–21:00. Fri dinner ends 21:00; Sat breakfast starts 09:00, lunch 11:00–17:00, dinner 17:00–21:00; Sun brunch 10:00–16:00, dinner 16:00–21:00. These dated meal periods are not October 19 historical hours.",
+          "url": "https://www.bu.edu/dining/location/marciano/",
+          "status": "verified",
+          "checked": "2026-10-25",
+          "effectiveFrom": "2026-10-24",
+          "effectiveThrough": "2026-10-30"
+        },
+        "address": {
+          "text": "100 Bay State Road, Boston, MA 02215",
+          "url": "https://www.bu.edu/articles/2026/where-to-eat-when-youre-hungry-at-bu/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        }
+      }
+    },
+    "west-dining-synthetic": {
+      "location": "west",
+      "hours": [
+        [
+          "07:00",
+          "23:00"
+        ]
+      ],
+      "metadata": {
+        "identity": {
+          "text": "The Fresh Food Co. at West Campus",
+          "url": "https://www.bu.edu/cpo/project/west-campus-dining-expansion/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        },
+        "plannerHours": {
+          "text": "Illustrative Monday schedule for the October 19, 2026 simulation. Current operating hours are separate; check the dated schedule before a real visit.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "studyAmenities": {
+          "text": "Planner amenities are illustrative; no seat or room availability is known.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "access": {
+          "text": "Check entry requirements for this visit and have an accepted meal or payment method. Payment acceptance alone does not verify unrestricted building or study access.",
+          "url": "https://www.bu.edu/dining/location/west/",
+          "status": "partial",
+          "checked": "2026-10-25",
+          "group": "dining"
+        },
+        "currentHours": {
+          "text": "Retained dated schedule in hours.json was checked October 24. The large official location page could not be re-fetched in this verification pass. Do not apply its current week to October 19.",
+          "url": "https://www.bu.edu/dining/location/west/",
+          "status": "not_reverified",
+          "checked": "2026-10-25"
+        },
+        "payment": {
+          "text": "Confirm the accepted tenders on the official dining page before visiting.",
+          "url": "https://www.bu.edu/dining/location/west/",
+          "status": "unknown",
+          "checked": "2026-10-25"
+        },
+        "address": {
+          "text": "273 Babcock Street, Claflin Hall entrance, Boston, MA 02215",
+          "url": "https://www.bu.edu/cpo/project/west-campus-dining-expansion/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        }
+      }
+    },
+    "fenway-dining-synthetic": {
+      "location": "fenway",
+      "hours": null,
+      "metadata": {
+        "identity": {
+          "text": "Fenway Campus Center Dining Room / The Fenway Dining Hall",
+          "url": "https://www.bu.edu/dining/location/fenway/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        },
+        "plannerHours": {
+          "text": "Illustrative Monday schedule for the October 19, 2026 simulation. Current operating hours are separate; check the dated schedule before a real visit.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "studyAmenities": {
+          "text": "Planner amenities are illustrative; no seat or room availability is known.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "access": {
+          "text": "Check entry requirements for this visit and have an accepted meal or payment method. Payment acceptance alone does not verify unrestricted building or study access.",
+          "url": "https://www.bu.edu/dining/location/fenway/",
+          "status": "partial",
+          "checked": "2026-10-25",
+          "group": "dining"
+        },
+        "payment": {
+          "text": "The BU directory lists meal-plan meals, dining points and convenience points. Confirm current tender rules with the operator.",
+          "url": "https://www.bu.edu/dining/where-to-eat/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        },
+        "currentHours": {
+          "text": "BU links to the Fenway operator. Weekday and meal-period schedules were not reliably retrievable; hours remain unknown.",
+          "url": "https://www.bu.edu/dining/location/fenway/",
+          "status": "unknown",
+          "checked": "2026-10-25"
+        },
+        "address": {
+          "text": "Operator contact address is not verified as the dining entrance. Use the official facility page.",
+          "url": "https://www.bu.edu/dining/location/fenway/",
+          "status": "unknown",
+          "checked": "2026-10-25"
+        }
+      }
+    },
+    "fitrec-synthetic": {
+      "location": "fitrec",
+      "hours": [
+        [
+          "06:00",
+          "24:00"
+        ]
+      ],
+      "metadata": {
+        "identity": {
+          "text": "Fitness & Recreation Center (FitRec)",
+          "url": "https://www.bu.edu/fitrec/visit-us/hours/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        },
+        "plannerHours": {
+          "text": "Illustrative Monday schedule for the October 19, 2026 simulation. Current operating hours are separate; check the dated schedule before a real visit.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "studyAmenities": {
+          "text": "Planner amenities are illustrative; no seat or room availability is known.",
+          "url": null,
+          "status": "illustrative",
+          "checked": "2026-10-25"
+        },
+        "access": {
+          "text": "Full-time BU undergraduate and graduate student access includes membership; complete the student waiver and bring your Terrier Card. Other visitors need appropriate membership or entry arrangements.",
+          "url": "https://www.bu.edu/fitrec/about-us/fitrec-welcomes-new-terriers/frequently-asked-questions-and-things-you-need-to-know/",
+          "status": "verified",
+          "checked": "2026-10-25",
+          "group": "fitness"
+        },
+        "currentHours": {
+          "text": "September 2–December 10, 2026: Mon–Thu 06:00–23:00, Fri 06:00–22:00, Sat–Sun 08:00–22:00. October 12: 08:00–22:00. November 26–28: closed. Subject to change; building only.",
+          "url": "https://www.bu.edu/fitrec/visit-us/hours/",
+          "status": "verified",
+          "checked": "2026-10-25",
+          "effectiveFrom": "2026-09-02",
+          "effectiveThrough": "2026-12-10"
+        },
+        "address": {
+          "text": "915 Commonwealth Avenue, Boston, MA 02215",
+          "url": "https://www.bu.edu/fitrec/visit-us/directions-parking/",
+          "status": "verified",
+          "checked": "2026-10-25"
+        }
+      }
+    }
   },
   "places": [
-    { "facility_id": "mugar-synthetic", "activities": ["study"], "amenities": { "outlets": true, "quiet_space": true } },
-    { "facility_id": "marciano-dining-synthetic", "activities": ["eat", "study"], "amenities": { "outlets": true, "quiet_space": false } },
-    { "facility_id": "west-dining-synthetic", "activities": ["eat", "study"] },
-    { "facility_id": "warren-dining-synthetic", "activities": ["eat"] },
-    { "facility_id": "fenway-dining-synthetic", "activities": ["eat"] },
-    { "facility_id": "fitrec-synthetic", "activities": ["workout"] }
+    {
+      "facility_id": "mugar-synthetic",
+      "activities": [
+        "study"
+      ],
+      "amenities": {
+        "outlets": true,
+        "quiet_space": true
+      }
+    },
+    {
+      "facility_id": "marciano-dining-synthetic",
+      "activities": [
+        "eat",
+        "study"
+      ],
+      "amenities": {
+        "outlets": true,
+        "quiet_space": false
+      }
+    },
+    {
+      "facility_id": "west-dining-synthetic",
+      "activities": [
+        "eat",
+        "study"
+      ]
+    },
+    {
+      "facility_id": "warren-dining-synthetic",
+      "activities": [
+        "eat"
+      ]
+    },
+    {
+      "facility_id": "fenway-dining-synthetic",
+      "activities": [
+        "eat"
+      ]
+    },
+    {
+      "facility_id": "fitrec-synthetic",
+      "activities": [
+        "workout"
+      ]
+    }
   ],
   "scenarios": [
     {
-      "id": "workout-between-classes", "label": "70 free minutes, workout, then class",
-      "activity": "workout", "start": "15:00", "minutes": 70, "from": "mugar", "to": "warren",
-      "min_activity": 35, "buffer": 10, "prefer_quiet": true, "prefer_short_travel": false, "needs": []
+      "id": "workout-between-classes",
+      "label": "80 free minutes, workout + changing, then class (access checked)",
+      "activity": "workout",
+      "start": "15:00",
+      "minutes": 80,
+      "from": "mugar",
+      "to": "warren",
+      "min_activity": 35,
+      "buffer": 10,
+      "prefer_quiet": true,
+      "prefer_short_travel": false,
+      "needs": [],
+      "access": {
+        "library": "yes",
+        "dining": "yes",
+        "fitness": "yes"
+      }
     },
     {
-      "id": "study-with-outlets", "label": "An hour to study, outlets needed",
-      "activity": "study", "start": "15:00", "minutes": 60, "from": "mugar", "to": "warren",
-      "min_activity": 30, "buffer": 10, "prefer_quiet": true, "prefer_short_travel": false, "needs": ["outlets"]
+      "id": "study-with-outlets",
+      "label": "An hour to study, outlets needed",
+      "activity": "study",
+      "start": "15:00",
+      "minutes": 60,
+      "from": "mugar",
+      "to": "warren",
+      "min_activity": 30,
+      "buffer": 10,
+      "prefer_quiet": true,
+      "prefer_short_travel": false,
+      "needs": [
+        "outlets"
+      ],
+      "access": {
+        "library": "yes",
+        "dining": "yes",
+        "fitness": "yes"
+      }
     },
     {
-      "id": "lunch-too-tight", "label": "30-minute lunch across campus (nothing fits)",
-      "activity": "eat", "start": "12:00", "minutes": 30, "from": "west", "to": "warren",
-      "min_activity": 20, "buffer": 10, "prefer_quiet": true, "prefer_short_travel": false, "needs": []
+      "id": "lunch-too-tight",
+      "label": "30-minute lunch across campus (nothing fits)",
+      "activity": "eat",
+      "start": "12:00",
+      "minutes": 30,
+      "from": "west",
+      "to": "warren",
+      "min_activity": 20,
+      "buffer": 10,
+      "prefer_quiet": true,
+      "prefer_short_travel": false,
+      "needs": [],
+      "access": {
+        "library": "yes",
+        "dining": "yes",
+        "fitness": "yes"
+      }
     }
   ]
 }

@@ -1,7 +1,16 @@
 # BU-sy demo runbook
 
-Everything below was run on **2026-10-24** (Windows 11, Python 3.14.7, Node 24.21, Microsoft Edge headless)
-unless it is marked *not verified*. All data in the demo is sample data; nothing is live.
+Integration checks (October 25, 2026): all fetched feature branches are combined locally.
+198 Python tests and 104 JavaScript tests pass. Calendar requires the declared cryptography
+dependency and optional OAuth configuration described in README; no Google account was connected.
+The local integration includes actionable plans, calendar/availability, the Places list,
+the club directory and separately sourced facility metadata.
+
+Earlier actionable-plan checks: 115 Python tests and 66 JavaScript tests passed.
+The static exporter was run locally. Browser inspection was attempted but the computer-use tool
+stopped because it could not reliably determine Edge's current URL. The 390/768/1280 px,
+both-theme, keyboard, overflow and external-link browser checks remain **not executed** for this change.
+Historical browser reports in section 4 below belong to older builds and are not new verification.
 
 ## 0. Before the demo (once, with internet)
 
@@ -16,8 +25,8 @@ git clone https://github.com/jadenlee202/bu-sy.git
 cd bu-sy
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
-.venv\Scripts\python -m pytest -q                           # expect 103 passed
-node --test "tests/*.test.mjs"                              # expect 46 passed (or: npm test)
+.venv\Scripts\python -m pytest -q                           # expect 115 passed
+node --test "tests/*.test.mjs"                              # expect 66 passed (or: npm test)
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 
@@ -43,43 +52,41 @@ This exposes the server to that network, so stop it after the demo.
 
 ## 2. Demo sequence (about 3 minutes)
 
-Every result below comes from the real engine (`web/js/recommend.js`) running on the sample data. Results
-don't depend on the time of day or the viewer's timezone (verified with the browser set to Asia/Tokyo), and
-API mode gives exactly the same text as static mode (verified).
+The home URL opens the planner, with no large hero ahead of the controls. Both static and API
+modes use the same campus payload and recommendation engine. These sample outputs were checked
+through the real engine in Node; the browser interaction sequence still needs visual verification.
 
-1. **Quick start.** On "What fits now?", tap **Work out** and **60 min**. With no starting point, the app
-   lists FitRec as *could work* and says travel isn't checked. Pick **Mugar Library** as the starting point:
-   now it *fits*, with the walk counted. Open **Preferences** to show the visible defaults (start time from
-   the demo clock, minimum, 10-min buffer, ranking). Point out the persistent **Demo data** card (sidebar) or
-   **Demo** pill (phone).
-2. Open **Try a sample** under the form and choose *70 free minutes, workout, then class* (3 PM, Mugar Library →
-   class at Warren Towers).
-   - Expect **FitRec**, *"The only place that fits"* (quiet), and *"Fits your 70-minute window: 10 min there +
-     36-minute workout + 14 min onward + 10-minute buffer."* FitRec is one building-level count: courts, pools,
-     rooms and reservations aren't tracked.
-   - Open **Why this fits** on a card: calculation, timeline, busyness source, hours and limits.
-3. **"An hour to study, outlets needed"** (under *Try a sample*).
-   - Expect **Best match: Marciano Commons** (quieter at the selected demo time), then Mugar Library (moderate).
-     Open **Why this fits**: the busyness line names the period, e.g. *(Breakfast and morning: modeled)* or
-     *(From a library room's counts)*.
-   - *Why 1 other place doesn't fit*: West Campus Dining, "Outlets not listed in sample metadata".
-4. **"30-minute lunch across campus (nothing fits)"**.
-   - Expect **"Nothing fits this window"**, with reasons and a per-place list.
-   - Tap **Extend to 48 minutes**: the form updates and 2 options fit.
-5. **View place** on any card. The chart and playback open at the same demo time (3:00 PM). Press play.
-   Point out the **Simulated** tag and **How it's simulated**: it opens **Sources & Simulation**, which maps
-   FitRec to the campus gym dataset (rescaled, whole building only), Mugar to ROBOD's library room, and the
-   dining halls to NOVANIMAL at lunch (with breakfast and dinner modeled), and explains why the Chapel Hill
-   library and UCI room datasets weren't used. On **Places → Mugar Library**, move the slider past 10 PM:
-   *No data · Not simulated: the source library room is empty by this hour* (not Closed: the sample hours run
-   to midnight). On **Warren Towers Dining**, the line under the count switches between *Breakfast and
-   morning: modeled*, *Lunch: from canteen purchase times* and *Afternoon and dinner: modeled*.
-6. **Places → Historical references → Campus Gym — Historical Reference.** Point out the notice
-   ("Historical gym data — not live and not BU FitRec."), pick another **Recorded day** (5–11 Dec 2016), press
-   play, and show "Replay 5:30 PM · observed 5:24 PM (UTC−08:00)", the busyness line "Relative to this gym's
-   historical traffic", the typical weekday × hour grid and **How this works** (capacity unknown, 30-minute gap
-   rule, source and license). The Clemente Room (COD) is the other reference: an office room, timezone unverified.
-7. *(Optional)* **Meetups** (sidebar, or the footer on a phone): join an example, or create an invite-only one.
+1. Choose **Study** and **60 min**. Leave the starting point unset: options are browsable, travel
+   is not checked and no plan can be chosen. Set **Mugar Library** as the start.
+2. Under **Preferences**, set the demo time to **15:00**, next stop **Warren Towers**, minimum
+   activity **30**, preparation **3**, cleanup **2**, buffer **10**. Check the library entry
+   requirements in **Facility details & sources**, then confirm access for this session.
+   Do not confirm access for a real visit without checking it.
+3. Choose **Mugar Library**. The evaluated timeline is: depart/arrive **3:00 PM**, prepare
+   **3:00-3:03**, study **3:03-3:44** (41 minutes), clean up **3:44-3:46**, leave by **3:46**,
+   reach Warren **3:50**, protect **3:50-4:00** as buffer. Every minute is counted once.
+   **Open directions** uses the verified address; it does not validate the sample walk.
+4. **Change plan** returns to options. **Edit inputs** preserves inputs and opens settings.
+   Change the next stop to **Fenway**. The old selection is invalidated; for Mugar only 25
+   activity minutes remain, below the 30-minute minimum. Choose a suggested change explicitly
+   or revise the plan. Never treat the former timeline as current.
+5. Try **80 free minutes, workout + changing, then class (access checked)**. This sample
+   explicitly assumes eligibility. It used to be a 70-minute window; that no longer meets
+   the unchanged 35-minute workout minimum after changing/cleanup. At 80 minutes, FitRec
+   gives **36 activity minutes**: walk 3:00-3:10, prepare 3:10-3:15, exercise 3:15-3:51,
+   cleanup 3:51-3:56, walk onward to Warren 3:56-4:10, buffer 4:10-4:20.
+6. Try **30-minute lunch across campus**. Nothing fits. Each proposed fix is checked by the
+   engine with preparation/cleanup included; the form changes only when you choose one.
+7. Open a facility's sources and current weekly schedule. Current published dining weeks
+   do not establish October 19 historical hours. Fenway planner hours remain unknown,
+   and its entrance is unverified, so it has no confirmed plan or directions action.
+8. Browse **Sources & Simulation** and the historical references under **Places**. ROBOD,
+   NOVANIMAL, COD and campus-gym attribution remains. References never become campus plans.
+
+For the pending human study use [the five-task script](team/usability/test_script.md).
+Pending browser checks: at 390, 768 and 1280 px in both themes, verify planner-first order,
+no horizontal overflow, visible keyboard focus, readable timeline, back/edit preservation,
+accurate provenance labels, and supported directions links. No results are invented here.
 
 ## 3. After changing data or server code
 
@@ -87,7 +94,7 @@ API mode gives exactly the same text as static mode (verified).
 .venv\Scripts\python server/export_static.py    # rewrites web/data/*.json
 .venv\Scripts\python -m pytest -q               # includes "static export == API"
 ```
-Commit `web/data/` together with the change. GitHub Pages serves those files as they are; it doesn't run
+Keep regenerated `web/data/` with the local change; do not commit, push or deploy without explicit instruction. GitHub Pages serves those files as they are; it doesn't run
 the export.
 
 ## 4. Checks and results (2026-10-24)

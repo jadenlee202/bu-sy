@@ -8,6 +8,10 @@ Endpoint shapes follow the shared brief:
     GET  /api/sources                                  (how each campus place is simulated, with citations)
     GET  /api/community-events                         (unofficial, student-run)
     POST /api/community-events, /{id}/join, /{id}/leave, /{id}/cancel
+    GET  /api/clubs, /api/clubs/{id}                   (club directory; sample clubs + student-created)
+    POST /api/clubs, /{id}/edit, /{id}/apply, /{id}/withdraw
+    GET  /api/clubs/{id}/applications                  (organizer token only)
+    POST /api/clubs/{id}/applications/{app_id}/decide  (organizer token only)
 
 How it works
     1. sources.py loads data/campus_simulation_occupancy.csv (SIMULATED: one demo
@@ -37,6 +41,7 @@ Try:    /api/facilities?at=17:30
         /api/facilities/COD_Bosch_Office_1_Clemente/history
         /docs
 """
+import logging
 import os
 from datetime import date, datetime, time
 from enum import Enum
@@ -49,10 +54,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import clubs
 import community_events as ce
 from campus import Campus, load_campus
 from analytics import THRESHOLD_NOTE, latest_at
 from sources import Facility, load_all, load_provenance
+from google_calendar import router as calendar_router
+from facility_info import get_info
+
+
+class CalendarCallbackLogFilter(logging.Filter):
+    def filter(self, record):
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                "/api/calendar/callback" if isinstance(value, str) and "/api/calendar/callback" in value else value
+                for value in record.args
+            )
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(CalendarCallbackLogFilter())
 
 app = FastAPI(title="BU-sy API (synthetic campus demo + COD historical playback)")
 LOCAL_TZ = ZoneInfo("America/New_York")  # demo clock for "now" when no `at` is given
@@ -61,14 +82,32 @@ FACILITIES = load_all()
 PROVENANCE = load_provenance()
 CAMPUS = load_campus(FACILITIES)
 
-# Lets a site on another origin use this API (`?api=https://host`). No cookies or
-# credentials are involved. Restrict with BUSY_CORS_ORIGINS="https://a,https://b".
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=os.environ.get("BUSY_CORS_ORIGINS", "*").split(","),
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-BUsy-Device"],
-)
+def cors_options(origins_env):
+    """Lets a site on another origin use this API (`?api=https://host`).
+
+    With the default "*", any origin may read it but no cookies are sent. Credentials
+    (the Google Calendar session cookie) are only allowed for the exact origins listed in
+    BUSY_CORS_ORIGINS="https://a,https://b"; with "*" Starlette would echo every origin back.
+    """
+    origins = [origin.strip() for origin in (origins_env or "*").split(",") if origin.strip()] or ["*"]
+    return {
+        "allow_origins": origins,
+        "allow_methods": ["GET", "POST", "DELETE"],
+        "allow_headers": ["Content-Type", "X-BUsy-Device"],
+        "allow_credentials": "*" not in origins,
+    }
+
+
+app.add_middleware(CORSMiddleware, **cors_options(os.environ.get("BUSY_CORS_ORIGINS")))
+
+
+@app.middleware("http")
+async def prevent_calendar_caching(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/calendar/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    return response
 
 
 # ---------- models ----------
@@ -113,6 +152,10 @@ class FacilitySummary(BaseModel):
     playback_at: Optional[datetime]
     opening_hours: Optional[dict]
     amenities: list[str]
+    # Manually researched hours/access/amenities/walking time with their OWN
+    # provenance (see facility_info.py). None when nothing was verified. This is
+    # kept separate from occupancy: verified hours never make occupancy real.
+    verified_info: Optional[dict] = None
 
 
 class Observation(BaseModel):
@@ -226,11 +269,31 @@ def basis_text(f: Facility, count: Optional[int], tod: time) -> str:
     return f"{count:,} people ({pct:.0%} of typical high); {f.reference_note}; {THRESHOLD_NOTE}"
 
 
+def opening_hours_summary(info) -> Optional[dict]:
+    """A compact regular-hours view derived from verified metadata.
+
+    Returns None when no regular schedule was verified, so unknown stays unknown.
+    """
+    if info is None:
+        return None
+    regular = next((h for h in info.hours if h.schedule_kind == "regular"), None)
+    if regular is None or not any(regular.weekly.values()):
+        return None
+    return {
+        "label": regular.label,
+        "weekly": {str(k): v for k, v in regular.weekly.items()},
+        "source_url": info.hours_source_url,
+        "checked": info.hours_checked,
+        "note": "Published regular hours; verified by hand, subject to change.",
+    }
+
+
 def facility_fields(f: Facility, tod: time) -> dict:
     day = f.default_day
     playback_at = f.at(day, tod)
     obs = latest_at(f.days[day], playback_at, f.coverage_end(day), f.max_hold)
     count = obs[1] if obs else None
+    info = get_info(f.facility_id)
     return dict(
         facility_id=f.facility_id,
         facility_name=f.facility_name,
@@ -249,8 +312,9 @@ def facility_fields(f: Facility, tod: time) -> dict:
         timezone=f.timezone,
         time_note=f.time_note,
         playback_at=playback_at,
-        opening_hours=None,
+        opening_hours=opening_hours_summary(info),
         amenities=f.amenities,
+        verified_info=info.as_dict() if info else None,
     )
 
 
@@ -379,5 +443,48 @@ def cancel_community_event(event_id: str, body: ce.TokenRequest):
     ce.cancel_event(event_id, body)
 
 
+# ---------- club directory (sample clubs + student-created; demo-grade organizer gating) ----------
+@app.get("/api/clubs")
+def list_clubs(device: Optional[str] = Header(None, alias="X-BUsy-Device")):
+    return clubs.list_clubs(device, FACILITIES)
+
+
+@app.get("/api/clubs/{club_id}")
+def get_club(club_id: str, device: Optional[str] = Header(None, alias="X-BUsy-Device")):
+    return clubs.get_club(club_id, device, FACILITIES)
+
+
+@app.post("/api/clubs", status_code=201)
+def create_club(body: clubs.ClubFields):
+    return clubs.create_club(body, FACILITIES)
+
+
+@app.post("/api/clubs/{club_id}/edit")
+def edit_club(club_id: str, body: clubs.ClubFields):
+    return clubs.edit_club(club_id, body, FACILITIES)
+
+
+@app.post("/api/clubs/{club_id}/apply")
+def apply_to_club(club_id: str, body: clubs.Application):
+    return clubs.apply(club_id, body, FACILITIES)
+
+
+@app.post("/api/clubs/{club_id}/withdraw")
+def withdraw_from_club(club_id: str, body: clubs.TokenRequest):
+    return clubs.withdraw(club_id, body, FACILITIES)
+
+
+@app.get("/api/clubs/{club_id}/applications")
+def club_applications(club_id: str, device: Optional[str] = Header(None, alias="X-BUsy-Device")):
+    """Organizer only. The token comes in a header, never the URL."""
+    return clubs.applications(club_id, device)
+
+
+@app.post("/api/clubs/{club_id}/applications/{app_id}/decide")
+def decide_application(club_id: str, app_id: str, body: clubs.Decision):
+    return clubs.decide(club_id, app_id, body, FACILITIES)
+
+
 # The web app, served from the same origin so it finds /api automatically.
+app.include_router(calendar_router)
 app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")

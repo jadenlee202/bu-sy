@@ -6,6 +6,7 @@
 //
 // A remembered starting point is shown as "Last selected". It is not the
 // student's current location, which BU-sy never detects.
+import { ALLOWANCES } from "./recommend.js";
 import { store } from "./source.js";
 
 export const PREFS_KEY = "busy.plan.prefs.v1";
@@ -26,6 +27,11 @@ function clean(raw, campus) {
       .filter(([id, v]) => campus.activities.some((a) => a.id === id) && isInt(v, 5, 600));
     if (mins.length) out.minByActivity = Object.fromEntries(mins);
   }
+  for (const field of ["preparation", "cleanup"]) {
+    const key = `${field}ByActivity`;
+    if (raw[key] && typeof raw[key] === "object") out[key] = Object.fromEntries(Object.entries(raw[key])
+      .filter(([id, v]) => campus.activities.some(a => a.id === id) && isInt(v, 0, 120)));
+  }
   return out;
 }
 
@@ -40,6 +46,9 @@ export function loadPrefs(campus) {
 export function savePrefs(patch, campus) {
   const old = loadPrefs(campus);
   // from: "" ("Not set") isn't a location, so clean() drops it and the remembered start is cleared.
+  for (const key of ["preparationByActivity", "cleanupByActivity"]) {
+    if (patch[key]) patch = { ...patch, [key]: { ...old[key], ...patch[key] } };
+  }
   const next = clean({ ...old, ...patch, minByActivity: { ...old.minByActivity, ...patch.minByActivity } }, campus);
   store.set(PREFS_KEY, JSON.stringify(next));
   return next;
@@ -51,6 +60,9 @@ export const resetPrefs = () => store.set(PREFS_KEY, "{}");
 export function defaults(campus, prefs, activity) {
   const act = campus.activities.find((a) => a.id === activity);
   return {
+    preparation: prefs.preparationByActivity?.[activity] ?? ALLOWANCES[activity]?.preparation ?? 0,
+    cleanup: prefs.cleanupByActivity?.[activity] ?? ALLOWANCES[activity]?.cleanup ?? 0,
+    access: {},
     from: prefs.from ?? "",
     to: null,
     minActivity: (activity && prefs.minByActivity?.[activity]) ?? act?.default_min ?? NaN,

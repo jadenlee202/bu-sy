@@ -22,13 +22,24 @@
 //   preferQuiet, preferShortTravel   ranking preferences
 //   needs               amenity ids a place must list (e.g. "outlets")
 //
-// Fit rule: minutes >= travel there + activity (>= minActivity) + onward + buffer,
+// Fit rule: minutes >= travel there + preparation + activity (>= minActivity)
+// + cleanup + onward + buffer. Preparation/cleanup are editable allowances.
 // and the place is open (illustrative hours) for the whole activity. Unknown hours are never "confirmed": they go to checkHours.
 // Without a starting point the same rule runs with the walk there left out, so
 // it can only rule places out (too little time even before walking, closed).
 
 import { fmtShort, fmtTime, latestAt, toMin } from "./clock.js";
 
+export const ALLOWANCES = {
+  study: { preparation: 3, cleanup: 2 },
+  eat: { preparation: 5, cleanup: 2 },
+  workout: { preparation: 5, cleanup: 5 },
+};
+export const allowances = (req) => ({
+  ...ALLOWANCES[req.activity],
+  ...(req.preparation != null ? { preparation: req.preparation } : {}),
+  ...(req.cleanup != null ? { cleanup: req.cleanup } : {}),
+});
 export const DAY_END = 24 * 60;
 export const MAX_SHOWN = 3;
 /** Ranking order for busyness. Unknown is never treated as quiet. */
@@ -41,7 +52,7 @@ export function requestFromScenario(s) {
   return {
     activity: s.activity, start: s.start, minutes: s.minutes, source: s.source ?? "manual",
     from: s.start_location, to: s.next_location ?? null, minActivity: s.min_activity, buffer: s.buffer,
-    preferQuiet: s.prefer_quiet, preferShortTravel: s.prefer_short_travel, needs: [...s.needs],
+    ...ALLOWANCES[s.activity], access: s.access ?? {}, preferQuiet: s.prefer_quiet, preferShortTravel: s.prefer_short_travel, needs: [...s.needs],
   };
 }
 
@@ -60,6 +71,9 @@ export function validateRequest(req, campus) {
   if (req.to != null && !isLocation(req.to)) add("to", "Choose a listed next stop, or none.");
   if (!int(req.minActivity, 5, 600)) add("minActivity", "Minimum time should be 5 to 600 minutes.");
   if (!int(req.buffer, 0, 120)) add("buffer", "Buffer should be 0 to 120 minutes.");
+  for (const [field, value] of Object.entries(allowances(req))) {
+    if (!int(value, 0, 120)) add(field, "Preparation and cleanup should be 0 to 120 minutes.");
+  }
   for (const n of req.needs ?? []) if (!(n in campus.amenity_labels)) add("needs", `Unknown need: ${n}`);
   return errors;
 }
@@ -114,6 +128,11 @@ function evaluate(place, req, campus, histories) {
         ? `No ${label.toLowerCase()} in sample metadata` : `${label} not listed in sample metadata`);
     }
   }
+  const access = place.metadata?.access;
+  const eligibility = access ? req.access?.[access.group] : "yes";
+  if (eligibility === "no") return out("access", "You do not meet the listed access requirements");
+  const { preparation, cleanup } = allowances(req);
+  const overhead = preparation + cleanup;
   const known = hasStart(req);
   const there = known ? travelMinutes(campus, req.from, place.location_id) : null;
   if (known && there == null) return out("route", `No sample walking time from ${locationName(campus, req.from)}`);
@@ -124,10 +143,10 @@ function evaluate(place, req, campus, histories) {
   const end = start + req.minutes;            // the next commitment
   const arriveEarliest = start + (there ?? 0); // unknown start: an upper bound only
   const leaveLatest = end - req.buffer - onward;
-  const room = leaveLatest - arriveEarliest;  // travel and buffer are subtracted once, here
+  const room = leaveLatest - arriveEarliest - overhead;  // travel and buffer are subtracted once, here
   if (room < req.minActivity) {
     const walk = (there ?? 0) + onward;
-    const spent = `${walk ? `${walk} min of walking and ` : ""}your ${req.buffer}-min buffer`
+    const spent = `${walk ? `${walk} min of walking and ` : ""}your ${req.buffer}-min buffer + ${preparation} min preparation + ${cleanup} min cleanup`
       + (known ? "" : ", before the walk there");
     return out("time", room > 0 ? `Only ${room} min left after ${spent}` : `No time left after ${spent}`,
       { short: req.minActivity - room, room: Math.max(room, 0) });
@@ -137,36 +156,42 @@ function evaluate(place, req, campus, histories) {
   let visit = [arriveEarliest, leaveLatest];
   if (segs) {
     visit = segs.map(([a, b]) => [Math.max(a, arriveEarliest), Math.min(b, leaveLatest)])
-      .find(([a, b]) => b - a >= req.minActivity);
+      .find(([a, b]) => b - a >= req.minActivity + overhead);
     if (!visit) return out("closed", closedReason(place, segs, arriveEarliest, leaveLatest));
   }
 
-  const [actStart, actEnd] = visit;
+  const [visitStart, visitEnd] = visit;
+  const actStart = visitStart + preparation;
+  const actEnd = visitEnd - cleanup;
   if (!known) {
     // Nothing about the trip is claimed: no leave/arrive times, and `activity` is
     // the most it could be before subtracting a walk we can't measure.
     return {
       status: segs ? "unchecked" : "check_hours", place, there: null, onward, activity: actEnd - actStart,
-      upTo: true, opensAt: actStart > start ? actStart : null, windowEnd: end, busy: busynessAt(place, histories, start),
+      upTo: true, opensAt: visitStart > start ? visitStart : null, windowEnd: end, busy: busynessAt(place, histories, start),
     };
   }
-  const depart = actStart - there;   // leave now, or later if the place opens later
+  const depart = visitStart - there;   // leave now, or later if the place opens later
   const free = depart - start;
   const activity = actEnd - actStart;
-  const spare = leaveLatest - actEnd; // unused because the place closes early
+  const spare = leaveLatest - visitEnd; // unused because the place closes early
   const budget = [
     free > 0 && { kind: "free", minutes: free },
     { kind: "there", minutes: there },
+    preparation > 0 && { kind: "preparation", minutes: preparation },
     { kind: "activity", minutes: activity },
-    spare > 0 && { kind: "spare", minutes: spare, until: actEnd },
+    cleanup > 0 && { kind: "cleanup", minutes: cleanup },
+    spare > 0 && { kind: "spare", minutes: spare, until: visitEnd },
     req.to != null && { kind: "onward", minutes: onward },
     { kind: "buffer", minutes: req.buffer },
   ].filter(Boolean);
 
   return {
-    status: segs ? "fit" : "check_hours", place, there, onward, free, activity, spare, budget,
-    depart, arrive: actStart, leaveBy: actEnd, arriveNext: req.to == null ? null : actEnd + onward,
-    windowEnd: end, busy: busynessAt(place, histories, start),
+    status: !segs ? "check_hours" : eligibility !== "yes" ? "check_access" : "fit", place, there, onward, free, activity, spare, budget,
+    depart, arrive: visitStart, preparation, cleanup, activityStart: actStart, activityEnd: actEnd,
+    leaveBy: visitEnd, arriveNext: req.to == null ? null : visitEnd + onward,
+    bufferStart: end - req.buffer, bufferEnd: end,
+    windowStart: start, windowEnd: end, busy: busynessAt(place, histories, start),
   };
 }
 
@@ -202,13 +227,13 @@ function compare(a, b) {
 }
 
 const FEATURE_WHY = {
-  busy: "Quieter than the other options at the selected time",
+  busy: "Quieter in the simulation at the selected time",
   travel: "Shorter sample walk than the other options",
   time: "More time for your activity than the other options",
   amenities: "Lists more study amenities than the other options",
 };
 const BEHIND_TOP = {
-  busy: "Busier than the top option",
+  busy: "Busier in the simulation at the selected time than the top option",
   travel: "Longer walk than the top option",
   time: "Less time than the top option",
   amenities: "Fewer study amenities listed",
@@ -218,7 +243,11 @@ const BEHIND_TOP = {
 export function rankReason(o, top) {
   if (!o.keys || !top?.keys || o === top) return null;
   const i = o.keys.values.findIndex((v, j) => v !== top.keys.values[j]);
-  return i < 0 ? "Tied with the top option; listed by name" : BEHIND_TOP[o.keys.names[i]];
+  if (i < 0) return "Tied with the top option; listed by name";
+  const key = o.keys.names[i];
+  if (key === "time") return `${top.activity - o.activity} fewer minutes of activity than the top option`;
+  if (key === "travel") return `${o.there + o.onward - top.there - top.onward} more minutes walking than the top option`;
+  return BEHIND_TOP[key];
 }
 
 /** "Best match" only when evidence (not the alphabetical tie-break) separates #1 from #2. */
@@ -227,7 +256,11 @@ function feature(fits) {
   if (fits.length < 2 || fits[0].busy.level === "unknown") return null;
   const [a, b] = fits;
   const i = a.keys.values.findIndex((v, j) => v !== b.keys.values[j]);
-  return i < 0 ? null : { kind: "best", why: FEATURE_WHY[a.keys.names[i]] };
+  if (i < 0) return null;
+  const key = a.keys.names[i];
+  const why = key === "time" ? `${a.activity - b.activity} more minutes of activity than the next option`
+    : key === "travel" ? `${b.there + b.onward - a.there - a.onward} minutes less walking than the next option` : FEATURE_WHY[key];
+  return { kind: "best", why };
 }
 
 // ---------- the whole request ----------
@@ -249,7 +282,7 @@ export function recommend(req, campus, histories, { suggest = true } = {}) {
   const result = {
     ok: true, request: req, travelKnown,
     window: { start, end: start + req.minutes, minutes: req.minutes },
-    options: fits.slice(0, MAX_SHOWN), more: fits.slice(MAX_SHOWN), browse, checkHours, excluded,
+    options: fits.slice(0, MAX_SHOWN), more: fits.slice(MAX_SHOWN), browse, checkHours, checkAccess: ranked("check_access"), excluded,
     featured: feature(fits), reasons: [], suggestions: [],
   };
   if (!fits.length && !browse.length && suggest) {
@@ -261,7 +294,8 @@ export function recommend(req, campus, histories, { suggest = true } = {}) {
 }
 
 const REASON_TEXT = {
-  time: "not enough time once walking and your buffer are counted",
+  access: "access requirements not met",
+  time: "not enough time once walking, preparation, cleanup and buffer are counted",
   closed: "closed during the visit (illustrative hours)",
   route: "no sample walking time for the route",
   amenity: "missing a study need you picked",
@@ -302,7 +336,7 @@ function suggestions(req, campus, histories, excluded) {
   }
   for (const a of campus.activities) {
     if (a.id === req.activity) continue;
-    const patch = { activity: a.id, minActivity: a.default_min, needs: a.id === "study" ? req.needs : [] };
+    const patch = { ...ALLOWANCES[a.id], activity: a.id, minActivity: a.default_min, needs: a.id === "study" ? req.needs : [] };
     const n = fitsWith(patch);
     if (n) out.push({ label: `${a.label} instead`, detail: `${plural(n)} (${a.default_min}-minute minimum)`, patch });
   }
@@ -333,6 +367,8 @@ export function budgetSentence(o, req, campus) {
   const text = {
     free: (m) => `${m} min free first`,
     there: (m) => (m ? `${m} min there` : "0 min there (same place)"),
+    preparation: (m) => `${m} min preparation (allowance)`,
+    cleanup: (m) => `${m} min cleanup (allowance)`,
     activity: (m) => `${m}-minute ${act.noun}`,
     spare: (m, b) => `${m} min unused (closes ${fmtShort(b.until)})`,
     onward: (m) => `${m} min onward`,

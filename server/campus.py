@@ -55,6 +55,7 @@ class Place(BaseModel):
     hours_basis: Literal["illustrative", "verified", "unknown"]
     amenities: dict[str, bool]                # missing key = not listed (unknown)
     amenities_basis: Literal["illustrative", "verified"]
+    metadata: dict = {}
 
 
 class TravelTime(BaseModel):
@@ -77,6 +78,7 @@ class Scenario(BaseModel):
     prefer_quiet: bool
     prefer_short_travel: bool
     needs: list[str]
+    access: dict[str, str] = {}
 
 
 class Campus(BaseModel):
@@ -163,6 +165,7 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
             location_id=meta["location"], activities=p["activities"], data_mode=f.data_mode,
             hours=hours, hours_basis="illustrative" if hours is not None else "unknown",
             amenities=p.get("amenities", {}), amenities_basis="illustrative",
+            metadata=meta.get("metadata", {}),
         ))
 
     scenarios = []

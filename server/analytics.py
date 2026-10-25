@@ -95,6 +95,20 @@ def hourly_time_weighted(series: Series, first_hour: int, last_hour: int,
             for w, c in hour_sums(series, first_hour, last_hour, coverage_end, max_hold)]
 
 
+def time_weighted_mean(series: Series, start: datetime, end: datetime, coverage_end: datetime,
+                       max_hold: Optional[timedelta] = None) -> tuple[Optional[float], float]:
+    """(mean count, covered seconds) over [start, end). Each count holds as in `_segments`;
+    uncovered time is left out of the mean, never counted as zero. No coverage -> (None, 0)."""
+    weighted = covered = 0.0
+    for seg_start, seg_end, count in _segments(series, coverage_end, max_hold):
+        a, b = max(seg_start, start), min(seg_end, end)
+        if b > a:
+            secs = (b - a).total_seconds()
+            weighted += count * secs
+            covered += secs
+    return (weighted / covered if covered else None), covered
+
+
 def time_weighted_percentile(days: list[tuple[Series, datetime]], p: float,
                              max_hold: Optional[timedelta] = None) -> Optional[int]:
     """Smallest count c such that the place held <= c people for at least p of recorded time."""
