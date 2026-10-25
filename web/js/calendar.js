@@ -164,7 +164,7 @@ export async function calendarView($view) {
       <label class="check"><input type="checkbox" id="schedule-remember"${schedule.storedIn === "local" ? " checked" : ""}> Remember my schedule on this device</label>
       <div class="calendar-actions">
         <button class="btn" type="button" data-schedule="pick">Replace schedule</button>
-        <button class="btn btn-quiet" type="button" data-schedule="remove">Remove schedule</button></div>`;
+        <button class="btn btn-quiet" type="button" data-schedule="remove">Clear calendar</button></div>`;
   };
 
   // ---------- month grid + the selected day's events (reads the same stored schedule) ----------
@@ -198,7 +198,7 @@ export async function calendarView($view) {
     const inRange = schedule && covers(schedule, dayStart(selected), dayStart(addDays(selected, 1)));
     let dayList;
     if (!schedule) {
-      dayList = `<div class="month-empty"><p>No schedule imported yet. Upload your ICS calendar to see your events here.</p>
+      dayList = `<div class="month-empty"><p>No schedule imported yet. Upload your ICS file to display your events.</p>
         <button class="btn btn-primary" type="button" data-schedule="pick">Upload Calendar</button></div>`;
     } else if (!events) {
       dayList = `<p class="help">This schedule was saved before BU-sy kept event details, so only your busy times are known. Upload the file again to see your events here.</p>`;
@@ -239,7 +239,7 @@ export async function calendarView($view) {
     $date.value = date;
     viewMonth = date.slice(0, 7);
     renderMonth();
-    if (hours) renderResults();   // campus hours failed to load: the calendar still works on its own
+    if (ready) renderResults();   // before campus data loads, the results catch up once it does
   };
   $month.addEventListener("click", (event) => {
     const step = event.target.closest("[data-month]")?.dataset.month;
@@ -257,6 +257,11 @@ export async function calendarView($view) {
     }
   });
 
+  // The upload card and the calendar don't depend on campus data, so they show at once.
+  let ready = false;
+  renderCard();
+  renderMonth();
+  let loadError = null;
   try {
     [facilities, hours] = await Promise.all([src.listFacilities(), src.getHours()]);
     facilities = facilities.filter((facility) => facility.data_mode !== "historical_playback");
@@ -267,10 +272,7 @@ export async function calendarView($view) {
     if (facilities.some((facility) => facility.facility_id === prefs.location)) $location.value = prefs.location;
     else if (dining) $location.value = dining.facility_id;
   } catch (error) {
-    renderCard();
-    renderMonth();
-    $results.innerHTML = failure(error);
-    return {};
+    loadError = error;   // only the free-time results need campus hours; everything else keeps working
   }
 
   const savePrefs = () => saveCalendarPrefs({
@@ -282,6 +284,10 @@ export async function calendarView($view) {
   });
 
   const renderResults = () => {
+    if (loadError) {
+      $results.innerHTML = failure(loadError);
+      return;
+    }
     const zone = $timezone.value.trim();
     if (!$date.value || !$from.value || !$until.value || !$location.value || !zone) {
       $results.innerHTML = `<p class="calendar-error">Choose a date, timezone, availability window, and location.</p>`;
@@ -406,10 +412,11 @@ export async function calendarView($view) {
     if (action === "pick") {
       $file.click();
     } else if (action === "remove") {
+      if (!confirm("Clear your calendar? Your imported events and busy times will be deleted from this browser.")) return;
       clearSchedule();
       schedule = null;
       renderCard();
-      showStatus(`<p class="calendar-ok">Schedule removed. Your events and busy times were deleted from this browser.</p>`);
+      showStatus(`<p class="calendar-ok">Calendar cleared. Your events and busy times were deleted from this browser.</p>`);
       renderMonth();
       renderResults();
       $card.querySelector("[data-schedule]")?.focus();
@@ -434,8 +441,7 @@ export async function calendarView($view) {
   $date.addEventListener("change", () => { if ($date.value) selectDay($date.value); });
   for (const $input of [$minimum, $from, $until, $location]) $input.addEventListener("change", rerender);
   $timezone.addEventListener("change", () => { rerender(); renderMonth(); });
-  renderCard();
-  renderMonth();
+  ready = true;
   renderResults();
   return {};
 }

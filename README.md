@@ -69,7 +69,7 @@ connection. The file is parsed **in the browser** with [ical.js](https://github.
   occurrence's title, start, end and all-day/free flags for the calendar view; the file name,
   import counts and the date range covered. Never the file, descriptions, locations or attendees.
   By default this lives in `sessionStorage` (cleared when the tab closes); *Remember my schedule
-  on this device* moves it to `localStorage`. *Remove schedule* deletes it from both.
+  on this device* moves it to `localStorage`. *Clear calendar* deletes it from both.
 - **Validation:** `.ics` name (or `text/calendar` type), at most 2 MB, and contents must start
   with `BEGIN:VCALENDAR` and parse. A failed upload, or a valid calendar with no events, never
   replaces the previous schedule. The import reports events imported and entries skipped (no
@@ -94,7 +94,7 @@ connection. The file is parsed **in the browser** with [ical.js](https://github.
   dashed and aren't busy. Clicking a date (or an event) selects that day: its events are listed
   below the grid, and the date control and free-time results switch to the same day. On narrow
   screens cells show an event count and the day's list holds the details. Replacing the file
-  replaces the events (no merging); *Remove schedule* deletes events and busy times together.
+  replaces the events (no merging); *Clear calendar* deletes events and busy times together.
 
 Each place's detail page has a *Find a time to eat* (dining) or *Find free time here* card that
 searches 7 days from a chosen date. On Places, *Open now* uses published hours; with a schedule
