@@ -1,6 +1,6 @@
 # BU-sy demo runbook
 
-Checks (October 25, 2026): 167 Python, 206 JavaScript and 18 Chromium browser tests pass locally,
+Checks (October 25, 2026): 167 Python, 211 JavaScript and 21 Chromium browser tests pass locally,
 and CI runs the same suites on every push; the Pages deploy waits for them. The browser tests drive the app's
 flows (onboarding, planning from a simulated location, location refused, nothing fits, schedule import, Explore,
 place and club pages, About, directions), check that no screen scrolls sideways from 320 to 1280 px, and test the
@@ -22,7 +22,7 @@ python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
 .venv\Scripts\python -m pytest -q                           # expect 167 passed
 npm ci                                                      # dev tools for the JS checks
-npm test                                                    # expect 206 passed
+npm test                                                    # expect 211 passed
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 
