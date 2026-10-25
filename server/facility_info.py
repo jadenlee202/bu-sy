@@ -206,34 +206,21 @@ _MUGAR = FacilityInfo(
     hours=[
         HoursEntry(
             schedule_kind="regular",
-            label="Representative term day (as shown on the library page)",
-            applies_from=None,
-            applies_to=None,
+            label="Mugar General Hours, October 25–31, 2026 only (02:00 closes next day)",
+            applies_from="2026-10-25",
+            applies_to="2026-10-31",
             weekly={
-                # Only a single day's posted hours ("Today's Hours 7:00am-11:00pm")
-                # was observed. The full weekly table was not captured, so other
-                # days are left unknown rather than guessed.
-                0: None, 1: None, 2: None, 3: None, 4: None, 5: None, 6: None,
+                0: "07:00-02:00", 1: "07:00-02:00", 2: "07:00-02:00",
+                3: "07:00-02:00", 4: "07:00-23:00", 5: "10:00-23:00", 6: "10:00-02:00",
             },
             note=(
-                "Observed 'Today's Hours 7:00 AM - 11:00 PM' on the Mugar page. "
-                "The full weekly schedule was not captured; treat other days as unknown."
-            ),
-        ),
-        HoursEntry(
-            schedule_kind="special_event",
-            label="Finals / study period (24-hour operation)",
-            applies_from=None,
-            applies_to=None,
-            weekly={},
-            note=(
-                "During study days and finals Mugar historically runs a 24-hour "
-                "schedule. Exact dates change each semester and were not pinned down."
+                "Published General Hours, not Library Services Desk hours; America/New_York. "
+                "02:00 falls on the following day. Do not repeat beyond the published dates."
             ),
         ),
     ],
-    hours_source_url="https://www.bu.edu/library/mugar-memorial/about/hours/",
-    hours_checked="2026-10-24",
+    hours_source_url="https://www.bu.edu/library/visit-study/hours/?week=2026-10-25",
+    hours_checked="2026-10-25",
     access_summary=(
         "Open to the BU community; study and collaboration spaces and reservable "
         "study rooms (up to 2 hours/day for BU students, staff, and faculty)."
@@ -256,8 +243,7 @@ _MUGAR = FacilityInfo(
         basis="Hand estimate; Mugar is at 771 Comm Ave, near the campus center.",
     ),
     open_questions=[
-        "Full regular weekly hours table not captured (only a single day's posted hours).",
-        "Exact 24-hour finals date ranges vary by semester and were not pinned down.",
+        "Hours outside October 25–31, including holiday and finals schedules, are not verified here.",
     ],
 )
 

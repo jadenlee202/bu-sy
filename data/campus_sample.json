@@ -98,10 +98,12 @@
           "checked": "2026-10-25"
         },
         "currentHours": {
-          "text": "Current weekday library schedule not independently confirmed in this time-boxed check. See the dated weekly hours on the place page; do not transfer term hours to the demo.",
-          "url": "https://www.bu.edu/library/",
-          "status": "unknown",
-          "checked": "2026-10-25"
+          "text": "Mugar General Hours, October 25–31, 2026 only: Sun 10:00–02:00 next day; Mon–Thu 07:00–02:00 next day; Fri 07:00–23:00; Sat 10:00–23:00. Building hours, not Library Services Desk hours. Other dates are unpublished here.",
+          "url": "https://www.bu.edu/library/visit-study/hours/?week=2026-10-25",
+          "status": "verified",
+          "checked": "2026-10-25",
+          "effectiveFrom": "2026-10-25",
+          "effectiveThrough": "2026-10-31"
         }
       }
     },
