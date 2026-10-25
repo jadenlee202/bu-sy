@@ -23,8 +23,7 @@ const draft = { req: null, startEdited: false, lastSelected: false };
 const header = () => `<div class="page-head hero-banner hero-skyline planner-skyline">
   <div class="hero-bg" aria-hidden="true">${bostonSkyline()}</div>
   <div class="hero-body"><h1 class="title">What fits now?</h1>
-    <p class="tagline">I have a free window. Make it a plan.</p>
-    <a href="#/calendar">Preview the sample week · October 25–31</a></div></div>`;
+    <p class="tagline">I have a free window. Make it a plan.</p></div></div>`;
 
 export async function planView($view, clock) {
   $view.innerHTML = header() + loading("Loading campus data…");

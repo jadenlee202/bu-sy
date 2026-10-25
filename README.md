@@ -69,22 +69,12 @@ when the site and API are on different origins.
 
 Current operating-hour cards may repeat a published weekly pattern outside its dates, labelled Assumed. Fenway opts out. These assumptions do not establish historical operating hours for the replay.
 
-### Calendar: sample week or your .ics schedule
-
-**Sample-week preview:** open **Calendar** (or the sample-week link on the planner). It defaults to the
-supplied October 25–31, 2026 screenshot, in `America/New_York` (GMT-04), and works on GitHub Pages with no
-server and no upload. Pick any day to see the shared availability engine calculate free windows and campus
-hour matches. Class blocks with cropped ends use a labelled 50-minute estimate; Saturday's code review
-uses a labelled 15-minute estimate. Halloween is informational and does not block the day. Overlapping
-Wednesday commitments count once. Dates outside that week stay unknown, and the sample replays the full
-day without filtering against today's clock. Preview choices are not saved. Turn off **Use sample
-schedule**, or upload your own calendar file, to use your schedule instead (an uploaded schedule that is
-still kept turns the sample off when the page opens). The source fixture is `web/js/sample-schedule.js`.
+### Calendar: your .ics schedule
 
 Each Pages deployment versions the stylesheet, entry module and all local module imports with the same
-commit key, preventing a fresh page from mixing old cached scripts with the new preview.
+commit key, preventing a fresh page from mixing old cached scripts with new ones.
 
-The Calendar page also lets a student upload a calendar file (`.ics`, exported from Google Calendar,
+The Calendar page lets a student upload a calendar file (`.ics`, exported from Google Calendar,
 Apple Calendar, Outlook or any iCalendar app). There is no sign-in and no calendar account
 connection. The file is parsed **in the browser** with [ical.js](https://github.com/kewisch/ical.js)
 2.2.1 (MPL-2.0, vendored unmodified in `web/vendor/`), and never sent to a server or AI service.
@@ -109,8 +99,8 @@ connection. The file is parsed **in the browser** with [ical.js](https://github.
   `web/data/hours.json`. No travel time is estimated.
 
 The server still contains the earlier Google Calendar free/busy integration (`server/google_calendar.py`,
-`/api/calendar/*`), but the Calendar page no longer uses it: availability comes from the sample week or an
-uploaded `.ics` file, both handled in the browser.
+`/api/calendar/*`), but the Calendar page no longer uses it: availability comes from an uploaded `.ics`
+file, handled in the browser.
 
 Each place's detail page has a *Find a time to eat* (dining) or *Find free time here* card that
 searches 7 days from a chosen date. On Places, *Open now* uses published hours; with a schedule
@@ -379,7 +369,7 @@ web/       the site: index.html, styles.css, js/
              calendar.js / findtime.js  availability   ics.js / schedule.js  .ics import (in the browser)
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
-tests/     test_api.py, test_campus_gym.py, test_clubs.py (pytest); recommend / planner_features / plan_prefs / clock / hours / clubs_static / ics / sample_schedule / sample_calendar_view .test.mjs (node --test)
+tests/     test_api.py, test_campus_gym.py, test_clubs.py (pytest); recommend / planner_features / plan_prefs / clock / hours / clubs_static / ics .test.mjs (node --test)
 DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 ```
 

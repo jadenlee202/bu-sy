@@ -1,6 +1,5 @@
 import { daySegments, freeWindows, matchFreeWindows, usableWindows, zonedInstant } from "./availability.js";
 import { daySchedule, formatPeriod } from "./hours.js";
-import { SAMPLE_DATES, SAMPLE_NOTE, SAMPLE_ZONE, sampleBusyForDay, sampleEventsForDay } from "./sample-schedule.js";
 import {
   busyOf, clearSchedule, covers, DEFAULT_TZ, importCalendarFile, ImportError, loadSchedule, saveSchedule, skippedText,
 } from "./schedule.js";
@@ -104,23 +103,13 @@ export async function calendarView($view) {
   let facilities = [];
   let hours = null;
   let schedule = loadSchedule();
-  // The supplied sample week drives the page until the student uses their own schedule
-  // (an uploaded one that's still kept turns the sample off from the start).
-  let sampleMode = !schedule;
   const events = new AbortController();
   const on = { signal: events.signal };
 
   $view.innerHTML = `
     <div class="page-head"><h1 class="title">Your availability</h1>
-      <p class="tagline">Preview a sample week, or upload your class schedule to see your free time and match it with verified campus hours.</p></div>
-    <section class="card sample-preview" aria-label="Sample weekly schedule">
-      <div class="calendar-actions"><h2>Sample week · October 25–31, 2026</h2>
-        <label class="check"><input type="checkbox" id="calendar-sample"${sampleMode ? " checked" : ""}><span>Use sample schedule</span></label></div>
-      <p class="help">${esc(SAMPLE_NOTE)}</p>
-      <div class="sample-week" id="sample-week"></div>
-    </section>
+      <p class="tagline">Upload your class schedule, see your free time, and match it with verified campus hours.</p></div>
     <section class="card calendar-connect" aria-labelledby="schedule-title">
-      <div id="calendar-connection"></div>
       <div id="schedule-card"></div>
       <input id="schedule-file" type="file" accept=".ics,text/calendar" hidden>
       <div id="schedule-status" role="status" aria-live="polite"></div>
@@ -128,21 +117,18 @@ export async function calendarView($view) {
     <section class="card calendar-controls" aria-label="Availability settings">
       <div class="calendar-controls-grid">
         <label>Date<div class="calendar-date-controls"><button class="icon-btn" type="button" data-date-step="-1" aria-label="Previous day">‹</button>
-          <input id="calendar-date" type="date" value="${sampleMode ? SAMPLE_DATES[1] : dateInputValue()}">
+          <input id="calendar-date" type="date" value="${dateInputValue()}">
           <button class="icon-btn" type="button" data-date-step="1" aria-label="Next day">›</button></div></label>
-        <label>Timezone<input id="calendar-timezone" value="${esc(sampleMode ? SAMPLE_ZONE : prefs.timezone ?? DEFAULT_TZ)}"${sampleMode ? " readonly" : ""} autocomplete="off" aria-describedby="calendar-timezone-help"></label>
+        <label>Timezone<input id="calendar-timezone" value="${esc(prefs.timezone ?? DEFAULT_TZ)}" autocomplete="off" aria-describedby="calendar-timezone-help"></label>
         <label>Minimum time<select id="calendar-minimum">${MIN_OPTIONS.map((minutes) => `<option value="${minutes}"${minutes === (prefs.minimum ?? 30) ? " selected" : ""}>${minutes} minutes</option>`).join("")}</select></label>
         <label>Available from<input id="calendar-from" type="time" value="${prefs.from ?? "08:00"}"></label>
         <label>Available until<input id="calendar-until" type="time" value="${prefs.until ?? "22:00"}"></label>
         <label>Campus location<select id="calendar-location"></select></label>
       </div>
-      <p class="help" id="calendar-timezone-help">The sample week uses Boston time (GMT-04). With your own schedule, your day and preferred hours are read in this timezone (Boston time by default; enter an IANA name such as America/Los_Angeles to change it), and event times keep the timezone written in your calendar file. Only your own settings are saved in this browser; the preview saves nothing.</p>
+      <p class="help" id="calendar-timezone-help">Your day and preferred hours are read in this timezone (Boston time by default; enter an IANA name such as America/Los_Angeles to change it). Event times keep the timezone written in your calendar file. These settings are saved in this browser only.</p>
     </section>
     <section class="card calendar-results" aria-live="polite"><div id="calendar-results">${loading()}</div></section>`;
 
-  const $connection = $view.querySelector("#calendar-connection");
-  const $sample = $view.querySelector("#calendar-sample");
-  const $week = $view.querySelector("#sample-week");
   const $card = $view.querySelector("#schedule-card");
   const $file = $view.querySelector("#schedule-file");
   const $status = $view.querySelector("#schedule-status");
@@ -153,29 +139,6 @@ export async function calendarView($view) {
   const $from = $view.querySelector("#calendar-from");
   const $until = $view.querySelector("#calendar-until");
   const $location = $view.querySelector("#calendar-location");
-
-  const renderWeek = () => {
-    $week.innerHTML = SAMPLE_DATES.map((date) => `<section class="sample-day"${date === $date.value && sampleMode ? ' data-selected="true"' : ""}>
-      <button type="button" class="btn btn-small" data-sample-date="${date}" aria-pressed="${date === $date.value && sampleMode}">${esc(new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", day: "numeric" }).format(new Date(`${date}T12:00:00Z`)))}</button>
-      <ul>${sampleEventsForDay(date).map((event) => `<li><strong>${esc(event.title)}</strong>
-        <span>${event.allDay ? "All day · doesn't block time" : `${event.start}–${event.end}${event.estimatedEnd ? " · end estimated" : ""}`}</span>
-        ${event.location ? `<span>${esc(event.location)}</span>` : ""}</li>`).join("")}</ul></section>`).join("");
-  };
-  const renderConnection = () => {
-    $connection.innerHTML = sampleMode
-      ? `<h2>Sample preview · no upload needed</h2><p>The sample week above drives the free-time results below. Turn off “Use sample schedule”, or upload your own calendar file, to use your schedule instead.</p>`
-      : "";
-  };
-  // Switching between the sample week and the student's own schedule.
-  const setSampleMode = (value, date) => {
-    sampleMode = value;
-    $sample.checked = value;
-    $timezone.readOnly = value;
-    $timezone.value = value ? SAMPLE_ZONE : prefs.timezone ?? DEFAULT_TZ;
-    $date.value = date ?? (value ? SAMPLE_DATES[1] : dateInputValue());
-    renderWeek();
-    renderConnection();
-  };
 
   const renderCard = () => {
     if (!schedule) {
@@ -216,7 +179,7 @@ export async function calendarView($view) {
     return {};
   }
 
-  const savePrefs = () => !sampleMode && saveCalendarPrefs({
+  const savePrefs = () => saveCalendarPrefs({
     timezone: $timezone.value.trim(),
     minimum: Number($minimum.value),
     from: $from.value,
@@ -255,13 +218,8 @@ export async function calendarView($view) {
       ${locationHours ? hoursSummary(locationHours, matchingLocation?.category, $date.value) : `<p class="help">Hours for this location are unverified.</p>`}
       <p class="help">These are the location's published hours (campus time), not a recommendation for you. ${verifiedNote}</p>`;
 
-    if (sampleMode && !SAMPLE_DATES.includes($date.value)) {
-      $results.innerHTML = `<h2>Outside the sample week</h2><p>No sample schedule is provided for this date. Choose October 25–31 above, or turn off sample mode to use your own schedule.</p>
-        ${publishedHours}`;
-      return;
-    }
     // Without a schedule, or outside the dates it covers, there's no claim that the day is free.
-    if (!sampleMode && (!schedule || !covers(schedule, start, end))) {
+    if (!schedule || !covers(schedule, start, end)) {
       $results.innerHTML = `<h2>${esc(dateLabel($date.value))}</h2>
         <h3>Your day</h3>
         <ul class="calendar-timeline"><li class="calendar-interval" data-kind="unknown"><strong>Schedule unknown</strong>
@@ -273,9 +231,8 @@ export async function calendarView($view) {
       return;
     }
 
-    // The sample replays its whole day regardless of today's clock; a real schedule hides past time.
-    const busy = sampleMode ? sampleBusyForDay($date.value) : busyOf(schedule);
-    const now = sampleMode ? -Infinity : Date.now();
+    const busy = busyOf(schedule);
+    const now = Date.now();
     const segments = daySegments(busy, start, end, minimum, now);
     const usable = usableWindows(freeWindows(busy, start, end), minimum, now);
     const total = usable.reduce((sum, interval) => sum + interval.end - interval.start, 0);
@@ -283,7 +240,7 @@ export async function calendarView($view) {
       ? matchFreeWindows(usable, { ...locationHours, category: matchingLocation?.category }, $date.value, minimum)
       : { status: "unverified", matches: [] };
     const assumedNote = match.assumed ? " Hours for this date are assumed to repeat the published weekly schedule." : "";
-    const afterLastEvent = !sampleMode && !schedule.openEnded && (schedule.lastBusyEnd == null || start >= schedule.lastBusyEnd)
+    const afterLastEvent = !schedule.openEnded && (schedule.lastBusyEnd == null || start >= schedule.lastBusyEnd)
       ? `<p class="help">Your calendar has no events ${schedule.lastBusyEnd == null ? "in the imported range" : `after ${esc(formatDay(schedule.lastBusyEnd, zone))}`}. If it only covers one semester, this free time may not match your real schedule.</p>`
       : "";
     const timelineHtml = segments.length ? `<ul class="calendar-timeline">${segments.map((interval) =>
@@ -324,9 +281,7 @@ export async function calendarView($view) {
     $results.innerHTML = `<h2>${esc(dateLabel($date.value))}</h2>
       <p class="calendar-total"><strong>${durationLabel(total) || "0 min"}</strong> available (free windows of ${minimum}+ min) during ${esc($from.value)}–${esc($until.value)} (${esc(zone)}).</p>
       <h3>Your day</h3>${timelineHtml}
-      <p class="help">${sampleMode
-        ? "Sample availability from the supplied screenshot, including the labelled estimated ends. Overlapping commitments count once. Halloween does not block time. No calendar file is used."
-        : `From ${esc(schedule.fileName)}. Cancelled events, excluded occurrences and events marked free aren't counted as busy.`}</p>${afterLastEvent}
+      <p class="help">From ${esc(schedule.fileName)}. Cancelled events, excluded occurrences and events marked free aren't counted as busy.</p>${afterLastEvent}
       <h3>Time at ${locationName}</h3>${matchesHtml}
       ${usable.length ? `<h3>Places that fit your free time</h3>${fitsHtml}` : ""}
       <p class="help">Travel time isn't included. Confirm the trip fits your schedule.${assumedNote} ${verifiedNote}</p>`;
@@ -340,7 +295,6 @@ export async function calendarView($view) {
     showStatus(loading(`Reading ${esc(file.name)}…`));
     try {
       schedule = await importCalendarFile(file, { remember });
-      if (sampleMode) setSampleMode(false);   // an upload means the student wants their own schedule
       renderCard();
       showStatus(`<p class="calendar-ok">Imported ${esc(file.name)}. ${esc(importSummary(schedule))}</p>`);
     } catch (error) {
@@ -351,17 +305,7 @@ export async function calendarView($view) {
     renderResults();
   };
 
-  $sample.addEventListener("change", () => {
-    setSampleMode($sample.checked);
-    renderResults();
-  }, on);
   $view.addEventListener("click", (event) => {
-    const sampleDate = event.target.closest("[data-sample-date]");
-    if (sampleDate) {
-      setSampleMode(true, sampleDate.dataset.sampleDate);
-      renderResults();
-      return;
-    }
     const action = event.target.closest("[data-schedule]")?.dataset.schedule;
     if (action === "pick") {
       $file.click();
@@ -376,7 +320,6 @@ export async function calendarView($view) {
       const step = event.target.closest("[data-date-step]");
       if (step) {
         $date.value = plusDays($date.value, Number(step.dataset.dateStep));
-        renderWeek();
         renderResults();
       }
     }
@@ -394,10 +337,8 @@ export async function calendarView($view) {
   }, on);
 
   const rerender = () => { savePrefs(); renderResults(); };
-  $date.addEventListener("change", () => { renderWeek(); renderResults(); }, on);
+  $date.addEventListener("change", renderResults, on);
   for (const $input of [$timezone, $minimum, $from, $until, $location]) $input.addEventListener("change", rerender, on);
-  renderWeek();
-  renderConnection();
   renderCard();
   renderResults();
   return { dispose() { events.abort(); } };
