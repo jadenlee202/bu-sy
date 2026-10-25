@@ -8,6 +8,10 @@ Endpoint shapes follow the shared brief:
     GET  /api/sources                                  (how each campus place is simulated, with citations)
     GET  /api/community-events                         (unofficial, student-run)
     POST /api/community-events, /{id}/join, /{id}/leave, /{id}/cancel
+    GET  /api/clubs, /api/clubs/{id}                   (club directory; sample clubs + student-created)
+    POST /api/clubs, /{id}/edit, /{id}/apply, /{id}/withdraw
+    GET  /api/clubs/{id}/applications                  (organizer token only)
+    POST /api/clubs/{id}/applications/{app_id}/decide  (organizer token only)
 
 How it works
     1. sources.py loads data/campus_simulation_occupancy.csv (SIMULATED: one demo
@@ -50,6 +54,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import clubs
 import community_events as ce
 from campus import Campus, load_campus
 from analytics import THRESHOLD_NOTE, latest_at
@@ -411,6 +416,48 @@ def leave_community_event(event_id: str, body: ce.TokenRequest):
 @app.post("/api/community-events/{event_id}/cancel", status_code=204)
 def cancel_community_event(event_id: str, body: ce.TokenRequest):
     ce.cancel_event(event_id, body)
+
+
+# ---------- club directory (sample clubs + student-created; demo-grade organizer gating) ----------
+@app.get("/api/clubs")
+def list_clubs(device: Optional[str] = Header(None, alias="X-BUsy-Device")):
+    return clubs.list_clubs(device, FACILITIES)
+
+
+@app.get("/api/clubs/{club_id}")
+def get_club(club_id: str, device: Optional[str] = Header(None, alias="X-BUsy-Device")):
+    return clubs.get_club(club_id, device, FACILITIES)
+
+
+@app.post("/api/clubs", status_code=201)
+def create_club(body: clubs.ClubFields):
+    return clubs.create_club(body, FACILITIES)
+
+
+@app.post("/api/clubs/{club_id}/edit")
+def edit_club(club_id: str, body: clubs.ClubFields):
+    return clubs.edit_club(club_id, body, FACILITIES)
+
+
+@app.post("/api/clubs/{club_id}/apply")
+def apply_to_club(club_id: str, body: clubs.Application):
+    return clubs.apply(club_id, body, FACILITIES)
+
+
+@app.post("/api/clubs/{club_id}/withdraw")
+def withdraw_from_club(club_id: str, body: clubs.TokenRequest):
+    return clubs.withdraw(club_id, body, FACILITIES)
+
+
+@app.get("/api/clubs/{club_id}/applications")
+def club_applications(club_id: str, device: Optional[str] = Header(None, alias="X-BUsy-Device")):
+    """Organizer only. The token comes in a header, never the URL."""
+    return clubs.applications(club_id, device)
+
+
+@app.post("/api/clubs/{club_id}/applications/{app_id}/decide")
+def decide_application(club_id: str, app_id: str, body: clubs.Decision):
+    return clubs.decide(club_id, app_id, body, FACILITIES)
 
 
 # The web app, served from the same origin so it finds /api automatically.
