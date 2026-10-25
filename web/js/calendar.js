@@ -1,7 +1,7 @@
 import { daySegments, freeWindows, matchFreeWindows, usableWindows, zonedInstant } from "./availability.js";
 import { daySchedule, formatPeriod } from "./hours.js";
 import {
-  addDays, eventsByDay, monthCells, monthTitle, rangeText, shiftMonth, timeOnDay, WEEKDAYS,
+  addDays, eventsByDay, monthCells, monthTitle, rangeText, shiftMonth, timeOnDay, WEEK_STARTS, weekdayNames,
 } from "./monthview.js";
 import {
   busyOf, clearSchedule, covers, DEFAULT_TZ, eventsOf, importCalendarFile, ImportError, loadSchedule, saveSchedule, skippedText,
@@ -57,6 +57,7 @@ export function loadCalendarPrefs() {
       ...(clock(raw.from) ? { from: raw.from } : {}),
       ...(clock(raw.until) ? { until: raw.until } : {}),
       ...(typeof raw.location === "string" ? { location: raw.location } : {}),
+      ...(WEEK_STARTS.some(([day]) => day === raw.weekStart) ? { weekStart: raw.weekStart } : {}),
     };
   } catch {
     return {};
@@ -144,6 +145,7 @@ export async function calendarView($view) {
   const $month = $view.querySelector("#month");
   let viewMonth = $date.value.slice(0, 7);   // the month on screen; the selected day is $date
   let focusEvent = null;                     // event to highlight after clicking it in the grid
+  let weekStart = prefs.weekStart ?? 0;      // first column of the month grid: Sunday unless changed
 
   const renderCard = () => {
     if (!schedule) {
@@ -173,7 +175,7 @@ export async function calendarView($view) {
   const displayZone = () => (validZone($timezone.value.trim()) ? $timezone.value.trim() : DEFAULT_TZ);
   const renderMonth = () => {
     const zone = displayZone();
-    const cells = monthCells(viewMonth);
+    const cells = monthCells(viewMonth, weekStart);
     const events = schedule ? eventsOf(schedule) : null;
     const byDay = events ? eventsByDay(events, cells[0].date, cells[cells.length - 1].date, zone) : new Map();
     const today = todayIn(zone);
@@ -218,12 +220,16 @@ export async function calendarView($view) {
     $month.innerHTML = `<div class="month-head">
         <h2 id="month-title">${esc(monthTitle(viewMonth))}</h2>
         <div class="month-nav">
-          <button class="icon-btn" type="button" data-month="-1" aria-label="Previous month">‹</button>
-          <button class="btn btn-small" type="button" data-month="today">Today</button>
-          <button class="icon-btn" type="button" data-month="1" aria-label="Next month">›</button>
+          <label class="month-week-start">Week starts<select data-week-start>${WEEK_STARTS.map(([day, name]) =>
+            `<option value="${day}"${day === weekStart ? " selected" : ""}>${name}</option>`).join("")}</select></label>
+          <span class="month-step">
+            <button class="icon-btn" type="button" data-month="-1" aria-label="Previous month">‹</button>
+            <button class="btn btn-small" type="button" data-month="today">Today</button>
+            <button class="icon-btn" type="button" data-month="1" aria-label="Next month">›</button>
+          </span>
         </div>
       </div>
-      <div class="month-weekdays" aria-hidden="true">${WEEKDAYS.map((day) => `<span>${day}</span>`).join("")}</div>
+      <div class="month-weekdays" aria-hidden="true">${weekdayNames(weekStart).map((day) => `<span>${day}</span>`).join("")}</div>
       <div class="month-grid">${cells.map(cell).join("")}</div>
       <section class="day-detail" aria-live="polite">
         <h3>${esc(dateLabel(selected))}</h3>
@@ -243,6 +249,13 @@ export async function calendarView($view) {
     renderMonth();
     if (ready) renderResults();   // before campus data loads, the results catch up once it does
   };
+  $month.addEventListener("change", (event) => {
+    if (!event.target.matches("[data-week-start]")) return;
+    weekStart = Number(event.target.value);
+    saveCalendarPrefs({ weekStart });
+    renderMonth();
+    $month.querySelector("[data-week-start]")?.focus();
+  }, on);
   $month.addEventListener("click", (event) => {
     const step = event.target.closest("[data-month]")?.dataset.month;
     if (step === "today") {

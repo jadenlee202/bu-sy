@@ -101,8 +101,9 @@ connection. The file is parsed **in the browser** with [ical.js](https://github.
 - **Free time** is the gap between merged busy blocks inside your preferred hours, at least your
   minimum length, intersected with the date-scoped building and meal-service hours in
   `web/data/hours.json`. No travel time is estimated.
-- **Calendar view:** the Calendar tab always shows a Monday–Sunday month grid (empty until a file
-  is imported) with previous/next month and *Today*. Imported events appear on every date they
+- **Calendar view:** the Calendar tab always shows a month grid (empty until a file is imported)
+  with previous/next month and *Today*. Weeks start on Sunday; *Week starts* switches to Monday
+  (saved in this browser). Imported events appear on every date they
   cover, in the display timezone (all-day events on their calendar dates); free events are shown
   dashed and aren't busy. Clicking a date (or an event) selects that day: its events are listed
   below the grid, and the date control and free-time results switch to the same day. On narrow
