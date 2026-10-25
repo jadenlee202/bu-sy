@@ -71,15 +71,15 @@
         },
         "specialHours": [],
         "effectiveFrom": "2026-10-23",
-        "effectiveThrough": "2026-10-29",
-        "scheduleNote": "Upcoming meal-service periods checked October 25 for October 23-29, 2026. Building span summarizes first to last meal service; it does not independently establish building entry hours."
+        "effectiveThrough": "2026-10-31",
+        "scheduleNote": "Building span summarizes the first to last published meal service (official BU Dining Upcoming Hours, checked 2026-10-25 for October 25-31, 2026); it does not independently establish building entry hours."
       },
       "serviceHours": {
         "status": "verified",
         "unverifiedReason": null,
         "effectiveFrom": "2026-10-23",
-        "effectiveThrough": "2026-10-29",
-        "scheduleNote": "Upcoming meal-service periods checked October 25 for October 23-29, 2026. Building span summarizes first to last meal service; it does not independently establish building entry hours.",
+        "effectiveThrough": "2026-10-31",
+        "scheduleNote": "Meal-service periods as published in Upcoming Hours on the official BU Dining location page, checked 2026-10-25 for October 25-31, 2026 (Sunday: Brunch and Dinner). Later dates are not yet published, so no meal status is shown for them.",
         "weeklyHours": {
           "monday": [ {"label": "Breakfast", "start": "07:00", "end": "11:00"}, {"label": "Lunch", "start": "11:00", "end": "17:00"}, {"label": "Dinner", "start": "17:00", "end": "22:00"} ],
           "tuesday": [ {"label": "Breakfast", "start": "07:00", "end": "11:00"}, {"label": "Lunch", "start": "11:00", "end": "17:00"}, {"label": "Dinner", "start": "17:00", "end": "22:00"} ],
@@ -110,15 +110,15 @@
         },
         "specialHours": [],
         "effectiveFrom": "2026-10-24",
-        "effectiveThrough": "2026-10-30",
+        "effectiveThrough": "2026-10-31",
         "scheduleNote": "Building hours follow the published first-to-last dining service periods, per user confirmation. Meal periods are shown separately."
       },
       "serviceHours": {
         "status": "verified",
         "unverifiedReason": null,
         "effectiveFrom": "2026-10-24",
-        "effectiveThrough": "2026-10-30",
-        "scheduleNote": "Dated Upcoming Hours published for October 24–30, 2026. Later dates are not yet verified.",
+        "effectiveThrough": "2026-10-31",
+        "scheduleNote": "Meal-service periods as published in Upcoming Hours on the official BU Dining location page, checked 2026-10-25 for October 25-31, 2026 (Sunday: Brunch and Dinner). Later dates are not yet published, so no meal status is shown for them.",
         "weeklyHours": {
           "monday": [ {"label": "Breakfast", "start": "07:00", "end": "11:00"}, {"label": "Lunch", "start": "11:00", "end": "17:00"}, {"label": "Dinner", "start": "17:00", "end": "21:00"} ],
           "tuesday": [ {"label": "Breakfast", "start": "07:00", "end": "11:00"}, {"label": "Lunch", "start": "11:00", "end": "17:00"}, {"label": "Dinner", "start": "17:00", "end": "21:00"} ],
@@ -134,7 +134,7 @@
     "west-dining-synthetic": {
       "sourceUrl": "https://www.bu.edu/dining/location/west/",
       "sourceLabel": "BU Dining · West Campus",
-      "lastVerified": "2026-10-24",
+      "lastVerified": "2026-10-25",
       "buildingHours": {
         "status": "verified",
         "unverifiedReason": null,
@@ -149,15 +149,15 @@
         },
         "specialHours": [],
         "effectiveFrom": "2026-10-24",
-        "effectiveThrough": "2026-10-30",
+        "effectiveThrough": "2026-10-31",
         "scheduleNote": "Building hours follow the published first-to-last dining service periods, per user confirmation. Meal periods are shown separately."
       },
       "serviceHours": {
         "status": "verified",
         "unverifiedReason": null,
         "effectiveFrom": "2026-10-24",
-        "effectiveThrough": "2026-10-30",
-        "scheduleNote": "Dated Upcoming Hours published for October 24–30, 2026. Later dates are not yet verified.",
+        "effectiveThrough": "2026-10-31",
+        "scheduleNote": "Meal-service periods as published in Upcoming Hours on the official BU Dining location page, checked 2026-10-25 for October 25-31, 2026 (Sunday: Brunch and Dinner). Later dates are not yet published, so no meal status is shown for them.",
         "weeklyHours": {
           "monday": [ {"label": "Breakfast", "start": "07:00", "end": "11:00"}, {"label": "Lunch", "start": "11:00", "end": "17:00"}, {"label": "Dinner", "start": "17:00", "end": "22:00"} ],
           "tuesday": [ {"label": "Breakfast", "start": "07:00", "end": "11:00"}, {"label": "Lunch", "start": "11:00", "end": "17:00"}, {"label": "Dinner", "start": "17:00", "end": "22:00"} ],
@@ -173,7 +173,7 @@
     "fenway-dining-synthetic": {
       "sourceUrl": "https://bufenway.sodexomyway.com/en-us/locations/hours",
       "sourceLabel": "Fenway Dining · Sodexo hours",
-      "lastVerified": "2026-10-24",
+      "lastVerified": "2026-10-25",
       "buildingHours": {
         "status": "verified",
         "unverifiedReason": null,
@@ -198,7 +198,7 @@
         "effectiveFrom": "2026-10-19",
         "effectiveThrough": "2026-10-25",
         "repeatsWeekly": false,
-        "scheduleNote": "Fenway Dining Hall regular hours published for the week of October 19–25, 2026. Do not apply this schedule beyond that week.",
+        "scheduleNote": "Standard weekly meal-service periods on the Fenway Dining Hall hours page (https://www.bu.edu/dining/location/fenway/ redirects there), shown for the week of October 19-25, 2026 and re-checked 2026-10-25; no seasonal schedule covers this period. Not applied beyond the published week.",
         "weeklyHours": {
           "monday": [ {"label": "Breakfast", "start": "07:00", "end": "10:00"}, {"label": "Continental breakfast", "start": "10:00", "end": "11:30"}, {"label": "Lunch", "start": "11:30", "end": "14:00"}, {"label": "Light lunch", "start": "14:00", "end": "16:30"}, {"label": "Dinner", "start": "16:30", "end": "20:00"}, {"label": "Light dinner", "start": "20:00", "end": "22:00"} ],
           "tuesday": [ {"label": "Breakfast", "start": "07:00", "end": "10:00"}, {"label": "Continental breakfast", "start": "10:00", "end": "11:30"}, {"label": "Lunch", "start": "11:30", "end": "14:00"}, {"label": "Light lunch", "start": "14:00", "end": "16:30"}, {"label": "Dinner", "start": "16:30", "end": "20:00"}, {"label": "Light dinner", "start": "20:00", "end": "22:00"} ],

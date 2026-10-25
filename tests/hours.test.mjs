@@ -42,7 +42,7 @@ test("Places reports unpublished dates without claiming an open or closed status
 test("weekly hours repeat beyond the published dates and are marked assumed", () => {
   const marciano = hours.locations["marciano-dining-synthetic"];
   const published = daySchedule(marciano, "2026-10-24");
-  const nextWeek = daySchedule(marciano, "2026-10-31");
+  const nextWeek = daySchedule(marciano, "2026-11-07");
   const weekBefore = daySchedule(marciano, "2026-10-17");
 
   assert.equal(published.assumed, undefined);
@@ -50,9 +50,9 @@ test("weekly hours repeat beyond the published dates and are marked assumed", ()
   assert.equal(nextWeek.assumed, true);
   assert.deepEqual(nextWeek.periods, published.periods);
   assert.deepEqual(weekBefore.periods, published.periods);
-  assert.equal(buildingHoursSummary(marciano, "2026-10-31"), "9:00 AM–9:00 PM (assumed)");
-  assert.equal(selectedBuildingStatus(marciano, "2026-10-31", 12 * 60).status, "open");
-  assert.deepEqual(displaySchedule(marciano, "2026-10-31", "dining").periods.map(({ label }) => label),
+  assert.equal(buildingHoursSummary(marciano, "2026-11-07"), "9:00 AM–9:00 PM (assumed)");
+  assert.equal(selectedBuildingStatus(marciano, "2026-11-07", 12 * 60).status, "open");
+  assert.deepEqual(displaySchedule(marciano, "2026-11-07", "dining").periods.map(({ label }) => label),
     ["Breakfast", "Lunch", "Dinner"]);
 });
 
@@ -102,9 +102,9 @@ test("dining service is determined by selected date and slider time", () => {
   const marciano = hours.locations["marciano-dining-synthetic"];
   const date = "2026-10-24";
   for (const [minute, expected] of [
-    [10 * 60, "Serving Breakfast"],
-    [12 * 60, "Serving Lunch"],
-    [18 * 60, "Serving Dinner"],
+    [10 * 60, "Serving breakfast"],
+    [12 * 60, "Serving lunch"],
+    [18 * 60, "Serving dinner"],
   ]) {
     const service = serviceAtTime(marciano, date, minute);
     const building = selectedBuildingStatus(marciano, date, minute);
@@ -113,10 +113,67 @@ test("dining service is determined by selected date and slider time", () => {
 
   const sunday = "2026-10-25";
   const brunch = serviceAtTime(marciano, sunday, 11 * 60);
-  assert.equal(serviceStatusLabel(brunch, selectedBuildingStatus(marciano, sunday, 11 * 60)), "Serving Brunch");
+  assert.equal(serviceStatusLabel(brunch, selectedBuildingStatus(marciano, sunday, 11 * 60)), "Serving brunch");
 
   const closed = selectedBuildingStatus(marciano, sunday, 21 * 60 + 30);
   assert.equal(serviceStatusLabel(serviceAtTime(marciano, sunday, 21 * 60 + 30), closed), "No meal service — building closed");
+});
+
+// Meal status against the official BU Dining "Upcoming Hours" (checked 2026-10-25 for Oct 25-31).
+const mealAt = (location, date, hhmm) => {
+  const minute = Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3));
+  return serviceStatusLabel(serviceAtTime(location, date, minute), selectedBuildingStatus(location, date, minute));
+};
+
+test("dining meal status follows BU's published breakfast, lunch and dinner boundaries", () => {
+  const warren = hours.locations["warren-dining-synthetic"];
+  const monday = "2026-10-26";   // Breakfast 7-11, Lunch 11-5, Dinner 5-10
+  for (const [time, expected] of [
+    ["06:59", "No meal service — building closed"], ["07:00", "Serving breakfast"], ["10:59", "Serving breakfast"],
+    ["11:00", "Serving lunch"], ["16:59", "Serving lunch"], ["17:00", "Serving dinner"], ["21:59", "Serving dinner"],
+    ["22:00", "No meal service — building closed"],
+  ]) assert.equal(mealAt(warren, monday, time), expected, `Warren ${monday} ${time}`);
+  // Marciano's dinner ends an hour earlier than Warren's on weekdays.
+  assert.equal(mealAt(hours.locations["marciano-dining-synthetic"], monday, "21:30"), "No meal service — building closed");
+  assert.equal(mealAt(hours.locations["west-dining-synthetic"], monday, "21:30"), "Serving dinner");
+});
+
+test("brunch is named brunch, and Saturday and Halloween use their own published hours", () => {
+  const warren = hours.locations["warren-dining-synthetic"];
+  assert.equal(mealAt(warren, "2026-10-25", "10:00"), "Serving brunch");     // Sunday: Brunch 10-4, Dinner 4-9
+  assert.equal(mealAt(warren, "2026-10-25", "15:59"), "Serving brunch");
+  assert.equal(mealAt(warren, "2026-10-25", "16:00"), "Serving dinner");
+  assert.equal(mealAt(warren, "2026-10-25", "09:30"), "No meal service — building closed");
+  assert.equal(mealAt(warren, "2026-10-31", "08:30"), "No meal service — building closed");   // Saturday opens at 9
+  assert.equal(mealAt(warren, "2026-10-31", "09:00"), "Serving breakfast");
+  assert.equal(mealAt(warren, "2026-10-31", "17:00"), "Serving dinner");
+});
+
+test("Fenway's named services keep their own names", () => {
+  const fenway = hours.locations["fenway-dining-synthetic"];
+  assert.equal(mealAt(fenway, "2026-10-23", "10:30"), "Serving continental breakfast");
+  assert.equal(mealAt(fenway, "2026-10-23", "14:00"), "Serving light lunch");
+  assert.equal(mealAt(fenway, "2026-10-22", "21:00"), "Serving light dinner");
+  assert.equal(mealAt(fenway, "2026-10-24", "12:00"), "Serving brunch");        // weekend: brunch, not lunch
+});
+
+test("no meal status without published meal hours for that date", () => {
+  const warren = hours.locations["warren-dining-synthetic"];
+  assert.equal(serviceAtTime(warren, "2026-11-02", 12 * 60).status, "unpublished");     // weekly pattern only assumed
+  assert.doesNotMatch(mealAt(warren, "2026-11-02", "12:00"), /^Serving/);
+  assert.doesNotMatch(mealAt(hours.locations["fenway-dining-synthetic"], "2026-10-26", "12:00"), /^Serving/);
+  assert.equal(serviceAtTime(hours.locations["fitrec-synthetic"], "2026-10-26", 12 * 60).status, "not_applicable");
+});
+
+test("an open hall between meal periods says no meal service is scheduled", () => {
+  const hall = {   // SYNTHETIC FIXTURE: open 7-22 with a gap between breakfast and lunch
+    buildingHours: { status: "verified", effectiveFrom: "2026-10-26", effectiveThrough: "2026-10-26",
+      weeklyHours: { monday: [{ label: "Building hours", start: "07:00", end: "22:00" }] } },
+    serviceHours: { status: "verified", effectiveFrom: "2026-10-26", effectiveThrough: "2026-10-26",
+      weeklyHours: { monday: [{ label: "Breakfast", start: "07:00", end: "10:00" }, { label: "Lunch", start: "12:00", end: "14:00" }] } },
+  };
+  assert.equal(mealAt(hall, "2026-10-26", "11:00"), "No meal service currently scheduled");
+  assert.equal(mealAt(hall, "2026-10-26", "12:00"), "Serving lunch");
 });
 
 test("dining weekly display uses named service periods while non-dining keeps building hours", () => {

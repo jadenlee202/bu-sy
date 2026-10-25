@@ -127,8 +127,10 @@ export function selectedBuildingStatus(location, date, minute) {
 export function serviceAtTime(location, date, minute) {
   const today = daySchedule(location, date, "service");
   if (today.status === "not_applicable") return { status: "not_applicable", periods: [] };
-  if (today.status === "unverified" || today.status === "unpublished") {
-    return { status: today.status, periods: [] };
+  // A meal status needs published meal hours for that date: an assumed repeat of the weekly
+  // pattern is never shown as "Serving ...".
+  if (today.status === "unverified" || today.status === "unpublished" || today.assumed) {
+    return { status: today.assumed ? "unpublished" : today.status, periods: [] };
   }
   const yesterday = today.special ? null : overnightPeriodFrom(location, date, minute, "service");
   const periods = [
@@ -178,10 +180,10 @@ export function serviceStatusLabel(service, buildingStatus) {
   if (service.status === "unverified" || service.status === "unpublished") return "Service hours unavailable";
   if (service.status === "not_applicable") return "Food service not applicable";
   if (service.status === "serving") {
-    const labels = [...new Set(service.periods.map((period) => period.label))];
+    // The meal's own published name (Breakfast, Brunch, Light lunch...), never relabelled.
+    const labels = [...new Set(service.periods.map((period) => period.label.trim().toLowerCase()))];
     return `Serving ${labels.join(", ")}`;
   }
-  if (buildingStatus.status === "open") return "Open — no meal service currently scheduled";
   return "No meal service currently scheduled";
 }
 

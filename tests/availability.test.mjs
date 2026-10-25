@@ -186,10 +186,10 @@ test("search ignores time that has passed and reports unpublished dates", () => 
 
 test("matches on dates past the published week use repeated hours and are flagged assumed", () => {
   const nextSaturday = [
-    { start: "2026-10-31T08:00:00-04:00", end: "2026-10-31T12:15:00-04:00" },
-    { start: "2026-10-31T12:55:00-04:00", end: "2026-10-31T22:00:00-04:00" },
+    { start: "2026-11-07T08:00:00-04:00", end: "2026-11-07T12:15:00-04:00" },
+    { start: "2026-11-07T12:55:00-04:00", end: "2026-11-07T22:00:00-04:00" },
   ];
-  const { matches } = findOpportunities(nextSaturday, marciano, "2026-10-31", 1, searchOptions);
+  const { matches } = findOpportunities(nextSaturday, marciano, "2026-11-07", 1, searchOptions);
   assert.deepEqual(matches.map(({ label, assumed }) => [label, assumed]), [["Lunch", true]]);
 
   const published = findOpportunities(weekBusy, marciano, "2026-10-24", 1, searchOptions);
@@ -218,20 +218,16 @@ test("open-now filter uses verified hours and flags unverified places instead of
   assert.equal(placeAvailability(mugar, "library", "open_now", { now: noon }).result, "unchecked");
 });
 
-test("free-time filters match building hours, meals, and only dining for meals", () => {
+test("the free-time filter matches building hours", () => {
   const fitrec = hours.locations["fitrec-synthetic"];
   const open = placeAvailability(fitrec, "fitness", "free", filterContext);
   assert.equal(open.result, "match");
   assert.equal(open.match.start, Date.parse("2026-10-24T12:15:00-04:00"));
-
-  assert.equal(placeAvailability(marciano, "dining", "lunch", filterContext).result, "match");
-  assert.equal(placeAvailability(marciano, "dining", "dinner", filterContext).result, "no");
-  assert.equal(placeAvailability(fitrec, "fitness", "lunch", filterContext).result, "no");
   assert.equal(placeAvailability(marciano, "dining", "free", { ...filterContext, minimum: 45 }).result, "no");
 });
 
 test("free-time filters report unverified or unpublished hours as unchecked", () => {
   assert.equal(placeAvailability(mugar, "library", "free", filterContext).result, "unchecked");
-  assert.equal(placeAvailability(fenway, "dining", "lunch", { ...filterContext, date: "2026-10-31", busy: [] }).result, "unchecked");
-  assert.equal(placeAvailability(marciano, "dining", "lunch", { ...filterContext, date: "2026-10-31", busy: [] }).result, "match");
+  assert.equal(placeAvailability(fenway, "dining", "free", { ...filterContext, date: "2026-10-31", busy: [] }).result, "unchecked");
+  assert.equal(placeAvailability(marciano, "dining", "free", { ...filterContext, date: "2026-10-31", busy: [] }).result, "match");
 });

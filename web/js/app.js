@@ -28,10 +28,8 @@ const CATEGORY = { fitness: "Fitness", dining: "Dining", library: "Library", off
 const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], ["library", "Library"], ["historical", "Historical"]];
 // Availability filters combine with the category chips. Without an uploaded schedule the free-time
 // filters treat the student as free for their whole preferred window.
-const AVAIL_FILTERS = [["any", "Any time"], ["open_now", "Open now"], ["free", "Open during my free time"],
-  ["breakfast", "Serving breakfast during my free time"], ["brunch", "Serving brunch during my free time"],
-  ["lunch", "Serving lunch during my free time"], ["dinner", "Serving dinner during my free time"]];
-const CALENDAR_FILTERS = new Set(["free", "breakfast", "brunch", "lunch", "dinner"]);
+const AVAIL_FILTERS = [["any", "Any time"], ["open_now", "Open now"], ["free", "Open during my free time"]];
+const CALENDAR_FILTERS = new Set(["free"]);
 
 const state = { minute: FIRST_VIEW, playing: false, speed: 1, timer: null, filter: "all", query: "", avail: "any" };
 const $view = document.getElementById("view");

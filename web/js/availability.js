@@ -183,11 +183,9 @@ export function placeAvailability(location, category, mode, context) {
     if (status === "open") return { result: "match" };
     return status === "opens" || status === "closed" ? { result: "no" } : { result: "unchecked" };
   }
-  const meal = mode === "free" ? null : mode;
-  if (meal && category !== "dining") return { result: "no" };
   // Open during free time means the building is open, so dining halls use building hours here.
-  const schedule = { ...location, category: meal ? "dining" : "building" };
-  const { matches, outcomes } = findOpportunities(context.busy, schedule, context.date, 1, { ...context, meal });
+  const schedule = { ...location, category: "building" };
+  const { matches, outcomes } = findOpportunities(context.busy, schedule, context.date, 1, context);
   if (matches.length) return { result: "match", match: matches[0] };
   return UNCHECKABLE.has(outcomes[0]?.reason) ? { result: "unchecked" } : { result: "no" };
 }
