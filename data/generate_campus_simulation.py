@@ -631,7 +631,7 @@ def main():
         w = csv.writer(f, lineterminator="\n")
         w.writerow(["facility_id", "timestamp", "occupancy_count"])
         w.writerows(rows)
-    OUT_JSON.write_text(json.dumps(provenance, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    OUT_JSON.write_text(json.dumps(provenance, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     sims = {s["id"]: s for s in provenance["simulations"]}
     print(f"Rows:    {len(rows):,} ({len({r[0] for r in rows})} series, every {GRID_MIN} min)")
     print(f"FitRec:  x{sims['fitrec-from-campus-gym']['parameters']['scale']} from {GYM_SOURCE_DAY}")

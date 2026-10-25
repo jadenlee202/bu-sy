@@ -131,6 +131,30 @@ main:focus { outline: none; }
 .foot { padding: 8px 16px max(24px, env(safe-area-inset-bottom)); font-size: 13px; color: var(--muted); text-align: center; }
 .source-mode { display: block; margin-top: 2px; font-size: 12px; }
 
+/* ---------- version note: in the footer on small screens, the corner on wide ones ---------- */
+.version { margin-top: 8px; font-size: 12px; }
+.version > summary {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 3px 11px; cursor: pointer; list-style: none;
+  color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+}
+.version > summary::-webkit-details-marker { display: none; }
+.version[open] > summary, .version > summary:hover { color: var(--text); }
+.version-panel {
+  max-width: 360px; max-height: 50vh; margin: 8px auto 0; padding: 12px 14px; overflow-y: auto; text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.version-head { margin: 0 0 4px; font-size: 13px; font-weight: 650; color: var(--text); }
+.version-list { list-style: none; margin: 0; padding: 0; }
+.version-list li { display: grid; grid-template-columns: 2.4em minmax(0, 1fr); gap: 8px; padding: 7px 0; border-top: 1px solid var(--line); }
+.version-list li:first-child { border-top: 0; }
+.version-num { font-weight: 650; color: var(--text); }
+.version-title { display: block; color: var(--text); line-height: 1.4; }
+.version-meta { display: block; color: var(--muted); }
+@media (min-width: 64rem) {
+  .version { position: fixed; right: 20px; bottom: 16px; z-index: 20; margin: 0; }
+  .version-panel { position: absolute; right: 0; bottom: calc(100% + 8px); width: 360px; margin: 0; box-shadow: 0 12px 32px rgb(0 0 0 / 0.18); }
+}
+
 @media (min-width: 48rem) {
   main { padding-top: 28px; padding-left: 24px; padding-right: 24px; }
 }
