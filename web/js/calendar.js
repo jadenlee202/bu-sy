@@ -7,6 +7,7 @@ import {
   busyOf, clearSchedule, covers, DEFAULT_TZ, eventsOf, importCalendarFile, ImportError, loadSchedule, saveSchedule, skippedText,
 } from "./schedule.js";
 import { clubBusy, clubEventItems, loadClubEvents, reconcile, removeClubEvent } from "./clubevents.js";
+import { icon } from "./icons.js";
 import * as src from "./source.js";
 import { esc, failure, infoTip, loading } from "./ui.js";
 
@@ -150,28 +151,40 @@ export async function calendarView($view) {
   let focusEvent = null;                     // event to highlight after clicking it in the grid
   let weekStart = prefs.weekStart ?? 0;      // first column of the month grid: Sunday unless changed
 
+  // The upload card: heading, status and upload/replace/clear always visible; the explanation and
+  // instructions collapse (collapsed by default, and kept as the user left it while on this page).
+  let uploadOpen = false;
   const renderCard = () => {
-    if (!schedule) {
-      $card.innerHTML = `<h2 id="schedule-title">Upload your schedule</h2>
-        <p>Upload a calendar file (.ics) with your classes. BU-sy reads it in this browser to find your free time: the file isn't sent anywhere, and there's nothing to sign in to.</p>
+    const status = schedule
+      ? `<p><strong>${esc(schedule.fileName)}</strong> · imported ${esc(formatDay(schedule.importedAt, DEFAULT_TZ))}</p>`
+      : `<span class="pill">No schedule uploaded</span>`;
+    const actions = schedule
+      ? `<button class="btn" type="button" data-schedule="pick">Replace schedule</button>
+        <button class="btn btn-quiet" type="button" data-schedule="remove">Clear imported calendar</button>`
+      : `<button class="btn btn-primary" type="button" data-schedule="pick">Upload Calendar File</button>`;
+    const details = schedule
+      ? `<p>${esc(importSummary(schedule))}</p>
+        <p class="help">Kept: each event's title and times (for your calendar below) and your merged busy times. Never kept: the file, descriptions, locations or guests. ${STORED_IN[schedule.storedIn]}</p>
+        <label class="check"><input type="checkbox" id="schedule-remember"${schedule.storedIn === "local" ? " checked" : ""}> Remember my schedule on this device</label>`
+      : `<p>Upload a calendar file (.ics) with your classes. BU-sy reads it in this browser to find your free time: the file isn't sent anywhere, and there's nothing to sign in to.</p>
         <details class="how-export"><summary>How to export your calendar</summary><ul>
           <li><strong>Google Calendar</strong> (on a computer): Settings → Import &amp; export → Export. Unzip the download and choose the .ics file for your class calendar.</li>
           <li><strong>Apple Calendar</strong> (Mac): select the calendar, then File → Export → Export….</li>
           <li><strong>Outlook</strong> (Windows): File → Save Calendar, and save it as an iCalendar (.ics) file.</li>
         </ul></details>
-        <label class="check"><input type="checkbox" id="schedule-remember"> Remember my schedule on this device</label>
-        <div class="calendar-actions"><span class="pill">No schedule uploaded</span>
-          <button class="btn btn-primary" type="button" data-schedule="pick">Upload Calendar File</button></div>`;
-      return;
-    }
-    $card.innerHTML = `<h2 id="schedule-title">Schedule imported</h2>
-      <p><strong>${esc(schedule.fileName)}</strong> · imported ${esc(formatDay(schedule.importedAt, DEFAULT_TZ))}</p>
-      <p>${esc(importSummary(schedule))}</p>
-      <p class="help">Kept: each event's title and times (for your calendar below) and your merged busy times. Never kept: the file, descriptions, locations or guests. ${STORED_IN[schedule.storedIn]}</p>
-      <label class="check"><input type="checkbox" id="schedule-remember"${schedule.storedIn === "local" ? " checked" : ""}> Remember my schedule on this device</label>
-      <div class="calendar-actions">
-        <button class="btn" type="button" data-schedule="pick">Replace schedule</button>
-        <button class="btn btn-quiet" type="button" data-schedule="remove">Clear imported calendar</button></div>`;
+        <label class="check"><input type="checkbox" id="schedule-remember"> Remember my schedule on this device</label>`;
+    $card.innerHTML = `<div class="upload-head">
+        <h2 id="schedule-title"><button type="button" class="collapse-toggle" aria-expanded="${uploadOpen}" aria-controls="schedule-details">${schedule ? "Schedule imported" : "Upload your schedule"}${icon("down", 16)}</button></h2>
+        <div class="calendar-actions">${status}${actions}</div>
+      </div>
+      <div class="collapse${uploadOpen ? " is-open" : ""}" id="schedule-details"${uploadOpen ? "" : " inert"}><div class="collapse-inner">${details}</div></div>`;
+  };
+  const setUploadOpen = (open) => {
+    uploadOpen = open;
+    $card.querySelector(".collapse-toggle").setAttribute("aria-expanded", open);
+    const $details = $card.querySelector(".collapse");
+    $details.classList.toggle("is-open", open);
+    $details.inert = !open;   // collapsed content is skipped by Tab and screen readers
   };
 
   // ---------- month grid + the selected day's events (reads the same stored schedule) ----------
@@ -491,6 +504,9 @@ export async function calendarView($view) {
       const step = event.target.closest("[data-date-step]");
       if (step) selectDay(addDays($date.value, Number(step.dataset.dateStep)));
     }
+  }, on);
+  $card.addEventListener("click", (event) => {
+    if (event.target.closest(".collapse-toggle")) setUploadOpen(!uploadOpen);
   }, on);
   $card.addEventListener("change", (event) => {
     if (event.target.id !== "schedule-remember" || !schedule) return;

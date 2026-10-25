@@ -659,6 +659,24 @@ th { color: var(--muted); font-weight: 600; }
 #calendar-results h3 { margin-top: 6px; }
 #schedule-status { display: flex; flex-direction: column; gap: 6px; }
 #schedule-status .help { margin: 0; }
+/* upload card: the heading toggles the explanation; status and buttons stay in the header */
+.upload-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.upload-head .calendar-actions { min-width: 0; }
+.upload-head .calendar-actions p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.collapse-toggle {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.collapse-toggle .icon { flex: none; color: var(--muted); transition: transform var(--dur, 200ms) var(--ease, ease), color var(--dur-fast, 140ms) var(--ease, ease); }
+.collapse-toggle:hover .icon { color: var(--text); }
+.collapse-toggle[aria-expanded="true"] .icon { transform: rotate(180deg); }
+.collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur, 200ms) var(--ease, ease); }
+.collapse.is-open { grid-template-rows: 1fr; }
+.collapse:not(.is-open) { margin-top: -10px; }   /* no empty gap under the header when closed */
+.collapse-inner { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 2px; margin: -2px; }   /* room for focus rings */
+/* Closed: no padding (so not a sliver shows) and hidden once the closing animation ends. */
+.collapse:not(.is-open) .collapse-inner { padding: 0; margin: 0; visibility: hidden; transition: visibility 0s linear var(--dur, 200ms); }
+@media (prefers-reduced-motion: reduce) { .collapse, .collapse-toggle .icon { transition: none; } }
 .how-export summary { cursor: pointer; font-size: 14px; font-weight: 600; min-height: 40px; display: flex; align-items: center; }
 .how-export ul { margin: 0 0 4px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
 .how-export strong { color: var(--text); }
