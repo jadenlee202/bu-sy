@@ -80,7 +80,7 @@ def download() -> None:
         "archive_sha256": hashlib.sha256(archive).hexdigest(),
         "csv_sha256": hashlib.sha256(RAW_CSV.read_bytes()).hexdigest(),
         "description": meta.get("description"),
-    }, indent=2) + "\n", encoding="utf-8")
+    }, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"Saved {RAW_CSV.relative_to(HERE.parent)} and {SOURCE_JSON.name}")
 
 
@@ -293,7 +293,7 @@ def write_markdown(s):
         *[f"- {t}" for t in s["transformations"]],
         "",
     ]
-    OUT_MD.write_text("\n".join(lines), encoding="utf-8")
+    OUT_MD.write_text("\n".join(lines), encoding="utf-8", newline="\n")
 
 
 def main():
@@ -322,7 +322,7 @@ def main():
         w.writerow(COLUMNS)
         w.writerows((FACILITY_ID, t.isoformat(), c) for t, c, _ in records)
     summary = summarize(records, problems, mismatches, flags, identical, conflicting, out_of_order, source)
-    OUT_JSON.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    OUT_JSON.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8", newline="\n")
     write_markdown(summary)
 
     print(f"Rows kept:       {summary['rows_kept']:,} of {summary['rows_in_file']:,}")

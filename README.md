@@ -196,6 +196,10 @@ If the data can't load, the planner shows an error with a retry. It never falls 
 1. Push to `main`.
 2. **Settings → Pages → Source: GitHub Actions.** Free accounts need a public repo for Pages.
 3. Every push to `main` deploys `web/` (`.github/workflows/pages.yml`).
+4. Each deploy also writes `web/version.json` from `main`'s history (`server/write_version.py`), so the
+   **version note** in the page's corner (bottom right on wide screens, under the footer on phones) shows the
+   new version and opens the full history. Every merge or direct commit on `main` is one version. The file is
+   generated, not committed; run `python server/write_version.py` to preview it locally.
 
 ## What's inside
 

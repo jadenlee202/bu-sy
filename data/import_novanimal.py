@@ -103,7 +103,7 @@ def download() -> None:
                          "sha256": hashlib.sha256(b).hexdigest()} for name, (b, e) in stored.items()},
         "retrieved_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "csv_sha256": hashlib.sha256(stored[CSV_NAME][0]).hexdigest(),
-    }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     print(f"Saved {', '.join(stored)} and {SOURCE_JSON.name} in {RAW_DIR.relative_to(HERE.parent)}")
 
 
@@ -307,7 +307,7 @@ def write_markdown(s):
         *[f"- {t}" for t in s["transformations"]],
         "",
     ]
-    OUT_MD.write_text("\n".join(lines), encoding="utf-8")
+    OUT_MD.write_text("\n".join(lines), encoding="utf-8", newline="\n")
 
 
 def run(path: Path) -> dict:
@@ -323,7 +323,7 @@ def run(path: Path) -> dict:
         w.writerow(COLUMNS)
         w.writerows(intervals(purchases))
     summary = summarize(rows, problems, purchases, report, source, len(rows) + len(problems))
-    OUT_JSON.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    OUT_JSON.write_text(json.dumps(summary, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     write_markdown(summary)
     return summary
 

@@ -3,3 +3,10 @@
 data/raw/*/*.csv -text
 data/raw/*/*.pdf binary
 data/raw/robod/publisher_README.md -text
+
+# Generated data is compared byte for byte with what the pipeline writes (always LF),
+# so check it out with LF on every platform, Windows included.
+data/*.csv text eol=lf
+data/*.json text eol=lf
+data/*_quality.md text eol=lf
+web/data/** text eol=lf

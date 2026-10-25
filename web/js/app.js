@@ -770,5 +770,28 @@ src.getMode().then((mode) => {
     $notice.hidden = false;
   }
 });
+// Version note in the corner. version.json is written by server/write_version.py on every
+// deploy (each merge to main), so it updates by itself; a local copy without it shows nothing.
+const fmtStamp = (iso, withTime = false) => new Date(iso).toLocaleString("en-US", {
+  month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York",
+  ...(withTime ? { hour: "numeric", minute: "2-digit" } : {}),
+});
+fetch("version.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((v) => {
+  if (!v?.history?.length) return;
+  const $v = document.getElementById("version");
+  $v.innerHTML = `<summary title="Version history">v${v.version} · Updated ${esc(fmtStamp(v.date))}</summary>
+    <div class="version-panel"><p class="version-head">Version history</p>
+      <ol class="version-list">${v.history.map((h) => `<li><span class="version-num num">v${h.version}</span>
+        <span><span class="version-title">${esc(h.title)}</span>
+        <span class="version-meta">${esc(fmtStamp(h.date, true))} ET · ${h.url
+          ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.commit)}</a>` : esc(h.commit)}</span></span></li>`).join("")}</ol></div>`;
+  $v.hidden = false;
+  // Close on Escape or a click elsewhere, like other popovers.
+  document.addEventListener("click", (e) => { if ($v.open && !$v.contains(e.target)) $v.open = false; });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $v.open) { $v.open = false; $v.querySelector("summary").focus(); }
+  });
+}).catch(() => {});
+
 window.addEventListener("hashchange", route);
 route();
