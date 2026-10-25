@@ -15,7 +15,7 @@
 //     data must stay live, and we never want to serve stale API data as if it were fresh.
 //
 // Bumping CACHE busts the old one on activate.
-const CACHE = "busy-v12";
+const CACHE = "busy-v13";
 const SCOPE = new URL("./", self.location).pathname;
 
 const SHELL = [
@@ -31,6 +31,7 @@ const SHELL = [
   "./js/availability.js",
   "./js/clock.js",
   "./js/clubevents.js",
+  "./js/myevents.js",
   "./js/hours.js",
   "./js/icons.js",
   "./js/ics.js",

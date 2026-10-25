@@ -148,14 +148,19 @@ export const MEALS = [
 const WALK_ALLOWANCE = 30;                             // a slot holds the session plus up to a 30-minute walk
 const MIN_SLOT = { eat: 30, study: 45 };              // shorter than this isn't worth suggesting
 const MAX_CLUBS = 2;
+const MEALISH = /\b(breakfast|brunch|lunch|dinner|supper|meal|dining|eat)\b/i;
+
+/** Meals the day already has: an event that sounds like one ("Lunch with Mom") during that mealtime. Minutes of the day. */
+export const mealsTaken = (events) => MEALS.filter((m) => events.some((e) => MEALISH.test(e.title ?? "") && e.start < m.to && e.end > m.from)).map((m) => m.label);
 
 /**
  * What fits in one free gap, in campus minutes of the day, without touching anything on the calendar:
  * club meetings (`meetings`: { start, end, meeting }) that start and end inside the gap, a meal where the gap
  * overlaps breakfast, lunch or dinner, then a study block in the longest time left. Each slot has its own
- * start and end inside the gap, and no two overlap. The engine then picks a place for each meal and study slot.
+ * start and end inside the gap, and no two overlap. Meals named in `skipMeals` (see mealsTaken) aren't offered again.
+ * The engine then picks a place for each meal and study slot.
  */
-export function fillGap(start, end, meetings = []) {
+export function fillGap(start, end, meetings = [], skipMeals = []) {
   let free = [[start, end]];
   const take = (a, b) => { free = free.flatMap(([x, y]) => (b <= x || a >= y ? [[x, y]] : [[x, a], [b, y]].filter(([p, q]) => q > p))); };
   const slots = [];
@@ -163,7 +168,7 @@ export function fillGap(start, end, meetings = []) {
     if (slots.length >= MAX_CLUBS) break;
     if (free.some(([x, y]) => m.start >= x && m.end <= y)) { slots.push({ kind: "club", start: m.start, end: m.end, meeting: m.meeting }); take(m.start, m.end); }
   }
-  for (const meal of MEALS) {
+  for (const meal of MEALS.filter((m) => !skipMeals.includes(m.label))) {
     const piece = free.find(([x, y]) => Math.min(y, meal.to) - Math.max(x, meal.from) >= MIN_SLOT.eat);
     if (!piece) continue;
     const from = Math.max(piece[0], meal.from), to = Math.min(piece[1], from + WALK_ALLOWANCE + SESSION_CAP.eat);
@@ -178,7 +183,7 @@ export function fillGap(start, end, meetings = []) {
 
 /**
  * The day as blocks in time order, from availability.daySegments() plus the day's events:
- * busy blocks carry the titles of the events inside them (and whether any is a club meeting),
+ * busy blocks carry the events inside them and their titles (and whether any is a club meeting or added here),
  * free ones say whether they're long enough to plan ("free"), too short ("short") or already over ("past").
  * Heights follow the length (1 px per minute) with a floor so short blocks stay readable.
  */
@@ -190,7 +195,8 @@ export function dayBlocks(segments, events, now, { pxPerMin = 1, floor = { busy:
     const inside = kind === "busy" ? events.filter((e) => !e.allDay && e.start < s.end && e.end > s.start) : [];
     return {
       kind, start: s.start, end: s.end, minutes, over: over || kind === "past",
-      titles: [...new Set(inside.map((e) => e.title))], club: inside.some((e) => e.source === "club"),
+      titles: [...new Set(inside.map((e) => e.title))], events: inside,
+      club: inside.some((e) => e.source === "club"), mine: inside.some((e) => e.source === "mine"),
       height: Math.max(floor[kind] ?? 30, Math.round(minutes * pxPerMin)),
       nowAt: now >= s.start && now < s.end ? (now - s.start) / (s.end - s.start) : null,
     };

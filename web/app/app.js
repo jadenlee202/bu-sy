@@ -5,6 +5,7 @@ import { daySegments, zonedInstant } from "../js/availability.js";
 import { fmtTime, toHHMM, toMin } from "../js/clock.js";
 import { addClubEvent, clubBusy, clubEventItems, clubMeetings, loadClubEvents, removeClubEvent } from "../js/clubevents.js";
 import { addDays, campusDateTime, daySchedule, formatPeriod, nowServiceLabel, nowStatus, nowText } from "../js/hours.js";
+import { addMyEvent, loadMyEvents, myEventItems, removeMyEvent } from "../js/myevents.js";
 import * as prefs from "../js/prefs.js";
 import * as engine from "../js/recommend.js";
 import { busyOf, clearSchedule, covers, eventsOf, importCalendarFile, loadSchedule } from "../js/schedule.js";
@@ -31,7 +32,7 @@ const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(settings)
 
 // The sentence for this visit. minutes/start come from the schedule until someone picks a time.
 const sentence = { activity: "study", minutes: 60, start: null, date: null, fromSchedule: false, picked: false, patch: {}, chosen: null };
-const ui = { exploreTab: 0, showEvents: false, scheduleMsg: "", day: null };
+const ui = { exploreTab: 0, showEvents: false, scheduleMsg: "", day: null, adding: null };   // adding: the event form's { start, end }, or null
 
 let data = null, dataLoading = null;
 /** Loads everything once; every caller (including a route that starts mid-load) shares the same load. */
@@ -79,8 +80,8 @@ const icon = {
 
 // ---------- today's schedule (shared with the main app's Calendar) ----------
 /**
- * One campus day (8 AM–10 PM, stretched to show any earlier or later event) from the imported calendar and
- * saved club meetings. Every timed event blocks its time, even one the calendar marks "free"; all-day events
+ * One campus day (8 AM–10 PM, stretched to show any earlier or later event) from the imported calendar,
+ * saved club meetings and events added here. Every timed event blocks its time, even one the calendar marks "free"; all-day events
  * are listed above the day instead of blocking all of it.
  */
 function dayData(date) {
@@ -88,19 +89,20 @@ function dayData(date) {
   const midnight = zonedInstant(date, "00:00", TZ), nextMidnight = zonedInstant(addDays(date, 1), "00:00", TZ);
   const schedule = loadSchedule();
   const clubs = loadClubEvents();
+  const mine = myEventItems(loadMyEvents());
   const items = schedule ? eventsOf(schedule) : [];
-  const onDay = [...(items ?? []), ...clubEventItems(clubs)]
+  const onDay = [...(items ?? []), ...clubEventItems(clubs), ...mine]
     .filter((e) => e.end > midnight && e.start < nextMidnight).sort((a, b) => a.start - b.start);
   const timed = onDay.filter((e) => !e.allDay);
   const start = Math.max(midnight, Math.min(zonedInstant(date, DAY[0], TZ), ...timed.map((e) => e.start)));
   const end = Math.min(nextMidnight, Math.max(zonedInstant(date, DAY[1], TZ), ...timed.map((e) => e.end)));
   // a schedule saved before events were kept only has its busy ranges
-  const busy = items ? timed.map(({ start: s, end: e }) => ({ start: s, end: e })) : [...busyOf(schedule), ...clubBusy(clubs)];
+  const busy = items ? timed.map(({ start: s, end: e }) => ({ start: s, end: e })) : [...busyOf(schedule), ...clubBusy(clubs), ...mine.map(({ start: s, end: e }) => ({ start: s, end: e }))];
   const segments = daySegments(busy, start, end, 15, now);
   const events = timed.filter((e) => e.end > start && e.start < end);
   // a day the calendar file doesn't reach is unknown, not free
   const covered = !schedule || covers(schedule, start, end);
-  return { now, date, start, end, schedule, clubs, segments, events, allDay: onDay.filter((e) => e.allDay), covered, hasAny: Boolean(schedule || clubs.length) };
+  return { now, date, start, end, schedule, clubs, segments, events, allDay: onDay.filter((e) => e.allDay), covered, hasAny: Boolean(schedule || clubs.length || mine.length) };
 }
 const today = () => dayData(campusDateTime().date);
 
@@ -133,7 +135,7 @@ const ui2 = { meetings: {} };                         // club meetings offered o
  * a study block, none overlapping each other or anything on the calendar; the shared engine then picks the
  * place for each meal and study slot, from where you are. A slot with no place that fits is left out.
  */
-function suggestGap(seg, dayIso, date) {
+function suggestGap(seg, dayIso, date, taken = []) {
   const startMin = L.roundUp5(bostonMin(seg.start));
   const endMin = seg.end >= zonedInstant(addDays(dayIso, 1), "00:00", TZ) ? 24 * 60 : bostonMin(seg.end);
   if (endMin - startMin < 15) return [];
@@ -141,7 +143,7 @@ function suggestGap(seg, dayIso, date) {
   const meetings = (data.clubs ?? []).flatMap((c) => clubMeetings(c).regular)
     .filter((m) => m.date === dayIso && !saved.has(m.id))
     .map((m) => ({ start: toMin(m.start), end: toMin(m.end), meeting: m }));
-  return L.fillGap(startMin, endMin, meetings).flatMap((slot) => {
+  return L.fillGap(startMin, endMin, meetings, taken).flatMap((slot) => {
     if (slot.kind === "club") return [slot];
     const minutes = slot.end - slot.start;
     const d = prefs.defaults(data.campus, prefs.loadPrefs(data.campus), slot.kind);
@@ -411,8 +413,9 @@ const SCREENS = {
     const week = Array.from({ length: 7 }, (_, i) => addDays(todayIso, i));
     if (!week.includes(ui.day)) ui.day = todayIso;
     const t = dayData(ui.day), isToday = ui.day === todayIso;
+    let taken = [];                                   // meals the day already has, so they aren't suggested twice
     const input = `<input type="file" id="ics" accept=".ics,text/calendar" hidden>`;
-    if (!t.hasAny) {
+    if (!t.hasAny && !ui.adding) {
       $view.innerHTML = `<div class="head"><h1>Schedule</h1></div>
         <section class="stack stagger">
           <div class="card">
@@ -423,8 +426,10 @@ const SCREENS = {
             ${ui.scheduleMsg ? `<p class="chip warn" role="alert">${esc(ui.scheduleMsg)}</p>` : ""}
           </div>
           <p class="fine">Until then you're treated as free 8 AM – 10 PM.</p>
+          <button class="btn" type="button" data-add-own="12:00-13:00">Or add events by hand</button>
         </section>`;
       wireImport();
+      $view.querySelector("[data-add-own]").addEventListener("click", () => { ui.adding = { start: "12:00", end: "13:00" }; SCREENS.schedule(); });
       return;
     }
     const free = L.freeNow(t.segments, t.now);
@@ -449,17 +454,34 @@ const SCREENS = {
         ${isToday ? `<div><p class="label">${free ? "Free now" : "Right now"}</p>${nowCard}</div>` : ""}
         <div><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
             <p class="label" style="margin:0">${isToday ? "Your day" : esc(dayFmt.format(new Date(`${ui.day}T12:00:00Z`)))}</p>
-            ${loc.here || loc.near ? "" : `<button class="btn quiet" type="button" data-locate style="min-height:32px;padding:0;font-size:13px">Use my location for walks</button>`}</div>
+            <span style="display:flex;gap:14px">${loc.here || loc.near ? "" : `<button class="btn quiet" type="button" data-locate style="min-height:32px;padding:0;font-size:13px">Use my location</button>`}
+            <button class="btn quiet" type="button" data-add-own="12:00-13:00" style="min-height:32px;padding:0;font-size:13px">+ Add event</button></span></div>
+          ${ui.adding ? `<form class="card add-event" id="add-event" novalidate>
+              <span style="font-weight:700">New event · ${esc(dayFmt.format(new Date(`${ui.day}T12:00:00Z`)))}</span>
+              <label class="field">Name<input name="title" maxlength="80" required placeholder="Gym with Sam" value="${esc(ui.adding.title ?? "")}"></label>
+              <div style="display:flex;gap:10px"><label class="field" style="flex:1">Starts<input name="start" type="time" step="300" required value="${ui.adding.start}"></label>
+                <label class="field" style="flex:1">Ends<input name="end" type="time" step="300" required value="${ui.adding.end}"></label></div>
+              <p class="fine" role="alert" id="add-error" style="color:var(--accent)"></p>
+              <div style="display:flex;gap:10px"><button class="btn primary" type="submit" style="flex:1">Add to calendar</button><button class="btn" type="button" data-cancel-add>Cancel</button></div>
+              <p class="fine">Saved in this browser only. It counts as busy, and suggestions move around it.</p>
+            </form>` : ""}
           ${t.covered ? "" : `<p class="chip warn">Your calendar file doesn't cover this day, so its free time is unknown.</p>`}
           ${t.covered && t.allDay.length ? `<ul class="allday">${t.allDay.map((e) => `<li><b>All day</b> ${esc(e.title || "Event")}</li>`).join("")}</ul>` : ""}
-          <ol class="daymap">${(t.covered ? L.dayBlocks(t.segments, t.events, t.now) : []).map((blk) => {
+          <ol class="daymap">${(t.covered ? (taken = L.mealsTaken(t.events.map((e) => ({ title: e.title, start: bostonMin(e.start), end: bostonMin(e.end) }))),  L.dayBlocks(t.segments, t.events, t.now)) : []).map((blk) => {
             const time = `<time>${at(blk.start)}</time>`;
             const nowLine = blk.nowAt != null ? `<span class="now-line" style="top:${(blk.nowAt * 100).toFixed(1)}%"><b>now</b></span>` : "";
-            if (blk.kind === "busy") return `<li class="blk is-busy${blk.club ? " is-club" : ""}${blk.over ? " over" : ""}" style="min-height:${blk.height}px">${time}
-              <div class="body"><span class="title">${esc(blk.titles.join(" · ") || "Busy")}</span><span class="sub">${at(blk.start)} – ${at(blk.end)}${blk.club ? " · club" : ""}</span></div>${nowLine}</li>`;
+            if (blk.kind === "busy") {
+              const rows = blk.events.length ? blk.events.map((e) => `<div class="ev">
+                  <span class="title">${esc(e.title || "Busy")}</span>
+                  <span class="sub">${at(e.start)} – ${at(e.end)}${e.source === "club" ? " · club meeting" : e.source === "mine" ? " · added by you" : ""}${e.free ? " · marked free, counted busy" : ""}
+                    ${e.source && !blk.over ? `<button type="button" class="linkish" data-remove-event="${esc(e.id)}" data-source="${e.source}">Remove</button>` : ""}</span></div>`).join("")
+                : `<span class="title">Busy</span><span class="sub">${at(blk.start)} – ${at(blk.end)}</span>`;
+              return `<li class="blk is-busy${blk.club ? " is-club" : ""}${blk.mine ? " is-mine" : ""}${blk.over ? " over" : ""}" style="min-height:${blk.height}px">${time}
+                <div class="body">${rows}</div>${nowLine}</li>`;
+            }
             if (blk.kind !== "free" || blk.over) return `<li class="blk is-${blk.kind} over" style="min-height:${blk.height}px">${time}
               <div class="body"><span class="sub">${blk.kind === "short" ? `${blk.minutes} min break` : `Free · ${esc(L.durationText(blk.minutes))}`}</span></div>${nowLine}</li>`;
-            const fills = suggestGap(blk, ui.day, isToday ? null : ui.day).map((f) => {
+            const fills = suggestGap(blk, ui.day, isToday ? null : ui.day, taken).map((f) => {
               const when = `<span class="when">${fmtTime(f.start)} – ${fmtTime(f.end)}</span>`;
               if (f.kind === "club") {
                 ui2.meetings[f.meeting.id] = f.meeting;
@@ -469,11 +491,13 @@ const SCREENS = {
               }
               return `<li class="fill">${when}<span class="title">${esc(f.kind === "eat" ? f.label : "Study")} at ${esc(f.o.place.name)}</span>
                 <span class="sub">${f.session} min${f.checked ? ` · ${f.o.there ? `${f.o.there} min walk` : "you're there"}` : " · walk not timed"} · ${meter(L.visitWords(f.o).peak, true)}</span>
-                <button class="btn primary" type="button" data-plan-slot data-act="${f.kind}" data-minutes="${f.minutes}" data-start="${toHHMM(f.start)}" data-place="${esc(f.o.place.place_id)}">Plan this</button></li>`;
+                <div class="fill-acts"><button class="btn primary" type="button" data-plan-slot data-act="${f.kind}" data-minutes="${f.minutes}" data-start="${toHHMM(f.start)}" data-place="${esc(f.o.place.place_id)}">Plan this</button>
+                <button class="btn" type="button" data-keep-slot data-title="${esc(`${f.kind === "eat" ? f.label : "Study"} at ${f.o.place.name}`)}" data-start="${toHHMM(f.start)}" data-end="${toHHMM(f.end)}">Add to calendar</button></div></li>`;
             }).join("");
             return `<li class="blk is-free" style="min-height:${blk.height}px">${time}
               <div class="body"><span class="free-len">Free · ${esc(L.durationText(blk.minutes))}</span>
-                ${fills ? `<ul class="fills">${fills}</ul>` : `<span class="sub">Nothing to suggest here. Enjoy the break.</span>`}</div>${nowLine}</li>`;
+                ${fills ? `<ul class="fills">${fills}</ul>` : `<span class="sub">Nothing to suggest here. Enjoy the break.</span>`}
+                <button type="button" class="linkish" data-add-own="${toHHMM(L.roundUp5(bostonMin(blk.start)))}-${toHHMM(Math.min(L.roundUp5(bostonMin(blk.start)) + 60, blk.end >= zonedInstant(addDays(ui.day, 1), "00:00", TZ) ? 23 * 60 + 55 : bostonMin(blk.end)))}" style="align-self:flex-start">+ Add your own event here</button></div>${nowLine}</li>`;
           }).join("")}</ol>
           <p class="fine">Anything on your calendar counts as busy. Suggestions fit between events: club meetings, meals at mealtimes, then study, each with the walk from where you are. Busyness is simulated.</p></div>
         <p class="fine">${t.schedule ? `From ${esc(t.schedule.fileName)} · ` : "Only club meetings so far · "}${input}<label for="ics" style="cursor:pointer;color:var(--accent);font-weight:600">${t.schedule ? "Replace" : "Add your class calendar"}</label>${t.schedule ? ` · <button type="button" data-clear style="border:none;background:none;padding:0;color:var(--accent);font-weight:600;cursor:pointer">Clear</button>` : ""}</p>
@@ -487,6 +511,34 @@ const SCREENS = {
     for (const b of $view.querySelectorAll("[data-plan-slot]")) b.addEventListener("click", () => {
       Object.assign(sentence, { start: b.dataset.start, date: isToday ? null : ui.day, minutes: Number(b.dataset.minutes), activity: b.dataset.act, picked: true, patch: {}, chosen: b.dataset.place });
       go("#/answer");
+    });
+    const saveEvent = (e) => {
+      try { addMyEvent({ ...e, date: ui.day }); } catch (err) { return err.message || "This event couldn't be saved in this browser."; }
+      ui.adding = null; SCREENS.schedule();
+      $announce.textContent = `${e.title.trim()} added to your calendar.`;
+      return "";
+    };
+    for (const b of $view.querySelectorAll("[data-add-own]")) b.addEventListener("click", () => {
+      const [start, end] = b.dataset.addOwn.split("-");
+      ui.adding = { start, end }; SCREENS.schedule(); $view.querySelector("#add-event input[name=title]")?.focus();
+    });
+    $view.querySelector("[data-cancel-add]")?.addEventListener("click", () => { ui.adding = null; SCREENS.schedule(); });
+    $view.querySelector("#add-event")?.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const f = new FormData(ev.currentTarget);
+      const e = { title: String(f.get("title") ?? ""), start: String(f.get("start") ?? ""), end: String(f.get("end") ?? "") };
+      ui.adding = { ...e };
+      const problem = saveEvent(e);
+      if (problem) $view.querySelector("#add-error").textContent = problem;
+    });
+    for (const b of $view.querySelectorAll("[data-keep-slot]")) b.addEventListener("click", () => {
+      const problem = saveEvent({ title: b.dataset.title.slice(0, 80), start: b.dataset.start, end: b.dataset.end });
+      if (problem) { ui.scheduleMsg = problem; SCREENS.schedule(); }
+    });
+    for (const b of $view.querySelectorAll("[data-remove-event]")) b.addEventListener("click", () => {
+      try { (b.dataset.source === "club" ? removeClubEvent : removeMyEvent)(b.dataset.removeEvent); } catch { ui.scheduleMsg = "This browser wouldn't save the change."; }
+      SCREENS.schedule();
+      $announce.textContent = "Event removed.";
     });
     for (const b of $view.querySelectorAll("[data-add-meeting]")) b.addEventListener("click", () => {
       const m = ui2.meetings[b.dataset.addMeeting];

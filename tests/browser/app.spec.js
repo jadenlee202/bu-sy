@@ -223,7 +223,7 @@ test("the week strip shows seven days; a later day's gaps get suggestions you ca
     ["t2", "MA 123 Discussion", "20261027T140000", "20261027T150000"]]) });
   await expect(page.locator(".week .day")).toHaveCount(7);
   await expect(page.locator('.week .day[aria-pressed="true"]')).toContainText("Today");
-  await page.getByRole("button", { name: "Use my location for walks" }).click();
+  await page.getByRole("button", { name: "Use my location" }).click();
   await expect(page.locator(".blk.is-free").first()).toContainText("min walk");
   await page.locator('.week .day[data-day="2026-10-27"]').click();
   await expect(page.locator(".blk.is-busy")).toHaveCount(2);
@@ -242,7 +242,7 @@ test("the week strip shows seven days; a later day's gaps get suggestions you ca
   await expect(evening.locator(".fill.is-club")).toContainText("Charles River Run Club");
   await expect(evening.locator(".fill.is-club")).toContainText("6:00 PM – 7:00 PM");
   await expect(evening).toContainText("Dinner at");
-  await evening.getByRole("button", { name: "Add to calendar" }).click();
+  await evening.locator(".fill.is-club").getByRole("button", { name: "Add to calendar" }).click();
   await expect(page.locator(".blk.is-busy")).toHaveCount(3);
   await expect(page.locator(".blk.is-busy").nth(2)).toContainText("Charles River Run Club meeting");
   await expect(page.locator(".fill.is-club")).toHaveCount(0);
@@ -279,5 +279,42 @@ test("every event on the calendar is busy, even one marked free; nothing is sugg
     const [a, b] = when.split(" – ").map((t) => { const [, h, m, ap] = t.match(/(\d+):(\d+) (AM|PM)/); return (Number(h) % 12 + (ap === "PM" ? 12 : 0)) * 60 + Number(m); });
     expect(b <= 12 * 60 || a >= 13 * 60, when).toBe(true);
   }
+  expect(errors).toEqual([]);
+});
+
+test("you can add your own event or keep a suggestion; both are busy and can be removed", async ({ page }) => {
+  const errors = browserErrors(page);
+  await onboard(page);
+  await page.locator('.tabs a[data-tab="schedule"]').click();
+  await page.locator("#ics").setInputFiles({ name: "week.ics", mimeType: "text/calendar", buffer: ics([
+    ["t1", "PS 101 Lecture", "20261027T093000", "20261027T104500"]]) });
+  await page.locator('.week .day[data-day="2026-10-27"]').click();
+  // your own event, from the header
+  await page.getByRole("button", { name: "+ Add event" }).click();
+  await page.getByLabel("Name").fill("Gym with Sam");
+  await page.getByLabel("Starts").fill("16:00");
+  await page.getByLabel("Ends").fill("15:00");
+  await page.locator("#add-event").getByRole("button", { name: "Add to calendar" }).click();
+  await expect(page.locator("#add-error")).toHaveText("The event has to end after it starts.");
+  await page.getByLabel("Ends").fill("17:00");
+  await page.locator("#add-event").getByRole("button", { name: "Add to calendar" }).click();
+  await expect(page.locator("#add-event")).toHaveCount(0);
+  const gym = page.locator(".blk.is-busy", { hasText: "Gym with Sam" });
+  await expect(gym).toContainText("4:00 PM – 5:00 PM");
+  await expect(gym).toContainText("added by you");
+  await expect(page.locator(".blk.is-busy").first()).toContainText("PS 101 Lecture");       // the file's events stay
+  // keep the lunch suggestion: it becomes a busy block and the gap re-fills around it
+  const lunch = page.locator(".fill", { hasText: "Lunch at" });
+  const title = (await lunch.locator(".title").textContent()).trim();
+  await lunch.getByRole("button", { name: "Add to calendar" }).click();
+  await expect(page.locator(".blk.is-busy", { hasText: title })).toBeVisible();
+  await expect(page.locator(".fill", { hasText: "Lunch at" })).toHaveCount(0);
+  // still there after a reload; removing one leaves the rest
+  await page.reload();
+  await page.locator('.week .day[data-day="2026-10-27"]').click();
+  await expect(page.locator(".blk.is-busy")).toHaveCount(3);
+  await page.locator(".blk.is-busy", { hasText: "Gym with Sam" }).getByRole("button", { name: "Remove" }).click();
+  await expect(page.locator(".blk.is-busy")).toHaveCount(2);
+  await expect(page.locator(".blk.is-busy", { hasText: "PS 101 Lecture" }).getByRole("button", { name: "Remove" })).toHaveCount(0);   // the file's events are the file's
   expect(errors).toEqual([]);
 });

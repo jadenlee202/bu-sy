@@ -420,3 +420,10 @@ html[data-dir="tab"]::view-transition-new(view) { animation: in-fade var(--med) 
 .allday { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .allday li { font-size: 13px; padding: 6px 10px; border-radius: 999px; background: var(--busy); overflow-wrap: anywhere; }
 .allday b { font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted); margin-right: 4px; }
+.blk.is-mine .body { background: var(--free-soft); }
+.blk .ev { display: flex; flex-direction: column; gap: 2px; }
+.blk .ev + .ev { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; }
+.fill-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.fill-acts .btn { flex: 1 1 120px; }
+.add-event { margin-top: 10px; gap: 10px; }
+.blk .linkish { font-size: 13px; font-weight: 600; color: var(--muted); }

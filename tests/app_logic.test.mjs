@@ -130,7 +130,10 @@ test("a gap is filled around the calendar: clubs that fit, a meal at mealtimes, 
   for (const slots of [evening, midday, L.fillGap(8 * 60, 22 * 60, [club(12, 13, "A"), club(12.5, 13.5, "B")])]) {
     slots.forEach((s, i) => { assert.ok(s.end > s.start); if (i) assert.ok(s.start >= slots[i - 1].end); });
   }
-  assert.deepEqual(L.fillGap(15 * 60, 15.5 * 60), []);           // 30 minutes outside mealtimes: too short to study
+  assert.deepEqual(L.fillGap(15 * 60, 15.5 * 60), []);
+  // a meal the day already has isn't suggested again
+  assert.deepEqual(L.mealsTaken([{ title: "Lunch at Warren Towers Dining", start: 660, end: 712 }, { title: "CS 111", start: 1080, end: 1140 }]), ["Lunch"]);
+  assert.deepEqual(L.fillGap(10.75 * 60, 14 * 60, [], ["Lunch"]).map((s) => s.kind), ["study"]);           // 30 minutes outside mealtimes: too short to study
 });
 
 test("the day map keeps events inside busy blocks and marks now", () => {
