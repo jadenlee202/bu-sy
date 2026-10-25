@@ -5,7 +5,7 @@
 import { findOpportunities } from "./availability.js";
 import { DEFAULT_TZ, durationLabel, formatInstant, loadCalendarPrefs, MIN_OPTIONS, saveCalendarPrefs } from "./calendar.js";
 import { busyOf, loadSchedule } from "./schedule.js";
-import { esc } from "./ui.js";
+import { esc, infoTip } from "./ui.js";
 
 const DAYS = 7;
 const MEALS = [["", "Any meal"], ["breakfast", "Breakfast"], ["brunch", "Brunch"], ["lunch", "Lunch"], ["dinner", "Dinner"]];
@@ -37,10 +37,12 @@ const dayName = (isoDate, today) => {
 export async function findTimeCard($card, facility, scheduleLocation) {
   const dining = facility.category === "dining";
   const name = esc(facility.facility_name);
-  const head = `<h2>${dining ? "Find a time to eat" : "Find free time here"}</h2>`;
   const schedule = loadSchedule();
   const prefs = loadCalendarPrefs();
   const zone = prefs.timezone ?? DEFAULT_TZ;
+  const head = `<h2 class="with-info">${dining ? "Find a time to eat" : "Find free time here"}${infoTip("About availability assumptions", schedule
+    ? `Using your schedule from ${esc(schedule.fileName)} (${esc(zone)}). <a href="#/calendar">Replace or remove it on the Calendar page</a>. Based on ${name}'s verified hours (campus time). Travel time is not included.`
+    : `No schedule uploaded. Availability assumes you're free for the whole window set by “Available from” and “Available until” in the ${esc(zone)} timezone. <a href="#/calendar">Upload your class schedule (.ics)</a> to calculate availability using your actual events; it's read in this browser and never uploaded. Based on ${name}'s verified hours (campus time). Travel time is not included.`)}</h2>`;
   const today = todayIn(zone);
   let { from = "08:00", until = "22:00", minimum = 30 } = prefs;
   let startDate = today;
@@ -54,9 +56,6 @@ export async function findTimeCard($card, facility, scheduleLocation) {
       <label>Available from<input type="time" data-find="from" value="${from}"></label>
       <label>Available until<input type="time" data-find="until" value="${until}"></label>
     </div>
-    <p class="help">${schedule
-      ? `Using your schedule from ${esc(schedule.fileName)} (${esc(zone)}). <a href="#/calendar">Replace or remove it on the Calendar page</a>.`
-      : `No schedule uploaded, so you're treated as free for your whole preferred window (${esc(zone)}). <a href="#/calendar">Upload your class schedule (.ics)</a> to use your real one; it's read in this browser and never uploaded.`}</p>
     <div data-find="results"></div>`;
   const $results = $card.querySelector('[data-find="results"]');
 
@@ -85,7 +84,7 @@ export async function findTimeCard($card, facility, scheduleLocation) {
         ${durationLabel(next.end - next.start)} available. ${name} is open${dining ? ` and serving ${esc(next.label.toLowerCase())}` : ""} during this period${next.assumed ? " (assumed: repeats the published weekly hours)" : ""}.</p>
       ${later.length ? `<h3>Later</h3><ul class="calendar-matches">${later.slice(0, 4).map((match) =>
         `<li><strong>${dayName(match.date, today)}, ${range(match)}</strong><span>${detail(match)}</span></li>`).join("")}</ul>` : ""}
-      <p class="help">Travel time isn't included. Based on ${schedule ? "your uploaded schedule" : "no uploaded schedule (free for your whole window)"} and ${name}'s published hours (campus time).</p>`;
+      `;
   };
 
   $card.addEventListener("change", (event) => {
