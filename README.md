@@ -9,6 +9,8 @@ see when to depart, prepare, do the activity, pack up and reach the next destina
 Occupancy supports the decision; it isn't the product. Browsing places, the replayable traffic charts and
 a student club directory are still there as secondary screens.
 
+**Live demo:** https://jadenlee202.github.io/bu-sy/ · People counter: https://jadenlee202.github.io/bu-sy/counter/
+
 Independent student project, **not affiliated with Boston University**.
 
 > **Data honesty:** busyness at BU-named places is **simulated** (labelled *Simulated*): FitRec follows one
@@ -141,11 +143,15 @@ a visible default under **Preferences**. Or open **Try a sample** (80 free minut
 Mugar to a class at Warren Towers). The other samples show a best match chosen on evidence (*study, outlets needed*) and a
 window where nothing fits, with a one-tap fix the engine has checked.
 
+**People counter** (camera, on-device): open `http://localhost:8000/counter/`. It counts people crossing a line
+and never uploads video. It's a prototype for producing real counts; nothing in the planner uses it yet.
+Setup, model download and how it works: [`web/counter/README.md`](web/counter/README.md).
+
 ## Checks
 
 ```bash
 python -m pytest                        # API, calendar OAuth/freebusy, data loaders + gym import, analytics, events
-node --test "tests/*.test.mjs"          # planner engine, static clubs, .ics import + free time (Node 22+, no packages; or: npm test)
+node --test "tests/*.test.mjs"          # planner engine, static clubs, .ics import + free time, people counter (Node 22+, no packages; or: npm test)
 ```
 CI runs both (`.github/workflows/tests.yml`).
 
@@ -390,7 +396,8 @@ web/       the site: index.html, styles.css, js/
              calendar.js / findtime.js  availability   ics.js / schedule.js  .ics import (in the browser)
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
-tests/     test_api.py, test_campus_gym.py, test_clubs.py (pytest); recommend / planner_features / plan_prefs / clock / hours / clubs_static / ics .test.mjs (node --test)
+           counter/      on-device people counter (detector, tracker, line crossing)
+tests/     test_api.py, test_campus_gym.py, test_clubs.py (pytest); recommend / planner_features / plan_prefs / clock / hours / clubs_static / ics / counter .test.mjs (node --test)
 DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 ```
 

@@ -24,3 +24,6 @@ COD.zip
 
 # Club directory store (api mode)
 server/clubs.json
+
+# People counter: model + MediaPipe runtime from web/counter/get_model.py
+web/counter/vendor/
