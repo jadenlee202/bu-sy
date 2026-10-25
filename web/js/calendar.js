@@ -215,7 +215,7 @@ export async function calendarView($view) {
       dayList = `<ul class="list day-list">${dayEntries.map(({ event, index }) => `<li class="row${index === focusEvent ? " is-featured" : ""}" id="event-${index}" tabindex="-1">
         <div class="row-main"><span class="row-name">${esc(event.title || "Untitled event")}</span>
           <span class="row-sub num">${esc(rangeText(event, zone))}</span></div>
-        ${event.free ? `<div class="row-side"><span class="tag">Marked free · not counted as busy</span></div>` : ""}</li>`).join("")}</ul>`;
+        <div class="row-side"><span class="tag${event.free ? "" : " tag-busy"}">${event.free ? "Marked free · not counted as busy" : "Busy"}</span></div></li>`).join("")}</ul>`;
     }
 
     $month.innerHTML = `<div class="month-head">
@@ -348,7 +348,21 @@ export async function calendarView($view) {
     // No upload counts as an empty schedule: free for the whole preferred window.
     const busy = schedule ? busyOf(schedule) : [];
     const now = Date.now();
-    const segments = daySegments(busy, start, end, minimum, now);
+    const importedEvents = schedule ? eventsOf(schedule) : null;
+    const busyEvents = importedEvents ? importedEvents
+      .filter((event) => !event.free && event.start < end && event.end > start)
+      .map((event) => ({
+        start: Math.max(event.start, start),
+        end: Math.min(event.end, end),
+        kind: "busy",
+        title: event.title || "Untitled event",
+      })) : [];
+    const segments = [
+      ...daySegments(busy, start, end, minimum, now).filter((interval) =>
+        interval.kind !== "busy" || importedEvents === null),
+      ...busyEvents,
+    ].sort((a, b) => a.start - b.start
+      || (a.kind === "busy" && b.kind !== "busy" ? -1 : a.kind !== "busy" && b.kind === "busy" ? 1 : 0));
     const usable = usableWindows(freeWindows(busy, start, end), minimum, now);
     const total = usable.reduce((sum, interval) => sum + interval.end - interval.start, 0);
     const match = locationHours
@@ -360,7 +374,8 @@ export async function calendarView($view) {
       : "";
     const timelineHtml = segments.length ? `<ul class="calendar-timeline">${segments.map((interval) =>
       `<li class="calendar-interval" data-kind="${interval.kind}"><strong>${SEGMENT_LABELS[interval.kind]}</strong>
-        <span>${formatInstant(interval.start, zone)}–${formatInstant(interval.end, zone)}</span>
+        ${interval.kind === "busy" && interval.title ? `<span class="calendar-event-title">${esc(interval.title)}</span>` : ""}
+        <span class="calendar-interval-time">${formatInstant(interval.start, zone)}–${formatInstant(interval.end, zone)}</span>
         <span>${durationLabel(interval.end - interval.start)}</span></li>`,
     ).join("")}</ul>` : `<p>No busy events or free intervals in this preferred availability window.</p>`;
     let matchesHtml;

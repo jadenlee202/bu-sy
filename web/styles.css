@@ -265,6 +265,7 @@ main:focus { outline: none; }
 .pill { font-size: 13px; font-weight: 600; color: var(--muted); padding: 6px 12px; border-radius: var(--radius-xs); background: var(--subtle); }
 .tag { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); padding: 1px 8px; border-radius: var(--radius-xs); white-space: nowrap; }
 .tag-real { color: var(--text); border-color: var(--red); }
+.tag-busy { color: var(--text); border-color: var(--red); }
 .tag-sim { color: var(--text); border-style: dashed; border-color: var(--line-strong); }
 a.chip-link { text-decoration: none; }
 a.chip-link:hover { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
@@ -705,6 +706,8 @@ th { color: var(--muted); font-weight: 600; }
 .calendar-interval[data-kind="available"], .calendar-matches li { background: color-mix(in srgb, var(--red) 8%, var(--surface)); }
 .calendar-interval:is([data-kind="short"], [data-kind="past"]) { color: var(--muted); }
 .calendar-interval[data-kind="unknown"] { border-style: dashed; color: var(--muted); }
+.calendar-event-title { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.calendar-interval-time { white-space: nowrap; }
 .calendar-matches li { flex-direction: column; gap: 2px; }
 .calendar-matches li span { color: var(--muted); font-size: 13px; }
 .calendar-interval strong { min-width: 82px; }
