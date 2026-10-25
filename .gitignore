@@ -13,3 +13,6 @@ server/community_events.json
 
 # Raw download, if you keep a local copy
 COD.zip
+
+# Club directory store (api mode)
+server/clubs.json

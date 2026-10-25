@@ -553,6 +553,55 @@ main > .hint, main > .form, main > #events { max-width: 720px; }
 @media (max-width: 26rem) { .form-row { grid-template-columns: 1fr 1fr; } .form-row label:first-child { grid-column: 1 / -1; } }
 .form .help { margin: -8px 0 0; }
 
+/* ---------- club directory ---------- */
+.screen { display: contents; }               /* per-screen wrapper (clubs.js); keeps main's layout */
+.screen > :is(.hint, .form, .state, .list, section, .banner, .success) { max-width: 720px; }
+.title-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.clubs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@container (min-width: 44rem) { .clubs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 70rem) { .clubs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.club { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.club-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.club-name { margin: 2px 0 0; font-size: 17px; font-weight: 650; line-height: 1.25; }
+.club-name a { text-decoration: none; }
+.club-name a:hover { text-decoration: underline; text-decoration-color: var(--red); text-underline-offset: 3px; }
+.club-line { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 14px; color: var(--muted); }
+.club-line .icon { margin-top: 3px; }
+.club-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.club-hint .level { width: auto; }
+.club-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 8px; font-size: 13px; }
+/* status: icon + word, and a different shape per state, so it never relies on color */
+.club-status { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1.5px solid var(--line-strong); white-space: nowrap; }
+.club-status[data-status="open"] { border-color: var(--red); color: var(--text); }
+.club-status[data-status="open"] .icon { color: var(--red); }
+.club-status[data-status="waitlist"] { border-style: dashed; color: var(--text); }
+.club-status[data-status="full"] { background: var(--selected); border-color: var(--selected); color: var(--on-selected); }
+.app-pill { display: inline-flex; align-items: center; color: var(--text); }
+.app-pill[data-app="approved"] { background: var(--red-soft); }
+.app-pill[data-app="rejected"] { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
+.club-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@container (min-width: 52rem) { .club-layout { grid-template-columns: minmax(0, 1.8fr) minmax(240px, 1fr); } }
+.club-main { padding: 18px 20px; }
+.club-desc { margin: 0 0 14px; font-size: 15px; }
+.club-facts { font-size: 14px; gap: 10px 16px; }
+.club-basis { margin: 6px 0 0; }
+.plain { list-style: none; margin: 0; padding: 0; }
+.club-side { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; }
+.club-side p { margin: 0; }
+.side-title { font-size: 16px; font-weight: 650; }
+.success { margin: 0; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--red); font-size: 14px; font-weight: 600; }
+.form textarea { width: 100%; min-height: 88px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background-color: var(--subtle); font: inherit; font-size: 16px; font-weight: 400; resize: vertical; }
+.form textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; background-color: var(--surface); }
+.form label.check { flex-direction: row; }
+.form fieldset { display: flex; flex-direction: column; gap: 10px; }
+.form-row-2 { grid-template-columns: 1fr 1fr; }
+.form input[readonly] { color: var(--muted); }
+.app-group { display: flex; flex-direction: column; gap: 8px; }
+.apps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.app-card { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.app-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.app-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* ---------- states ---------- */
 .state { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 40px 16px; color: var(--muted); }
 .state .terrier { color: var(--red); }

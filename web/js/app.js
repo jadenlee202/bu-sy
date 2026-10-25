@@ -1,4 +1,5 @@
 import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obsOffset } from "./clock.js";
+import { clubFormView, clubView, clubsView, joinView, manageView, myClubsView } from "./clubs.js";
 import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
 import { hoursText, openSegments, periodAt } from "./recommend.js";
@@ -623,6 +624,7 @@ function aboutView() {
       ${item("Hourly averages", `<p>Time-weighted: each count holds until the next one, and never past the end of the recorded day.</p>`)}
       ${item("Your settings", `<p>Preferences and your last chosen starting point stay in this browser. Reset them under Preferences. BU-sy never detects your location.</p>`)}
       ${item("Meetups", `<p>Created by students and unofficial. We store only a nickname and a random device ID.</p>`)}
+      ${item("Clubs", `<p>Sample clubs are labeled and aren't real BU organizations. Signing up stores your name, school email and year (plus anything optional you add) for that club's organizer only; on the built-in demo files that stays in this browser. Organizer access is a device token, not a login. Busyness hints for meeting times are estimates from the simulated campus data.</p>`)}
     </div>
     <p class="fineprint">BU-sy is an independent student prototype, not affiliated with Boston University. A real version would need verified hours, real walking routes and an authorized, aggregate campus count.</p>`;
   return {};
@@ -721,8 +723,10 @@ const clock = {
 // ---------- router ----------
 async function route() {
   const hash = location.hash.replace(/^#\/?/, "");
-  const [section, id] = hash.split("/");
-  const current = section === "" ? "plan" : section === "place" ? "places" : section;
+  const [section, id, sub] = hash.split("/");
+  const current = section === "" ? "plan" : section === "place" ? "places"
+    : ["club", "my-clubs", "events"].includes(section) ? "clubs" : section;
+  const clubId = id ? decodeURIComponent(id) : null;
   for (const a of document.querySelectorAll("[data-section]")) a.toggleAttribute("aria-current", a.dataset.section === current);
   view = null;
   window.scrollTo(0, 0);
@@ -730,6 +734,13 @@ async function route() {
     section === "place" && id ? placeView(decodeURIComponent(id))
     : section === "events" && id === "new" ? newEventView()
     : section === "events" ? eventsView()
+    : section === "clubs" && id === "new" ? clubFormView($view)
+    : section === "clubs" ? clubsView($view)
+    : section === "club" && clubId && sub === "join" ? joinView($view, clubId)
+    : section === "club" && clubId && sub === "edit" ? clubFormView($view, clubId)
+    : section === "club" && clubId && sub === "manage" ? manageView($view, clubId)
+    : section === "club" && clubId ? clubView($view, clubId)
+    : section === "my-clubs" ? myClubsView($view)
     : section === "about" ? aboutView()
     : section === "sources" ? sourcesView(id ? decodeURIComponent(id) : null)
     : section === "places" ? placesView()
