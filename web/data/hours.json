@@ -1,0 +1,266 @@
+{
+  "timezone": "America/New_York",
+  "locations": {
+    "fitrec-synthetic": {
+      "sourceUrl": "https://www.bu.edu/fitrec/visit-us/hours/",
+      "sourceLabel": "BU FitRec hours",
+      "lastVerified": "2026-10-24",
+      "verificationStatus": "verified",
+      "effectiveFrom": "2026-09-02",
+      "effectiveThrough": "2026-12-10",
+      "scheduleNote": "Fall 2026 schedule. The official page says hours are subject to change.",
+      "weeklyHours": {
+        "monday": [{ "label": "Building hours", "start": "06:00", "end": "23:00" }],
+        "tuesday": [{ "label": "Building hours", "start": "06:00", "end": "23:00" }],
+        "wednesday": [{ "label": "Building hours", "start": "06:00", "end": "23:00" }],
+        "thursday": [{ "label": "Building hours", "start": "06:00", "end": "23:00" }],
+        "friday": [{ "label": "Building hours", "start": "06:00", "end": "22:00" }],
+        "saturday": [{ "label": "Building hours", "start": "08:00", "end": "22:00" }],
+        "sunday": [{ "label": "Building hours", "start": "08:00", "end": "22:00" }]
+      },
+      "specialHours": [
+        {
+          "date": "2026-10-12",
+          "status": "open",
+          "note": "All facilities open with adjusted hours.",
+          "periods": [{ "label": "Adjusted building hours", "start": "08:00", "end": "22:00" }]
+        },
+        {
+          "date": "2026-11-26",
+          "status": "closed",
+          "note": "Thanksgiving closure.",
+          "periods": []
+        },
+        {
+          "date": "2026-11-27",
+          "status": "closed",
+          "note": "Thanksgiving break closure.",
+          "periods": []
+        },
+        {
+          "date": "2026-11-28",
+          "status": "closed",
+          "note": "Thanksgiving break closure.",
+          "periods": []
+        }
+      ]
+    },
+    "warren-dining-synthetic": {
+      "sourceUrl": "https://www.bu.edu/dining/location/warren/",
+      "sourceLabel": "BU Dining · Warren Towers",
+      "lastVerified": "2026-10-24",
+      "verificationStatus": "verified",
+      "effectiveFrom": "2026-10-24",
+      "effectiveThrough": "2026-10-30",
+      "scheduleNote": "Dated Upcoming Hours published for October 24–30, 2026. Later dates are not yet verified.",
+      "weeklyHours": {
+        "monday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "22:00" }
+        ],
+        "tuesday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "22:00" }
+        ],
+        "wednesday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "22:00" }
+        ],
+        "thursday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "22:00" }
+        ],
+        "friday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "21:00" }
+        ],
+        "saturday": [
+          { "label": "Breakfast", "start": "09:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "21:00" }
+        ],
+        "sunday": [
+          { "label": "Brunch", "start": "10:00", "end": "16:00" },
+          { "label": "Dinner", "start": "16:00", "end": "21:00" }
+        ]
+      },
+      "specialHours": []
+    },
+    "marciano-dining-synthetic": {
+      "sourceUrl": "https://www.bu.edu/dining/location/marciano/",
+      "sourceLabel": "BU Dining · Marciano Commons",
+      "lastVerified": "2026-10-24",
+      "verificationStatus": "verified",
+      "effectiveFrom": "2026-10-24",
+      "effectiveThrough": "2026-10-30",
+      "scheduleNote": "Dated Upcoming Hours published for October 24–30, 2026. Later dates are not yet verified.",
+      "weeklyHours": {
+        "monday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "21:00" }
+        ],
+        "tuesday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "21:00" }
+        ],
+        "wednesday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "21:00" }
+        ],
+        "thursday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "21:00" }
+        ],
+        "friday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "21:00" }
+        ],
+        "saturday": [
+          { "label": "Breakfast", "start": "09:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "21:00" }
+        ],
+        "sunday": [
+          { "label": "Brunch", "start": "10:00", "end": "16:00" },
+          { "label": "Dinner", "start": "16:00", "end": "21:00" }
+        ]
+      },
+      "specialHours": []
+    },
+    "west-dining-synthetic": {
+      "sourceUrl": "https://www.bu.edu/dining/location/west/",
+      "sourceLabel": "BU Dining · West Campus",
+      "lastVerified": "2026-10-24",
+      "verificationStatus": "verified",
+      "effectiveFrom": "2026-10-24",
+      "effectiveThrough": "2026-10-30",
+      "scheduleNote": "Dated Upcoming Hours published for October 24–30, 2026. Later dates are not yet verified.",
+      "weeklyHours": {
+        "monday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "22:00" }
+        ],
+        "tuesday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "22:00" }
+        ],
+        "wednesday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "22:00" }
+        ],
+        "thursday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "22:00" }
+        ],
+        "friday": [
+          { "label": "Breakfast", "start": "07:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "21:00" }
+        ],
+        "saturday": [
+          { "label": "Breakfast", "start": "09:00", "end": "11:00" },
+          { "label": "Lunch", "start": "11:00", "end": "17:00" },
+          { "label": "Dinner", "start": "17:00", "end": "21:00" }
+        ],
+        "sunday": [
+          { "label": "Brunch", "start": "10:00", "end": "16:00" },
+          { "label": "Dinner", "start": "16:00", "end": "21:00" }
+        ]
+      },
+      "specialHours": []
+    },
+    "fenway-dining-synthetic": {
+      "sourceUrl": "https://bufenway.sodexomyway.com/en-us/locations/hours",
+      "sourceLabel": "Fenway Dining · Sodexo hours",
+      "lastVerified": "2026-10-24",
+      "verificationStatus": "verified",
+      "effectiveFrom": "2026-10-19",
+      "effectiveThrough": "2026-10-25",
+      "scheduleNote": "Fenway Dining Hall regular hours published for the week of October 19–25, 2026. Do not apply this schedule beyond that week.",
+      "weeklyHours": {
+        "monday": [
+          { "label": "Breakfast", "start": "07:00", "end": "10:00" },
+          { "label": "Continental breakfast", "start": "10:00", "end": "11:30" },
+          { "label": "Lunch", "start": "11:30", "end": "14:00" },
+          { "label": "Light lunch", "start": "14:00", "end": "16:30" },
+          { "label": "Dinner", "start": "16:30", "end": "20:00" },
+          { "label": "Light dinner", "start": "20:00", "end": "22:00" }
+        ],
+        "tuesday": [
+          { "label": "Breakfast", "start": "07:00", "end": "10:00" },
+          { "label": "Continental breakfast", "start": "10:00", "end": "11:30" },
+          { "label": "Lunch", "start": "11:30", "end": "14:00" },
+          { "label": "Light lunch", "start": "14:00", "end": "16:30" },
+          { "label": "Dinner", "start": "16:30", "end": "20:00" },
+          { "label": "Light dinner", "start": "20:00", "end": "22:00" }
+        ],
+        "wednesday": [
+          { "label": "Breakfast", "start": "07:00", "end": "10:00" },
+          { "label": "Continental breakfast", "start": "10:00", "end": "11:30" },
+          { "label": "Lunch", "start": "11:30", "end": "14:00" },
+          { "label": "Light lunch", "start": "14:00", "end": "16:30" },
+          { "label": "Dinner", "start": "16:30", "end": "20:00" },
+          { "label": "Light dinner", "start": "20:00", "end": "22:00" }
+        ],
+        "thursday": [
+          { "label": "Breakfast", "start": "07:00", "end": "10:00" },
+          { "label": "Continental breakfast", "start": "10:00", "end": "11:30" },
+          { "label": "Lunch", "start": "11:30", "end": "14:00" },
+          { "label": "Light lunch", "start": "14:00", "end": "16:30" },
+          { "label": "Dinner", "start": "16:30", "end": "20:00" },
+          { "label": "Light dinner", "start": "20:00", "end": "22:00" }
+        ],
+        "friday": [
+          { "label": "Breakfast", "start": "07:00", "end": "10:00" },
+          { "label": "Continental breakfast", "start": "10:00", "end": "11:30" },
+          { "label": "Lunch", "start": "11:30", "end": "14:00" },
+          { "label": "Light lunch", "start": "14:00", "end": "16:30" },
+          { "label": "Dinner", "start": "16:30", "end": "19:30" }
+        ],
+        "saturday": [
+          { "label": "Brunch", "start": "10:00", "end": "13:00" },
+          { "label": "Light lunch", "start": "13:00", "end": "16:30" },
+          { "label": "Dinner", "start": "16:30", "end": "19:30" }
+        ],
+        "sunday": [
+          { "label": "Brunch", "start": "10:00", "end": "13:00" },
+          { "label": "Light lunch", "start": "13:00", "end": "16:30" },
+          { "label": "Dinner", "start": "16:30", "end": "19:30" }
+        ]
+      },
+      "specialHours": []
+    },
+    "mugar-synthetic": {
+      "sourceUrl": "https://www.bu.edu/library/visit-study/hours/?week=2026-10-25",
+      "sourceLabel": "BU Libraries hours",
+      "lastVerified": "2026-10-24",
+      "verificationStatus": "unverified",
+      "unverifiedReason": "The official page lists multiple Mugar service rows without service names, so the building's visitor hours cannot be identified safely.",
+      "weeklyHours": null,
+      "specialHours": []
+    },
+    "COD_Bosch_Office_1_Clemente": {
+      "sourceUrl": "https://doi.org/10.5281/zenodo.996587",
+      "sourceLabel": "COD dataset (not an operating-hours source)",
+      "lastVerified": "2026-10-24",
+      "verificationStatus": "unverified",
+      "unverifiedReason": "This is an office-room demo record from the COD dataset, not a BU Dining location. The dataset's weekday sensor coverage is not an operating-hours schedule.",
+      "weeklyHours": null,
+      "specialHours": []
+    }
+  }
+}

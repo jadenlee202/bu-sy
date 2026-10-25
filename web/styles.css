@@ -104,6 +104,12 @@ main { padding-top: 20px; padding-bottom: 32px; display: flex; flex-direction: c
 .row-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-static .row-name { font-weight: 500; font-size: 15px; }
 .row-sub { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.row-hours { color: var(--text); font-size: 12px; line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.row-hours-status { font-size: 12px; font-weight: 700; color: var(--muted); }
+.row-hours-status[data-status="open"], .hours-current-status[data-status="open"] { color: #16713a; }
+.row-hours-status[data-status="opens"], .hours-current-status[data-status="opens"] { color: var(--red); }
+.row-hours-status[data-status="unverified"], .row-hours-status[data-status="unpublished"],
+.hours-current-status[data-status="unverified"], .hours-current-status[data-status="unpublished"] { color: var(--muted); }
 .row-count { font-weight: 700; min-width: 3ch; text-align: right; }
 .tag { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line); padding: 1px 6px; border-radius: 6px; }
 .tag-real { color: var(--red); border-color: color-mix(in srgb, var(--red) 40%, transparent); }
@@ -155,6 +161,24 @@ th { color: var(--muted); font-weight: 600; }
 .about dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 6px 0 0; font-size: 14px; }
 .about dt { color: var(--muted); }
 .about dd { margin: 0; }
+.hours-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; background: var(--surface); }
+.hours-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.hours-head h2 { margin: 0; font-size: 17px; }
+.hours-today { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+.hours-current-status { white-space: nowrap; color: var(--text); }
+.hours-week-nav { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; color: var(--muted); }
+.hours-nav-btn { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); font-size: 20px; line-height: 1; }
+.hours-nav-btn:hover { border-color: var(--text); color: var(--text); }
+.hours-status-note, .hours-source { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.hours-source a { color: var(--red); font-weight: 650; }
+.hours-days { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.hours-day { display: grid; grid-template-columns: minmax(92px, 1fr) minmax(0, 2fr); gap: 10px; padding: 9px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.hours-day.is-today { background: var(--red-soft); border-radius: 7px; }
+.hours-day-name { font-weight: 650; }
+.hours-day-periods { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hours-period strong { font-weight: 650; }
+.hours-closed { font-weight: 650; }
+.hours-unknown { color: var(--muted); overflow-wrap: anywhere; }
 
 /* ---------- buttons ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; font-weight: 700; text-decoration: none; }
@@ -192,6 +216,10 @@ th { color: var(--muted); font-weight: 600; }
 .form input:focus, .form select:focus { outline: none; border-color: var(--red); background: var(--surface); }
 .form-row { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; }
 @media (max-width: 420px) { .form-row { grid-template-columns: 1fr 1fr; } .form-row label:first-child { grid-column: 1 / -1; } }
+@media (max-width: 420px) {
+  .hours-day { grid-template-columns: 1fr; gap: 2px; }
+  .hours-week-nav { width: 100%; justify-content: flex-end; }
+}
 .segmented { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .segmented legend { font-size: 14px; font-weight: 600; margin-bottom: 6px; padding: 0; }
 .segmented label { position: relative; }

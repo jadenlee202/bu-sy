@@ -1,0 +1,135 @@
+const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const TIME_ZONE = "America/New_York";
+
+function dateParts(date = new Date()) {
+  return Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date).map(({ type, value }) => [type, value]));
+}
+
+export function campusDateTime(date = new Date()) {
+  const parts = dateParts(date);
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    weekday: parts.weekday.toLowerCase(),
+    minute: Number(parts.hour) * 60 + Number(parts.minute),
+  };
+}
+
+export function addDays(isoDate, days) {
+  const date = new Date(`${isoDate}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+export function dateLabel(isoDate) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${isoDate}T12:00:00Z`));
+}
+
+export function daySchedule(location, isoDate) {
+  if (!location || location.verificationStatus !== "verified" || !location.weeklyHours) {
+    return { status: "unverified", periods: [] };
+  }
+
+  const special = (location.specialHours ?? []).find((item) => item.date === isoDate);
+  if (special) return { status: special.status, periods: special.periods ?? [], note: special.note, special: true };
+  if (isoDate < location.effectiveFrom || isoDate > location.effectiveThrough) {
+    return { status: "unpublished", periods: [] };
+  }
+
+  const weekday = DAYS[new Date(`${isoDate}T12:00:00Z`).getUTCDay()];
+  const periods = location.weeklyHours[weekday];
+  return periods
+    ? { status: periods.length ? "scheduled" : "closed", periods }
+    : { status: "unverified", periods: [] };
+}
+
+function timeValue(hhmm) {
+  const [hour, minute] = hhmm.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function periodIsOpen(period, minute) {
+  const start = timeValue(period.start);
+  const end = timeValue(period.end);
+  return end > start ? minute >= start && minute < end : minute >= start;
+}
+
+export function openStatus(location, now = new Date()) {
+  const { date, minute } = campusDateTime(now);
+  const today = daySchedule(location, date);
+  if (today.status === "closed" && today.special) return { status: "closed" };
+  const yesterday = daySchedule(location, addDays(date, -1));
+
+  const openPeriod = yesterday.periods.find((period) =>
+    timeValue(period.end) <= timeValue(period.start) && minute < timeValue(period.end));
+  if (openPeriod) return { status: "open", period: openPeriod };
+
+  const todayStatus = today.status === "open" ? "scheduled" : today.status;
+  if (todayStatus !== "scheduled" && todayStatus !== "closed") {
+    return { status: today.status };
+  }
+  const firstOpening = today.periods.length ? timeValue(today.periods[0].start) : 0;
+  if (todayStatus === "scheduled" && minute < firstOpening &&
+      yesterday.status !== "scheduled" && yesterday.status !== "closed") {
+    return { status: yesterday.status };
+  }
+  const active = today.periods.find((period) => periodIsOpen(period, minute));
+  if (active) return { status: "open", period: active };
+
+  const next = today.periods.find((period) => timeValue(period.start) > minute);
+  return next ? { status: "opens", period: next } : { status: "closed" };
+}
+
+export function formatClock(hhmm) {
+  const [hour, minute] = hhmm.split(":").map(Number);
+  const suffix = hour < 12 ? "AM" : "PM";
+  return `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
+export function formatPeriod(period) {
+  const start = timeValue(period.start);
+  const end = timeValue(period.end);
+  const overnight = end <= start;
+  const ending = `${formatClock(period.end)}${overnight ? end === 0 ? " (midnight)" : " (next day)" : ""}`;
+  return `${formatClock(period.start)}–${ending}`;
+}
+
+export function todayHoursSummary(location, now = new Date()) {
+  const { date } = campusDateTime(now);
+  const schedule = daySchedule(location, date);
+  if (schedule.status === "unverified") return "Hours unverified";
+  if (schedule.status === "unpublished") return "Today's hours not published";
+  if (schedule.status === "closed") return "Closed today";
+  return schedule.periods.map((period) =>
+    `${period.label}: ${formatPeriod(period)}`).join(" · ");
+}
+
+export function statusLabel(status) {
+  if (status.status === "open") return "Open now";
+  if (status.status === "opens") return `Opens at ${formatClock(status.period.start)}`;
+  if (status.status === "closed") return "Closed now";
+  return status.status === "unpublished" ? "Hours not published" : "Hours unverified";
+}
+
+export function weekRangeLabel(startDate) {
+  const endDate = addDays(startDate, 6);
+  const start = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", day: "numeric" })
+    .format(new Date(`${startDate}T12:00:00Z`));
+  const end = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC", month: "short", day: "numeric", year: "numeric",
+  }).format(new Date(`${endDate}T12:00:00Z`));
+  return `${start}–${end}`;
+}

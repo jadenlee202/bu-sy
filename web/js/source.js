@@ -43,6 +43,7 @@ export function getMode() {
 
 // ---------- facilities ----------
 const historyCache = new Map();
+let hoursPromise;
 
 export async function listFacilities() {
   return (await getMode()) === "api"
@@ -61,6 +62,14 @@ export async function getHistory(id) {
     }));
   }
   return historyCache.get(id);
+}
+
+export function getHours() {
+  hoursPromise ??= getJSON("data/hours.json").catch((error) => {
+    hoursPromise = null;
+    throw error;
+  });
+  return hoursPromise;
 }
 
 // ---------- per-device identity (anonymous) ----------

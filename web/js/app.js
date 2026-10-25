@@ -1,5 +1,9 @@
 import { icon, paw, terrier } from "./icons.js";
 import * as src from "./source.js";
+import {
+  addDays, campusDateTime, dateLabel, daySchedule, formatPeriod, openStatus,
+  statusLabel, todayHoursSummary, weekRangeLabel,
+} from "./hours.js";
 
 // ---------- constants ----------
 const DAY_START = 7 * 60;          // playback runs 7 AM - 11 PM
@@ -15,6 +19,7 @@ const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], [
 const state = { minute: FIRST_VIEW, playing: false, timer: null, filter: "all", query: "" };
 const $view = document.getElementById("view");
 let view = null; // the mounted screen: { update?(), resize?() }
+setInterval(() => view?.update?.(), 60_000);
 
 // ---------- helpers ----------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -118,7 +123,7 @@ async function placesView() {
   $view.innerHTML = `
     <h1 class="title">How busy is it?</h1>
     ${playbackBar()}
-    <p class="hint">Replaying one recorded Monday. Places marked <em>Sample</em> use made-up data.</p>
+    <p class="hint">Replaying one recorded Monday. Sample occupancy is made up; operating hours are static, source-linked schedules.</p>
     <label class="search">${icon("search")}<input type="search" placeholder="Search places" aria-label="Search places" value="${esc(state.query)}"></label>
     <div class="chips" role="group" aria-label="Filter places">
       ${FILTERS.map(([id, label]) => `<button class="chip" data-filter="${id}" aria-pressed="${state.filter === id}">${label}</button>`).join("")}
@@ -127,9 +132,9 @@ async function placesView() {
   syncPlayback();
 
   const $list = $view.querySelector("#places");
-  let facilities, histories;
+  let facilities, histories, hours;
   try {
-    facilities = await src.listFacilities();
+    [facilities, hours] = await Promise.all([src.listFacilities(), src.getHours()]);
     histories = Object.fromEntries(
       await Promise.all(facilities.map(async (f) => [f.facility_id, await src.getHistory(f.facility_id)])),
     );
@@ -154,9 +159,17 @@ async function placesView() {
     $list.innerHTML = rows.map((f) => {
       const h = histories[f.facility_id];
       const o = latestAt(h.observations, state.minute, h.coverage_end);
+      const placeHours = hours.locations[f.facility_id];
+      const now = new Date();
+      const todayStatus = openStatus(placeHours, now);
+      const summary = todayHoursSummary(placeHours, now);
+      const statusText = todayStatus.status === "unverified" || todayStatus.status === "unpublished"
+        ? "" : `<span class="row-hours-status" data-status="${esc(todayStatus.status)}">${esc(statusLabel(todayStatus))}</span>`;
       return `<li><a class="row" href="#/place/${encodeURIComponent(f.facility_id)}">
         <span class="row-main"><span class="row-name">${esc(f.facility_name)}</span>
-          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}</span></span>
+          <span class="row-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}</span>
+          <span class="row-hours">${summary === "Hours unverified" || summary === "Today's hours not published" ? esc(summary) : `Today: ${esc(summary)}`}</span>
+          ${statusText}</span>
         <span class="row-count num">${fmtCount(o?.occupancy_count)}</span>
         ${level(o?.busyness ?? "unknown")}
         ${icon("chevron", 16)}
@@ -179,23 +192,40 @@ async function placesView() {
 // ---------- screen: one place ----------
 async function placeView(id) {
   $view.innerHTML = `<a class="back" href="#/">${icon("back", 16)} All places</a>${loading()}`;
-  let f, hist;
+  let f, hist, placeHours;
   try {
-    const facilities = await src.listFacilities();
+    const [facilities, hours] = await Promise.all([src.listFacilities(), src.getHours()]);
     f = facilities.find((x) => x.facility_id === id);
     if (!f) throw new Error("We couldn't find that place.");
     hist = await src.getHistory(id);
+    placeHours = hours.locations[id];
   } catch (err) {
     $view.innerHTML = `<a class="back" href="#/">${icon("back", 16)} All places</a>${failure(err)}`;
     return {};
   }
   const real = isReal(f);
+  let hoursOffset = 0;
+  let renderedDate = "";
+  let renderedAtMinute = "";
 
   $view.innerHTML = `
     <a class="back" href="#/">${icon("back", 16)} All places</a>
     <h1 class="title">${esc(f.facility_name)}</h1>
     <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${real ? `<span class="muted">Office room, not BU</span>` : ""}</p>
     ${playbackBar()}
+    <section class="hours-card" id="weekly-hours" aria-label="Weekly operating hours">
+      <div class="hours-head">
+        <div><h2>Operating hours</h2><p id="hours-today" class="hours-today"></p></div>
+        <div class="hours-week-nav" role="group" aria-label="Navigate weekly hours">
+          <button class="hours-nav-btn" type="button" data-hours-nav="-7" aria-label="Previous 7 days">‹</button>
+          <span id="hours-week-label" aria-live="polite"></span>
+          <button class="hours-nav-btn" type="button" data-hours-nav="7" aria-label="Next 7 days">›</button>
+        </div>
+      </div>
+      <p class="hours-status-note" id="hours-note"></p>
+      <ul class="hours-days" id="hours-days"></ul>
+      <p class="hours-source" id="hours-source"></p>
+    </section>
     <section class="hero" id="hero" aria-live="polite"></section>
     <section class="suggest" id="suggest"></section>
     <section class="card">
@@ -221,8 +251,63 @@ async function placeView(id) {
   const $hero = $view.querySelector("#hero");
   const $suggest = $view.querySelector("#suggest");
   const $areas = $view.querySelector("#areas");
+  const renderHours = () => {
+    const now = new Date();
+    const { date, minute } = campusDateTime(now);
+    const refreshKey = `${date}:${minute}`;
+    if (renderedAtMinute === refreshKey) return;
+    renderedAtMinute = refreshKey;
+    if (renderedDate !== date) {
+      hoursOffset = 0;
+      renderedDate = date;
+    }
+    const today = daySchedule(placeHours, date);
+    const status = openStatus(placeHours, now);
+    const $today = $view.querySelector("#hours-today");
+    const summary = todayHoursSummary(placeHours, now);
+    const currentStatus = status.status === "unverified" || status.status === "unpublished"
+      ? "" : `<strong class="hours-current-status" data-status="${esc(status.status)}">${esc(statusLabel(status))}</strong>`;
+    $today.innerHTML = `<span>${summary === "Hours unverified" || summary === "Today's hours not published" ? esc(summary) : `Today: ${esc(summary)}`}</span>${currentStatus}`;
+
+    const start = addDays(date, hoursOffset);
+    $view.querySelector("#hours-week-label").textContent = `7 days · ${weekRangeLabel(start)}`;
+    $view.querySelector("#hours-days").innerHTML = Array.from({ length: 7 }, (_, index) => {
+      const currentDate = addDays(start, index);
+      const schedule = daySchedule(placeHours, currentDate);
+      let details;
+      if (schedule.status === "closed") details = `<span class="hours-closed">Closed${schedule.note ? ` · ${esc(schedule.note)}` : ""}</span>`;
+      else if (schedule.status === "unverified") details = `<span class="hours-unknown">${esc(placeHours?.unverifiedReason || "Hours unverified.")}</span>`;
+      else if (schedule.status === "unpublished") details = `<span class="hours-unknown">No official schedule published for this date.</span>`;
+      else details = schedule.periods.map((period) =>
+        `<span class="hours-period"><strong>${esc(period.label)}</strong> ${esc(formatPeriod(period))}</span>`,
+      ).join("");
+      return `<li class="hours-day${currentDate === date ? " is-today" : ""}"${currentDate === date ? ' aria-current="date"' : ""}>
+        <span class="hours-day-name">${esc(dateLabel(currentDate))}${currentDate === date ? " · Today" : ""}</span>
+        <span class="hours-day-periods">${details}</span>
+      </li>`;
+    }).join("");
+
+    const freshness = placeHours?.verificationStatus === "verified"
+      ? `${esc(placeHours.scheduleNote)} Last verified ${esc(placeHours.lastVerified)}.`
+      : `${esc(placeHours?.unverifiedReason || "Hours have not been verified.")} Last checked ${esc(placeHours?.lastVerified || "unknown")}.`;
+    $view.querySelector("#hours-note").textContent = freshness;
+    const sourceUrl = placeHours?.sourceUrl;
+    $view.querySelector("#hours-source").innerHTML = sourceUrl
+      ? `Source: <a href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(placeHours?.sourceLabel || "source checked")}</a> · Times in America/New_York`
+      : "No official hours source found.";
+  };
+  $view.querySelector(".hours-week-nav").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-hours-nav]");
+    if (!button) return;
+    hoursOffset += Number(button.dataset.hoursNav);
+    renderedDate = campusDateTime().date;
+    renderedAtMinute = "";
+    renderHours();
+  });
+  renderHours();
 
   const update = () => {
+    renderHours();
     const o = latestAt(hist.observations, state.minute, hist.coverage_end);
     const when = o
       ? real ? `Last recorded event ${fmtTime(Math.floor(obsSec(o) / 60))}` : `At ${fmtTime(state.minute)}`
@@ -509,6 +594,7 @@ function aboutView() {
     <h1 class="title">About the data</h1>
     <div class="prose">
       <p><strong>Sample places</strong> (FitRec, dining, Mugar) use synthetic counts from one made-up Monday. They are not BU measurements, and capacities are illustrative.</p>
+      <p><strong>Operating hours</strong> are static, manually transcribed from the linked official pages and are not live. Each schedule is limited to its stated date range; unpublished future dates are shown as unverified rather than inferred. FitRec hours include the official Fall 2026 schedule and listed holiday closures. All times use America/New_York.</p>
       <p><strong>Clemente Room</strong> is real: an office conference room from the public COD dataset (Liu et al., 2017, <a href="https://doi.org/10.5281/zenodo.996587" target="_blank" rel="noopener">doi:10.5281/zenodo.996587</a>). It shows the app working on real sensor data. It is not a BU space.</p>
       <p><strong>Busyness</strong> compares a count with capacity (sample places) or with the room's usual high (Clemente). Under 40% is quiet, under 75% moderate, above that busy. These are demo thresholds.</p>
       <p><strong>Hourly averages</strong> are time-weighted: each count holds until the next one, and never past the end of the recorded day.</p>

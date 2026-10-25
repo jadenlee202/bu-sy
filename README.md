@@ -31,6 +31,21 @@ The site detects the API automatically. To use an API on another host, add `?api
 
 **Tests:** `python -m pytest`
 
+### Operating hours
+
+Places-page hours are static data in `web/data/hours.json`; the site does not fetch or scrape
+operator websites when visitors load the page. Each location entry is keyed by its existing
+facility ID, includes the source URL and last-verified date, and limits verified hours to the
+published schedule's effective dates. Dates without a published schedule display as unverified.
+All calculations and displayed times use `America/New_York`.
+
+To update hours, check the official source linked in that location's data entry, transcribe the
+published schedule and meal periods, update `lastVerified` and the effective dates (and any
+date-specific `specialHours`), then run `python -m pytest`. Do not extend a schedule beyond its
+published period unless the source confirms it applies; keep the date unverified otherwise.
+Mugar Library and the Clemente office-room demo currently have explicit unverified entries
+because the available sources did not confirm the locations' visitor operating hours.
+
 ## Publish on GitHub Pages
 
 1. Push this repo to GitHub (branch `main`).
