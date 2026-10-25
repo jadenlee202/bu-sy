@@ -13,7 +13,7 @@
 //     live, and we never want to serve stale API data as if it were fresh.
 //
 // Bumping CACHE busts the old one on activate.
-const CACHE = "busy-v1";
+const CACHE = "busy-v2";
 
 const SHELL = [
   "./",

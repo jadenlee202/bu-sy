@@ -996,16 +996,13 @@ function revealBelowFold() {
 }
 
 // ---------- theme ----------
+// The in-app theme toggle was removed with the desktop sidebar (phone-first shell).
+// We still honor a previously saved choice and otherwise follow the system theme.
 const root = document.documentElement;
 try {
   const saved = localStorage.getItem("busy.theme");
   if (saved) root.dataset.theme = saved;
 } catch { /* storage blocked: follow the system theme */ }
-document.getElementById("theme").addEventListener("click", () => {
-  const dark = (root.dataset.theme ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
-  root.dataset.theme = dark ? "light" : "dark";
-  try { localStorage.setItem("busy.theme", root.dataset.theme); } catch { /* ignore */ }
-});
 
 let resizeTimer;
 window.addEventListener("resize", () => {
