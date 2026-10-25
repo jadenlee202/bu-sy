@@ -17,6 +17,16 @@ The product is BU-sy: a vanilla-JS frontend (`web/`), a FastAPI backend
 introduce a framework, build step, database, or auth system the stack cannot
 support without explicit human approval.
 
+## Standing product decisions (do not reverse without explicit human approval)
+
+- **Phone display, always.** BU-sy is presented as a phone app at every width:
+  the centered phone frame (`--app-frame`, the `PHONE-FIRST APP SHELL` block in
+  `styles.css`) with the bottom tab bar (`.tabbar`) is the layout on all screen
+  sizes, including desktop. Do not reintroduce the desktop sidebar layout or
+  make the content span the full desktop width. Any change must keep the phone
+  frame and bottom tab bar intact. When fixing layout issues, fix the content
+  inside the frame — never by restoring the desktop shell.
+
 ---
 
 ## The team (roles agents play)

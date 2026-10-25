@@ -1202,6 +1202,7 @@ details > summary { transition: color var(--dur-fast) var(--ease); }
     a.row, .calendar-interval, .calendar-matches li, .btn, .version-panel) { box-shadow: none; }
 }
 
+/* ======================================================================
    PHONE-FIRST APP SHELL (overrides)
    The app is presented as a phone app at every width. On wide screens it is
    centered in a phone-sized frame over a plain backdrop; the desktop sidebar
@@ -1444,60 +1445,8 @@ a.row.is-featured:is(:hover, :focus-visible) { border-color: var(--red); }
   a.row:not([aria-disabled="true"]):hover .row-side > .icon { transform: translateX(3px); }
 }
 
-/* ---------- PWA: phone bottom tab bar + offline bar ---------- */
-/* A persistent bottom tab bar on phones, like a native app. It drives the same
-   hash routes as the sidebar; on wide screens the sidebar takes over and this
-   is hidden. Hidden by default (wide-first here) and shown only below 64rem. */
-.tabbar { display: none; }
-.offline-bar {
-  margin: 0; padding: 10px 16px; font-size: 13px; font-weight: 600; text-align: center;
-  background: var(--selected); color: var(--on-selected);
-}
-
-@media (max-width: 63.99rem) {
-  /* The top bar keeps the brand, Simulated pill and theme button; primary
-     navigation moves to the bottom tab bar, so hide the top links to avoid duplicates. */
-  .side .nav { display: none; }
-
-  .tabbar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-    display: flex; justify-content: space-around; align-items: stretch;
-    background: color-mix(in srgb, var(--surface) 92%, transparent);
-    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
-    border-top: 1px solid var(--line);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);
-  }
-  .tabbar a {
-    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-    min-height: 56px; padding: 7px 4px 5px; text-decoration: none;
-    color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.01em;
-    position: relative; -webkit-tap-highlight-color: transparent;
-  }
-  .tabbar a .icon { color: currentColor; }
-  .tabbar a[aria-current] { color: var(--red-text); }
-  .tabbar a[aria-current] .icon { color: var(--red); }
-  /* Active pill behind the icon, matching the app's small-radius language. */
-  .tabbar a[aria-current]::before {
-    content: ""; position: absolute; top: 6px; width: 48px; height: 30px; border-radius: 999px;
-    background: var(--red-soft); z-index: -1;
-  }
-  .tabbar a:active { background: var(--subtle); }
-  .tabbar a:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-
-  /* Clear the fixed tab bar so nothing hides behind it. */
-  .main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
-  /* Sticky in-page controls (playback, planner) must also sit above the tab bar. */
-  .foot { margin-bottom: 4px; }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .tabbar a { transition: color var(--dur-fast, 140ms) var(--ease, ease); }
-}
-@media (forced-colors: active) {
-  .tabbar { border-top: 1px solid CanvasText; }
-  .tabbar a[aria-current] { color: Highlight; }
-}
+/* (The earlier responsive PWA tab-bar block was removed: the phone-first app
+   shell above is the single source of truth for the tab bar at all widths.) */
 
 /* ---------- information icon (ui.js infoTip): a small ⓘ that reveals a longer note ---------- */
 .info { display: inline-flex; vertical-align: middle; }
