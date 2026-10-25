@@ -1,5 +1,12 @@
 # BU-sy demo runbook
 
+Sample-week preview update: **199 Python tests and 111 JavaScript tests pass**. Open **Calendar** to
+preview the supplied October 25–31, 2026 schedule without connecting Google. It starts on Monday;
+choose Wednesday to see overlapping evening events merged, or Saturday to see that Halloween does not
+block the day. Estimated class/review end times are labelled. Turning off **Use sample schedule** restores
+the normal connection flow. Sample data never calls the calendar API or replaces saved personal settings.
+Pages assets now share a commit cache key on every deployment. Browser visual checks remain unverified.
+
 Integration checks (October 25, 2026): all fetched feature branches are combined locally.
 198 Python tests and 104 JavaScript tests pass. Calendar requires the declared cryptography
 dependency and optional OAuth configuration described in README; no Google account was connected.

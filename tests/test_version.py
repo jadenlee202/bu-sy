@@ -48,3 +48,27 @@ def test_every_pages_deploy_writes_the_note_from_full_history():
     assert "fetch-depth: 0" in workflow and "python3 server/write_version.py" in workflow
     assert workflow.index("write_version.py") < workflow.index("upload-pages-artifact")   # before the site is packed
     assert "web/version.json" in (ROOT / ".gitignore").read_text(encoding="utf-8")       # generated, never committed
+
+
+def test_deployment_versions_entrypoint_styles_and_transitive_modules(tmp_path):
+    web = tmp_path / "web"
+    (web / "js").mkdir(parents=True)
+    index = web / "index.html"
+    app = web / "js" / "app.js"
+    calendar = web / "js" / "calendar.js"
+    index.write_text('<link href="styles.css"><script src="js/app.js"></script>')
+    app.write_text('import { calendar } from "./calendar.js";\nimport "./other.js";')
+    calendar.write_text("import { data } from './sample-schedule.js';\nconst url = 'https://example.org/file.js';")
+    wv.stamp_assets(web, "abc1234")
+    assert 'styles.css?v=abc1234' in index.read_text()
+    assert 'js/app.js?v=abc1234' in index.read_text()
+    assert '"./calendar.js?v=abc1234"' in app.read_text()
+    assert '"./other.js?v=abc1234"' in app.read_text()
+    assert "'./sample-schedule.js?v=abc1234'" in calendar.read_text()
+    assert "https://example.org/file.js'" in calendar.read_text()
+    old = app.read_text()
+    wv.stamp_assets(web, "abc1234")
+    assert app.read_text() == old
+    wv.stamp_assets(web, "def5678")
+    assert "?v=abc1234" not in app.read_text()
+    assert "?v=def5678" in app.read_text()

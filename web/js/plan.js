@@ -19,7 +19,8 @@ const TYPED = new Set(["custom", "start", "minActivity", "buffer", "preparation"
 const draft = { req: null, startEdited: false, lastSelected: false };
 
 const header = () => `<div class="page-head"><h1 class="title">What fits now?</h1>
-  <p class="tagline">I have a free window. Make it a plan.</p></div>`;
+  <p class="tagline">I have a free window. Make it a plan.</p>
+  <a href="#/calendar">Preview the sample week · October 25–31</a></div>`;
 
 export async function planView($view, clock) {
   $view.innerHTML = header() + loading("Loading campus data…");

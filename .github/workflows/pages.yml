@@ -27,7 +27,7 @@ jobs:
         with:
           fetch-depth: 0        # full history: the version note lists every version on main
       - name: Write the version note (web/version.json)
-        run: python3 server/write_version.py
+        run: python3 server/write_version.py --stamp-assets
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
