@@ -1,7 +1,8 @@
-// Reads an uploaded .ics (iCalendar) file in the browser and turns it into busy intervals.
-// Only start and end instants leave this module: event titles, descriptions, locations and
-// attendees are never read. Parsing and recurrence expansion use ical.js (Mozilla, MPL-2.0),
-// vendored in web/vendor/ because the site has no build step.
+// Reads an uploaded .ics (iCalendar) file in the browser and turns it into busy intervals plus
+// the list of event occurrences for the calendar view. Only each event's title, start, end and
+// all-day/free flags leave this module: descriptions, locations and attendees are never read.
+// Parsing and recurrence expansion use ical.js (Mozilla, MPL-2.0), vendored in web/vendor/
+// because the site has no build step.
 import ICAL from "../vendor/ical.js";
 import { zonedInstant } from "./availability.js";
 
@@ -84,13 +85,18 @@ function checkFile(text) {
 const isFree = (component) =>
   String(component.getFirstPropertyValue("transp") ?? "").toUpperCase() === "TRANSPARENT"
   || String(component.getFirstPropertyValue("x-microsoft-cdo-busystatus") ?? "").toUpperCase() === "FREE";
+// SUMMARY as plain text: no line breaks or control characters, at most 200 characters, "" when missing.
+const titleOf = (component) => String(component.getFirstPropertyValue("summary") ?? "")
+  .replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, 200);
 const isCancelled = (component) => String(component.getFirstPropertyValue("status") ?? "").toUpperCase() === "CANCELLED";
 
 /**
- * Parses calendar text and returns the busy intervals that overlap [from, until) (epoch ms).
+ * Parses calendar text and returns the busy intervals that overlap [from, until) (epoch ms), plus
+ * `items`: every occurrence in that range as { start, end, title, allDay, free }, for display.
  * Times with a TZID use that zone (an IANA name, or the file's own VTIMEZONE definition),
  * UTC times stay UTC, and floating times and all-day dates use `defaultZone`.
- * Cancelled events, cancelled or excluded occurrences, and events marked free aren't busy.
+ * Cancelled events and cancelled or excluded occurrences appear nowhere; events marked free are
+ * listed in `items` but aren't busy.
  * Events without a usable start, end or timezone are skipped and counted in `skipped` by reason
  * (see SKIP_REASONS in schedule.js), never guessed.
  * Throws IcsError when the file itself can't be used.
@@ -116,7 +122,7 @@ export function parseIcs(text, { from, until, defaultZone = CAMPUS_TZ }) {
   const vevents = roots.flatMap((root) => root.getAllSubcomponents("vevent"));
   const result = {
     vevents: vevents.length, events: 0, occurrences: 0, cancelled: 0, free: 0,
-    skipped: {}, truncated: false, openEnded: false, busy: [],
+    skipped: {}, truncated: false, openEnded: false, busy: [], items: [],
   };
   const skip = (reason) => { result.skipped[reason] = (result.skipped[reason] ?? 0) + 1; };
 
@@ -171,7 +177,6 @@ export function parseIcs(text, { from, until, defaultZone = CAMPUS_TZ }) {
   try {
     for (const component of series) {
       if (isCancelled(component)) { result.cancelled += 1; continue; }
-      if (isFree(component)) { result.free += 1; continue; }
       const found = [];
       try {
         checkTimes(component);
@@ -181,13 +186,14 @@ export function parseIcs(text, { from, until, defaultZone = CAMPUS_TZ }) {
         related.forEach(checkTimes);
         const event = new ICAL.Event(component, { strictExceptions: true, exceptions: related });
         const startZone = tzidOf(component, "dtstart");
-        const add = (start, end) => {
+        // `item` is the event or the exception that replaces this occurrence (its own title and free status).
+        const add = (start, end, item, allDay) => {
           if (end <= start) throw new SkipEvent("bad_range");
-          if (end > from && start < until) found.push({ start, end });
+          if (end > from && start < until) found.push({ start, end, title: titleOf(item), allDay, free: isFree(item) });
         };
 
         if (!event.isRecurring()) {
-          add(toMs(event.startDate, startZone), toMs(event.endDate, endZone(component)));
+          add(toMs(event.startDate, startZone), toMs(event.endDate, endZone(component)), component, event.startDate.isDate);
         } else {
           const rules = component.getAllProperties("rrule").map((prop) => prop.getFirstValue());
           if (rules.some((rule) => !rule.until && !rule.count)) result.openEnded = true;
@@ -199,11 +205,11 @@ export function parseIcs(text, { from, until, defaultZone = CAMPUS_TZ }) {
             const details = event.getOccurrenceDetails(next);
             const item = details.item.component;
             if (isCancelled(item)) { result.cancelled += 1; continue; }
-            if (item !== component && isFree(item)) continue;
             // A plain occurrence is the series start moved by the rule, so its end is in the start's zone.
             add(
               toMs(details.startDate, tzidOf(item, "dtstart")),
               toMs(details.endDate, item === component ? startZone : endZone(item)),
+              item, details.startDate.isDate,
             );
           }
         }
@@ -212,10 +218,12 @@ export function parseIcs(text, { from, until, defaultZone = CAMPUS_TZ }) {
           : /recur|BYDAY|BYMONTHDAY|BYYEARDAY|BYWEEKNO|occurrence/i.test(error?.message ?? "") ? "recurrence" : "unreadable");
         continue;
       }
-      result.events += 1;
-      for (const range of found) {
-        if (result.occurrences >= MAX_OCCURRENCES) { result.truncated = true; break; }
-        result.busy.push(range);
+      if (isFree(component)) result.free += 1; else result.events += 1;
+      for (const occurrence of found) {
+        if (result.items.length >= MAX_OCCURRENCES) { result.truncated = true; break; }
+        result.items.push(occurrence);
+        if (occurrence.free) continue;
+        result.busy.push({ start: occurrence.start, end: occurrence.end });
         result.occurrences += 1;
       }
     }
@@ -226,5 +234,6 @@ export function parseIcs(text, { from, until, defaultZone = CAMPUS_TZ }) {
     }
   }
   result.busy.sort((a, b) => a.start - b.start);
+  result.items.sort((a, b) => a.start - b.start || a.end - b.end);
   return result;
 }

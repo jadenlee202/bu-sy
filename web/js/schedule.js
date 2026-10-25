@@ -1,7 +1,8 @@
-// The student's imported class schedule. Only merged busy intervals are kept: never the file,
-// event titles, descriptions, locations or attendees. It stays in this tab (sessionStorage)
-// unless the student chooses to remember it on this device (localStorage); removing it clears
-// both. Nothing here is sent to a server.
+// The student's imported class schedule: merged busy intervals for free-time calculations, and
+// each event occurrence's title, start, end and all-day/free flags for the calendar view. Never
+// the file, descriptions, locations or attendees. It stays in this tab (sessionStorage) unless
+// the student chooses to remember it on this device (localStorage); removing it clears both.
+// Nothing here is sent to a server.
 import { normalizeBusy, zonedInstant } from "./availability.js";
 
 export const DEFAULT_TZ = "America/New_York";
@@ -45,12 +46,22 @@ const remove = (kind) => {
   try { storage(kind)?.removeItem(KEY); } catch { /* storage blocked: nothing stored there */ }
 };
 
+const ALL_DAY = 1;
+const FREE = 2;
+
 function valid(schedule) {
   const instant = (value) => Number.isFinite(value);
+  const events = schedule?.events;
+  // `events` is absent on schedules imported before the calendar view; those still work for free time.
+  const validEvents = events == null || (Array.isArray(events.titles) && events.titles.every((t) => typeof t === "string")
+    && Array.isArray(events.items) && events.items.every((item) => Array.isArray(item) && item.length === 4
+      && instant(item[0]) && instant(item[1]) && item[0] < item[1]
+      && Number.isInteger(item[2]) && item[2] >= 0 && item[2] < events.titles.length && Number.isInteger(item[3])));
   return schedule?.v === 1 && typeof schedule.fileName === "string" && instant(schedule.importedAt)
     && instant(schedule.coverage?.start) && instant(schedule.coverage?.end)
     && Array.isArray(schedule.busy) && schedule.busy.every((range) =>
-      Array.isArray(range) && range.length === 2 && instant(range[0]) && instant(range[1]) && range[0] < range[1]);
+      Array.isArray(range) && range.length === 2 && instant(range[0]) && instant(range[1]) && range[0] < range[1])
+    && validEvents;
 }
 
 /** The saved schedule plus where it lives ("local", "session" or "memory"), or null. */
@@ -90,6 +101,10 @@ export function clearSchedule() {
 }
 
 export const busyOf = (schedule) => schedule.busy.map(([start, end]) => ({ start, end }));
+/** The imported event occurrences in start order, or null for a schedule saved without them. */
+export const eventsOf = (schedule) => schedule.events?.items.map(([start, end, title, flags]) => ({
+  start, end, title: schedule.events.titles[title], allDay: !!(flags & ALL_DAY), free: !!(flags & FREE),
+})) ?? null;
 export const covers = (schedule, start, end) => start >= schedule.coverage.start && end <= schedule.coverage.end;
 
 /** Campus dates from PAST_DAYS before `now` to FUTURE_DAYS after it, as epoch ms. */
@@ -105,7 +120,10 @@ export function importWindow(now = Date.now()) {
   return { start: shift(-PAST_DAYS), end: shift(FUTURE_DAYS) };
 }
 
-/** What gets stored from a parsed calendar: merged busy ranges and counts, nothing else. */
+/**
+ * What gets stored from a parsed calendar: merged busy ranges, the event occurrences (each title
+ * kept once; occurrences as [start, end, title index, flags]) and counts, nothing else.
+ */
 export function buildSchedule(parsed, fileName, coverage, now = Date.now()) {
   const busy = normalizeBusy(parsed.busy, coverage.start, coverage.end);
   return {
@@ -114,12 +132,27 @@ export function buildSchedule(parsed, fileName, coverage, now = Date.now()) {
     importedAt: now,
     coverage,
     busy: busy.map(({ start, end }) => [start, end]),
+    events: compactEvents(parsed.items),
     lastBusyEnd: busy.length ? busy[busy.length - 1].end : null,
     openEnded: parsed.openEnded,
     stats: {
       events: parsed.events, occurrences: parsed.occurrences, cancelled: parsed.cancelled,
       free: parsed.free, skipped: parsed.skipped, truncated: parsed.truncated,
     },
+  };
+}
+
+function compactEvents(items) {
+  const titles = [];
+  const index = new Map();
+  const titleIndex = (title) => {
+    if (!index.has(title)) { index.set(title, titles.length); titles.push(title); }
+    return index.get(title);
+  };
+  return {
+    titles,
+    items: items.map(({ start, end, title, allDay, free }) =>
+      [start, end, titleIndex(title), (allDay ? ALL_DAY : 0) | (free ? FREE : 0)]),
   };
 }
 

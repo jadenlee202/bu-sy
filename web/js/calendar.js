@@ -1,7 +1,10 @@
 import { daySegments, freeWindows, matchFreeWindows, usableWindows, zonedInstant } from "./availability.js";
 import { daySchedule, formatPeriod } from "./hours.js";
 import {
-  busyOf, clearSchedule, covers, DEFAULT_TZ, importCalendarFile, ImportError, loadSchedule, saveSchedule, skippedText,
+  addDays, eventsByDay, monthCells, monthTitle, rangeText, shiftMonth, timeOnDay, WEEKDAYS,
+} from "./monthview.js";
+import {
+  busyOf, clearSchedule, covers, DEFAULT_TZ, eventsOf, importCalendarFile, ImportError, loadSchedule, saveSchedule, skippedText,
 } from "./schedule.js";
 import * as src from "./source.js";
 import { esc, failure, loading } from "./ui.js";
@@ -15,14 +18,12 @@ const STORED_IN = {
   session: "Kept in this tab only and cleared when you close it.",
   memory: "Kept only while this page is open: this browser blocks storage.",
 };
-const dateInputValue = () => new Intl.DateTimeFormat("en-CA", {
-  timeZone: DEFAULT_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+const todayIn = (zone) => new Intl.DateTimeFormat("en-CA", {
+  timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
 }).format(new Date());
-const plusDays = (isoDate, amount) => {
-  const day = new Date(`${isoDate}T12:00:00Z`);
-  day.setUTCDate(day.getUTCDate() + amount);
-  return day.toISOString().slice(0, 10);
-};
+const MAX_IN_CELL = 3;   // events listed in a day cell before "+N more"
+// "9:00 AM" → "9:00a", so event times fit in a day cell.
+const compactTime = (label) => label.replace(/ ([AP])M/g, (_, x) => x.toLowerCase());
 export const formatInstant = (timestamp, timezone) => new Intl.DateTimeFormat("en-US", {
   timeZone: timezone, hour: "numeric", minute: "2-digit", timeZoneName: "short",
 }).format(new Date(timestamp));
@@ -114,10 +115,11 @@ export async function calendarView($view) {
       <input id="schedule-file" type="file" accept=".ics,text/calendar" hidden>
       <div id="schedule-status" role="status" aria-live="polite"></div>
     </section>
+    <section class="card month-card" aria-labelledby="month-title"><div id="month"></div></section>
     <section class="card calendar-controls" aria-label="Availability settings">
       <div class="calendar-controls-grid">
         <label>Date<div class="calendar-date-controls"><button class="icon-btn" type="button" data-date-step="-1" aria-label="Previous day">‹</button>
-          <input id="calendar-date" type="date" value="${dateInputValue()}">
+          <input id="calendar-date" type="date" value="${todayIn(DEFAULT_TZ)}">
           <button class="icon-btn" type="button" data-date-step="1" aria-label="Next day">›</button></div></label>
         <label>Timezone<input id="calendar-timezone" value="${esc(prefs.timezone ?? DEFAULT_TZ)}" autocomplete="off" aria-describedby="calendar-timezone-help"></label>
         <label>Minimum time<select id="calendar-minimum">${MIN_OPTIONS.map((minutes) => `<option value="${minutes}"${minutes === (prefs.minimum ?? 30) ? " selected" : ""}>${minutes} minutes</option>`).join("")}</select></label>
@@ -139,6 +141,9 @@ export async function calendarView($view) {
   const $from = $view.querySelector("#calendar-from");
   const $until = $view.querySelector("#calendar-until");
   const $location = $view.querySelector("#calendar-location");
+  const $month = $view.querySelector("#month");
+  let viewMonth = $date.value.slice(0, 7);   // the month on screen; the selected day is $date
+  let focusEvent = null;                     // event to highlight after clicking it in the grid
 
   const renderCard = () => {
     if (!schedule) {
@@ -157,13 +162,108 @@ export async function calendarView($view) {
     $card.innerHTML = `<h2 id="schedule-title">Schedule imported</h2>
       <p><strong>${esc(schedule.fileName)}</strong> · imported ${esc(formatDay(schedule.importedAt, DEFAULT_TZ))}</p>
       <p>${esc(importSummary(schedule))}</p>
-      <p class="help">Only your merged busy times are kept, not the file or any event titles, descriptions, locations or guests. ${STORED_IN[schedule.storedIn]}</p>
+      <p class="help">Kept: each event's title and times (for your calendar below) and your merged busy times. Never kept: the file, descriptions, locations or guests. ${STORED_IN[schedule.storedIn]}</p>
       <label class="check"><input type="checkbox" id="schedule-remember"${schedule.storedIn === "local" ? " checked" : ""}> Remember my schedule on this device</label>
       <div class="calendar-actions">
         <button class="btn" type="button" data-schedule="pick">Replace schedule</button>
-        <button class="btn btn-quiet" type="button" data-schedule="remove">Remove schedule</button></div>`;
+        <button class="btn btn-quiet" type="button" data-schedule="remove">Clear calendar</button></div>`;
   };
 
+  // ---------- month grid + the selected day's events (reads the same stored schedule) ----------
+  const displayZone = () => (validZone($timezone.value.trim()) ? $timezone.value.trim() : DEFAULT_TZ);
+  const renderMonth = () => {
+    const zone = displayZone();
+    const cells = monthCells(viewMonth);
+    const events = schedule ? eventsOf(schedule) : null;
+    const byDay = events ? eventsByDay(events, cells[0].date, cells[cells.length - 1].date, zone) : new Map();
+    const today = todayIn(zone);
+    const selected = $date.value;
+    const cell = ({ date, inMonth }) => {
+      const entries = byDay.get(date) ?? [];
+      const label = `${dateLabel(date)}${date === today ? ", today" : ""}: ${entries.length ? `${entries.length} event${entries.length === 1 ? "" : "s"}` : "no events"}`;
+      return `<button type="button" class="day-cell${inMonth ? "" : " is-outside"}${date === today ? " is-today" : ""}${entries.length ? " has-events" : ""}"
+        data-day="${date}" aria-pressed="${date === selected}" aria-label="${esc(label)}"${date === today ? ' aria-current="date"' : ""}>
+        <span class="day-num num">${Number(date.slice(8))}</span>
+        <span class="day-events" aria-hidden="true">${entries.slice(0, MAX_IN_CELL).map((entry) =>
+          `<span class="day-event${entry.event.allDay ? " is-allday" : ""}${entry.event.free ? " is-free" : ""}" data-event="${entry.index}">${entry.event.allDay
+            ? "" : `<span class="day-event-time num">${esc(compactTime(timeOnDay(entry, zone)))}</span> `}${esc(entry.event.title || "Untitled event")}</span>`).join("")}
+          ${entries.length > MAX_IN_CELL ? `<span class="day-more">+${entries.length - MAX_IN_CELL} more</span>` : ""}</span>
+        ${entries.length ? `<span class="day-count num" aria-hidden="true">${entries.length}</span>` : ""}
+      </button>`;
+    };
+
+    // The selected day can be outside the month on screen after browsing other months.
+    const shown = selected >= cells[0].date && selected <= cells[cells.length - 1].date;
+    const dayEntries = !events ? [] : (shown ? byDay : eventsByDay(events, selected, selected, zone)).get(selected) ?? [];
+    // A few zones skip midnight on DST days; the day then starts at 1 AM.
+    const dayStart = (date) => { try { return zonedInstant(date, "00:00", zone); } catch { return zonedInstant(date, "01:00", zone); } };
+    const inRange = schedule && covers(schedule, dayStart(selected), dayStart(addDays(selected, 1)));
+    let dayList;
+    if (!schedule) {
+      dayList = `<div class="month-empty"><p>No schedule imported yet. Upload your ICS file to display your events.</p>
+        <button class="btn btn-primary" type="button" data-schedule="pick">Upload Calendar</button></div>`;
+    } else if (!events) {
+      dayList = `<p class="help">This schedule was saved before BU-sy kept event details, so only your busy times are known. Upload the file again to see your events here.</p>`;
+    } else if (!inRange) {
+      dayList = `<p class="help">This date is outside the dates your imported calendar covers (${esc(formatDay(schedule.coverage.start, DEFAULT_TZ))}–${esc(formatDay(schedule.coverage.end - 1, DEFAULT_TZ))}).</p>`;
+    } else if (!dayEntries.length) {
+      dayList = `<p class="muted">No events on this day.</p>`;
+    } else {
+      dayList = `<ul class="list day-list">${dayEntries.map(({ event, index }) => `<li class="row${index === focusEvent ? " is-featured" : ""}" id="event-${index}" tabindex="-1">
+        <div class="row-main"><span class="row-name">${esc(event.title || "Untitled event")}</span>
+          <span class="row-sub num">${esc(rangeText(event, zone))}</span></div>
+        ${event.free ? `<div class="row-side"><span class="tag">Marked free · not counted as busy</span></div>` : ""}</li>`).join("")}</ul>`;
+    }
+
+    $month.innerHTML = `<div class="month-head">
+        <h2 id="month-title">${esc(monthTitle(viewMonth))}</h2>
+        <div class="month-nav">
+          <button class="icon-btn" type="button" data-month="-1" aria-label="Previous month">‹</button>
+          <button class="btn btn-small" type="button" data-month="today">Today</button>
+          <button class="icon-btn" type="button" data-month="1" aria-label="Next month">›</button>
+        </div>
+      </div>
+      <div class="month-weekdays" aria-hidden="true">${WEEKDAYS.map((day) => `<span>${day}</span>`).join("")}</div>
+      <div class="month-grid">${cells.map(cell).join("")}</div>
+      <section class="day-detail" aria-live="polite">
+        <h3>${esc(dateLabel(selected))}</h3>
+        ${dayList}
+      </section>`;
+    if (focusEvent != null) {
+      const $row = $month.querySelector(`#event-${focusEvent}`);
+      $row?.scrollIntoView({ block: "nearest" });
+      $row?.focus({ preventScroll: true });
+      focusEvent = null;
+    }
+  };
+  // The calendar, the date control and the availability results always show the same day.
+  const selectDay = (date) => {
+    $date.value = date;
+    viewMonth = date.slice(0, 7);
+    renderMonth();
+    if (ready) renderResults();   // before campus data loads, the results catch up once it does
+  };
+  $month.addEventListener("click", (event) => {
+    const step = event.target.closest("[data-month]")?.dataset.month;
+    if (step === "today") {
+      selectDay(todayIn(displayZone()));
+    } else if (step) {
+      viewMonth = shiftMonth(viewMonth, Number(step));
+      renderMonth();
+    } else {
+      const day = event.target.closest("[data-day]")?.dataset.day;
+      if (!day) return;
+      const chip = event.target.closest("[data-event]");
+      focusEvent = chip ? Number(chip.dataset.event) : null;
+      selectDay(day);
+    }
+  }, on);
+
+  // The upload card and the calendar don't depend on campus data, so they show at once.
+  let ready = false;
+  renderCard();
+  renderMonth();
+  let loadError = null;
   try {
     [facilities, hours] = await Promise.all([src.listFacilities(), src.getHours()]);
     facilities = facilities.filter((facility) => facility.data_mode !== "historical_playback");
@@ -174,9 +274,7 @@ export async function calendarView($view) {
     if (facilities.some((facility) => facility.facility_id === prefs.location)) $location.value = prefs.location;
     else if (dining) $location.value = dining.facility_id;
   } catch (error) {
-    renderCard();
-    $results.innerHTML = failure(error);
-    return {};
+    loadError = error;   // only the free-time results need campus hours; everything else keeps working
   }
 
   const savePrefs = () => saveCalendarPrefs({
@@ -188,6 +286,10 @@ export async function calendarView($view) {
   });
 
   const renderResults = () => {
+    if (loadError) {
+      $results.innerHTML = failure(loadError);
+      return;
+    }
     const zone = $timezone.value.trim();
     if (!$date.value || !$from.value || !$until.value || !$location.value || !zone) {
       $results.innerHTML = `<p class="calendar-error">Choose a date, timezone, availability window, and location.</p>`;
@@ -218,20 +320,19 @@ export async function calendarView($view) {
       ${locationHours ? hoursSummary(locationHours, matchingLocation?.category, $date.value) : `<p class="help">Hours for this location are unverified.</p>`}
       <p class="help">These are the location's published hours (campus time), not a recommendation for you. ${verifiedNote}</p>`;
 
-    // Without a schedule, or outside the dates it covers, there's no claim that the day is free.
-    if (!schedule || !covers(schedule, start, end)) {
+    // Outside the dates an uploaded calendar covers, there's no claim that the day is free.
+    if (schedule && !covers(schedule, start, end)) {
       $results.innerHTML = `<h2>${esc(dateLabel($date.value))}</h2>
         <h3>Your day</h3>
         <ul class="calendar-timeline"><li class="calendar-interval" data-kind="unknown"><strong>Schedule unknown</strong>
           <span>${range}</span></li></ul>
-        <p class="help">${schedule
-          ? `This date is outside the dates your imported calendar covers (${esc(formatDay(schedule.coverage.start, DEFAULT_TZ))}–${esc(formatDay(schedule.coverage.end - 1, DEFAULT_TZ))}). Upload a newer export to see it.`
-          : "No schedule uploaded, so BU-sy doesn't know when you're busy or free. Upload an .ics file above."}</p>
+        <p class="help">This date is outside the dates your imported calendar covers (${esc(formatDay(schedule.coverage.start, DEFAULT_TZ))}–${esc(formatDay(schedule.coverage.end - 1, DEFAULT_TZ))}). Upload a newer export to see it.</p>
         ${publishedHours}`;
       return;
     }
 
-    const busy = busyOf(schedule);
+    // No upload counts as an empty schedule: free for the whole preferred window.
+    const busy = schedule ? busyOf(schedule) : [];
     const now = Date.now();
     const segments = daySegments(busy, start, end, minimum, now);
     const usable = usableWindows(freeWindows(busy, start, end), minimum, now);
@@ -240,7 +341,7 @@ export async function calendarView($view) {
       ? matchFreeWindows(usable, { ...locationHours, category: matchingLocation?.category }, $date.value, minimum)
       : { status: "unverified", matches: [] };
     const assumedNote = match.assumed ? " Hours for this date are assumed to repeat the published weekly schedule." : "";
-    const afterLastEvent = !schedule.openEnded && (schedule.lastBusyEnd == null || start >= schedule.lastBusyEnd)
+    const afterLastEvent = schedule && !schedule.openEnded && (schedule.lastBusyEnd == null || start >= schedule.lastBusyEnd)
       ? `<p class="help">Your calendar has no events ${schedule.lastBusyEnd == null ? "in the imported range" : `after ${esc(formatDay(schedule.lastBusyEnd, zone))}`}. If it only covers one semester, this free time may not match your real schedule.</p>`
       : "";
     const timelineHtml = segments.length ? `<ul class="calendar-timeline">${segments.map((interval) =>
@@ -281,7 +382,9 @@ export async function calendarView($view) {
     $results.innerHTML = `<h2>${esc(dateLabel($date.value))}</h2>
       <p class="calendar-total"><strong>${durationLabel(total) || "0 min"}</strong> available (free windows of ${minimum}+ min) during ${esc($from.value)}–${esc($until.value)} (${esc(zone)}).</p>
       <h3>Your day</h3>${timelineHtml}
-      <p class="help">From ${esc(schedule.fileName)}. Cancelled events, excluded occurrences and events marked free aren't counted as busy.</p>${afterLastEvent}
+      <p class="help">${schedule
+        ? `From ${esc(schedule.fileName)}. Cancelled events, excluded occurrences and events marked free aren't counted as busy.`
+        : "No schedule uploaded, so you're treated as free for your whole preferred window. Upload your .ics file above to use your real schedule."}</p>${afterLastEvent}
       <h3>Time at ${locationName}</h3>${matchesHtml}
       ${usable.length ? `<h3>Places that fit your free time</h3>${fitsHtml}` : ""}
       <p class="help">Travel time isn't included. Confirm the trip fits your schedule.${assumedNote} ${verifiedNote}</p>`;
@@ -296,6 +399,7 @@ export async function calendarView($view) {
     try {
       schedule = await importCalendarFile(file, { remember });
       renderCard();
+      renderMonth();
       showStatus(`<p class="calendar-ok">Imported ${esc(file.name)}. ${esc(importSummary(schedule))}</p>`);
     } catch (error) {
       const message = error instanceof ImportError ? error.message : "The file couldn't be read.";
@@ -310,18 +414,17 @@ export async function calendarView($view) {
     if (action === "pick") {
       $file.click();
     } else if (action === "remove") {
+      if (!confirm("Clear your calendar? Your imported events and busy times will be deleted from this browser.")) return;
       clearSchedule();
       schedule = null;
       renderCard();
-      showStatus(`<p class="calendar-ok">Schedule removed. Your busy times were deleted from this browser.</p>`);
+      showStatus(`<p class="calendar-ok">Calendar cleared. Your events and busy times were deleted from this browser.</p>`);
+      renderMonth();
       renderResults();
       $card.querySelector("[data-schedule]")?.focus();
     } else {
       const step = event.target.closest("[data-date-step]");
-      if (step) {
-        $date.value = plusDays($date.value, Number(step.dataset.dateStep));
-        renderResults();
-      }
+      if (step) selectDay(addDays($date.value, Number(step.dataset.dateStep)));
     }
   }, on);
   $card.addEventListener("change", (event) => {
@@ -337,9 +440,10 @@ export async function calendarView($view) {
   }, on);
 
   const rerender = () => { savePrefs(); renderResults(); };
-  $date.addEventListener("change", renderResults, on);
-  for (const $input of [$timezone, $minimum, $from, $until, $location]) $input.addEventListener("change", rerender, on);
-  renderCard();
+  $date.addEventListener("change", () => { if ($date.value) selectDay($date.value); }, on);
+  for (const $input of [$minimum, $from, $until, $location]) $input.addEventListener("change", rerender, on);
+  $timezone.addEventListener("change", () => { rerender(); renderMonth(); }, on);
+  ready = true;
   renderResults();
   return { dispose() { events.abort(); } };
 }
