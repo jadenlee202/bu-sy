@@ -71,6 +71,19 @@ Current operating-hour cards may repeat a published weekly pattern outside its d
 
 ### Optional Google Calendar availability
 
+**Sample-week preview:** open **Calendar** (or the sample-week link on the planner). It defaults to the
+supplied October 25–31, 2026 screenshot, in `America/New_York` (GMT-04), and works on GitHub Pages without
+a calendar server. Pick any day to see the shared availability engine calculate free windows and campus
+hour matches. Class blocks with cropped ends use a labelled 50-minute estimate; Saturday's code review
+uses a labelled 15-minute estimate. Halloween is informational and does not block the day. Overlapping
+Wednesday commitments count once. Dates outside that week stay unknown, and the sample replays the full
+day without filtering against today's clock. No sample titles, locations or intervals are sent to Google,
+and preview choices do not overwrite personal calendar preferences. Turn off **Use sample schedule** to
+return to the normal connection flow. The source fixture is `web/js/sample-schedule.js`.
+
+Each Pages deployment versions the stylesheet, entry module and all local module imports with the same
+commit key, preventing a fresh page from mixing old cached scripts with the new preview.
+
 The Calendar page uses Google's OAuth authorization-code flow with PKCE and the single
 `calendar.freebusy` scope. It requests only the primary calendar's busy intervals; event names,
 descriptions, attendees, and locations are not read, returned to the browser, or logged. BU-sy

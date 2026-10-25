@@ -14,6 +14,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -76,10 +77,30 @@ def build(entries: list[dict], repo: str | None) -> dict:
             "title": history[0]["title"], "repo": repo, "history": history}
 
 
+def stamp_assets(web: Path, revision: str) -> None:
+    """Give one deployed module graph and stylesheet a shared cache key.
+
+    Run only on the deployment artifact. Source modules keep normal local imports.
+    Versioning every import avoids mixing a new entry point with cached old modules.
+    """
+    imports = re.compile(r'''(\bfrom\s*|\bimport\s*)(["'])(\./[^"'?]+\.js)(?:\?v=[^"']*)?\2''')
+    for path in (web / "js").rglob("*.js"):
+        source = path.read_text(encoding="utf-8")
+        source = imports.sub(lambda m: f"{m[1]}{m[2]}{m[3]}?v={revision}{m[2]}", source)
+        path.write_text(source, encoding="utf-8", newline="\n")
+    index = web / "index.html"
+    html = index.read_text(encoding="utf-8")
+    html = re.sub(r'((?:src|href)=")((?:js/app\.js|styles\.css))(?:\?v=[^"]*)?"',
+                  lambda m: f'{m[1]}{m[2]}?v={revision}"', html)
+    index.write_text(html, encoding="utf-8", newline="\n")
+
+
 def main() -> None:
     log = git("log", "--first-parent", f"--format=%H{FIELD}%cI{FIELD}%s{FIELD}%b{RECORD}", "HEAD")
     data = build(parse(log), repo_url())
     OUT.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    if "--stamp-assets" in sys.argv:
+        stamp_assets(OUT.parent, data["commit"])
     print(f"wrote {OUT.relative_to(ROOT)}: v{data['version']} ({data['commit']}, {data['date']}) {data['title']}")
 
 
