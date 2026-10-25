@@ -946,18 +946,28 @@ main > .hint, main > .form { max-width: 720px; }
   background: transparent; color: var(--text); border-radius: 0; min-height: 0; overflow: hidden;
   border-bottom: 1px solid var(--line); padding-bottom: 4px;
 }
-.planner-skyline .hero-body { padding: 4px 0 18px; gap: 6px; max-width: none; }
+.planner-skyline .hero-body { position: relative; z-index: 2; padding: 4px 0 18px; gap: 6px; max-width: none; }
 .planner-skyline .title, .planner-skyline .tagline, .planner-skyline a { color: inherit; }
-.planner-skyline .tagline { color: var(--muted); }
-.planner-skyline .hero-bg { inset: auto 0 0 auto; width: min(520px, 55%); height: 96px; }
+/* Subtitle at full text contrast (not muted) so it reads clearly over the skyline. */
+.planner-skyline .tagline { color: var(--text); font-weight: 500; }
+/* Skyline sits in the top-right corner only, clear of the title and subtitle. */
+.planner-skyline .hero-bg { inset: 0 0 auto auto; width: min(440px, 46%); height: 108px; opacity: 0.9; }
 @media (max-width: 40rem) { .planner-skyline .hero-bg { display: none; } }   /* phones: it would sit under the text */
 .hero-skyline.hero-skyline::after, .hero-skyline::after { content: none; }
+/* Crisp line-drawn city: a clear charcoal silhouette with red accents, so the
+   buildings read as a distinct accent rather than a gray wash behind the words. */
 :root .planner-skyline.hero-skyline {
   --sky-top: transparent; --sky-bottom: transparent; --sun: transparent;
-  --city-far: color-mix(in srgb, var(--line-strong) 70%, transparent);
-  --city-near: color-mix(in srgb, var(--muted) 55%, transparent); --city-glass: transparent;
+  --city-far: color-mix(in srgb, var(--line-strong) 85%, transparent);
+  --city-near: color-mix(in srgb, var(--text) 78%, transparent); --city-glass: transparent;
   --window: transparent; --sail: var(--red);   /* red sails: the one accent, gliding in last */
   --river-top: transparent; --river-bottom: transparent; --river-line: transparent;
+}
+/* Dark theme: lift the city to a light slate so it stands out from the dark panel. */
+:root[data-theme="dark"] .planner-skyline.hero-skyline,
+:root:not([data-theme="light"]) .planner-skyline.hero-skyline {
+  --city-far: color-mix(in srgb, var(--text) 32%, transparent);
+  --city-near: color-mix(in srgb, var(--text) 62%, transparent);
 }
 /* Section headings share the serif with page titles. */
 .section-title, .dash-title { font-family: var(--font-display); font-weight: 600; letter-spacing: 0; }
