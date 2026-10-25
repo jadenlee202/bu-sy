@@ -106,3 +106,33 @@ export function applySuggestion(state, patch) {
     patch: activity && activity !== state.activity ? { ...rest } : { ...state.patch, ...rest },
   };
 }
+
+// ---------- place pages ----------
+/** Walking directions in Google Maps, only to a field-level verified address (Maps uses your location as the start). */
+export function directionsURL(place) {
+  const a = place?.metadata?.address;
+  return a?.status === "verified" && a.text ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(a.text)}&travelmode=walking` : null;
+}
+
+/**
+ * One bar per hour of the sample day: height is the share of the place's reference (capacity, or its usual high),
+ * level is the history's own busyness word. Hours with no recording are left out, never drawn as zero.
+ */
+export function dayBars(hist, fromHour = 7, toHour = 23) {
+  const ref = hist?.capacity ?? hist?.busyness_reference ?? null;
+  const byHour = new Map((hist?.hourly ?? []).map((h) => [h.hour, h]));
+  const bars = [];
+  for (let hour = fromHour; hour < toHour; hour++) {
+    const h = byHour.get(hour);
+    bars.push(h && Number.isFinite(h.occupancy) && ref
+      ? { hour, pct: Math.max(0.03, Math.min(1, h.occupancy / ref)), level: h.busyness ?? "unknown" }
+      : { hour, pct: 0, level: "none" });
+  }
+  return bars;
+}
+
+/** A day's building hours in words, from hours.js daySchedule() output. */
+export function hoursText(day, formatPeriod) {
+  if (day.status === "scheduled") return day.periods.map(formatPeriod).join(", ") + (day.assumed ? " (assumed)" : "");
+  return { closed: "Closed", unpublished: "Not published yet", not_applicable: "—" }[day.status] ?? "Unverified";
+}

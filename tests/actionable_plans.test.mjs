@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { recommend, rankReason, budgetSentence } from "../web/js/recommend.js";
-import { createPlanSession } from "../web/js/plan-session.js";
-
-globalThis.location ??= { search: "" };
-const { selectedPlanHTML, directionsURL, metadataHTML } = await import("../web/js/plan.js");
+import { directionsURL } from "../web/app/logic.js";
 
 // Synthetic campus only; no live clock, files, downloads or network calls.
 const place = (id, more = {}) => ({
@@ -55,7 +52,6 @@ test("missing onward destination and unknown start retain honest travel semantic
   const r=result({from:""});
   assert.equal(r.options.length,0); assert.equal(r.browse[0].activity,45);
   assert.equal(r.browse[0].depart,undefined);
-  assert.equal(selectedPlanHTML(r.browse[0],request(),campus),"");
 });
 
 test("the entire visit including preparation and cleanup must fit before closing", () => {
@@ -75,40 +71,13 @@ test("access unknown needs checking, denied is excluded, confirmed enables choic
   assert.equal(result({},[place("gym",{hours:null})]).checkHours.length,1);
 });
 
-test("choosing keeps engine result identity; edits immediately invalidate; next stop recalculates", () => {
-  const session=createPlanSession(campus,{});
-  const r=session.update(request());
-  const chosen=session.choose("gym");
-  assert.equal(chosen.option,r.options[0]); assert.equal(chosen.request,r.request);
-  session.invalidate();
-  assert.equal(session.selected,null); assert.equal(session.choose("gym"),null);
-  session.update(request({to:null}));
-  assert.equal(session.selected,null);
-  const newPlan=session.choose("gym");
-  assert.equal(newPlan.option.arriveNext,null); assert.equal(newPlan.option.activity,50);
-  session.update(request({minutes:NaN}));
-  assert.equal(session.choose("gym"),null);
-  session.update(request({access:{}}));
-  assert.equal(session.choose("gym"),null);
-});
-
-test("selected plan renders engine intervals and exposes both return and edit actions", () => {
-  const q=request(),o=result().options[0];
-  const html=selectedPlanHTML(o,q,campus);
-  assert.match(html,/3:15 PM–3:50 PM/);
-  for (const text of ["Preparation", "Cleanup", "Latest departure", "Protected buffer", "Commitment boundary", "data-change-plan", "data-edit-inputs", "simulated", "illustrative demo hours"]) assert.ok(html.includes(text),text);
-  assert.ok(!html.includes("Open directions"));
-});
-
-test("directions require field-level verified address; metadata provenance is escaped", () => {
+test("directions require a field-level verified address and start from the device's own location", () => {
   assert.equal(directionsURL(place("gym")),null);
   const p=place("gym",{metadata:{address:{text:"123 Example & Main",status:"verified",checked:"2026-10-25",url:"https://www.bu.edu/"}}});
   const url=new URL(directionsURL(p));
   assert.equal(url.searchParams.get("destination"),"123 Example & Main");
   assert.equal(url.searchParams.get("travelmode"),"walking");
   assert.equal(url.searchParams.has("origin"),false);
-  assert.match(metadataHTML(p),/Example &amp; Main/);
-  assert.match(metadataHTML(p),/checked 2026-10-25/);
   p.metadata.address.status="unknown";
   assert.equal(directionsURL(p),null);
 });

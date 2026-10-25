@@ -7,20 +7,24 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f5f6f8",
-  "theme_color": "#cc0000",
+  "background_color": "#F6F1EA",
+  "theme_color": "#F6F1EA",
   "lang": "en",
   "dir": "ltr",
-  "categories": ["education", "utilities", "lifestyle"],
+  "categories": [
+    "education",
+    "utilities",
+    "lifestyle"
+  ],
   "icons": [
     {
-      "src": "assets/terrier.svg",
+      "src": "app/pin-clock.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "assets/icon-maskable.svg",
+      "src": "app/icon-maskable.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"

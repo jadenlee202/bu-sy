@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import * as L from "../web/proto/logic.js";
+import * as L from "../web/app/logic.js";
 
 // Pure helpers only: no DOM, storage, clock or network.
 const H = 3_600_000;
@@ -93,4 +93,23 @@ test("suggestions change only what they name; a new activity drops old patches",
   assert.deepEqual(L.applySuggestion(s, { minutes: 55 }), { activity: "eat", minutes: 55, patch: { minActivity: 15 } });
   assert.deepEqual(L.applySuggestion(s, { activity: "study", minActivity: 30, preparation: 3 }),
     { activity: "study", minutes: 30, patch: { minActivity: 30, preparation: 3 } });
+});
+
+test("the day chart draws recorded hours against the reference and leaves gaps empty", () => {
+  const hist = { capacity: 200, hourly: [{ hour: 8, occupancy: 50, busyness: "quiet" }, { hour: 9, occupancy: 400, busyness: "busy" }] };
+  const bars = L.dayBars(hist, 7, 11);
+  assert.deepEqual(bars.map((b) => b.hour), [7, 8, 9, 10]);
+  assert.deepEqual(bars[0], { hour: 7, pct: 0, level: "none" });            // no recording: no bar, never zero people
+  assert.equal(bars[1].pct, 0.25);
+  assert.equal(bars[2].pct, 1);                                             // capped at the reference
+  assert.equal(L.dayBars(null).every((b) => b.level === "none"), true);
+});
+
+test("hours read in words, never guessed", () => {
+  const fmt = (p) => `${p.start}-${p.end}`;
+  assert.equal(L.hoursText({ status: "scheduled", periods: [{ start: "07:00", end: "02:00" }] }, fmt), "07:00-02:00");
+  assert.equal(L.hoursText({ status: "scheduled", periods: [{ start: "07:00", end: "22:00" }], assumed: true }, fmt), "07:00-22:00 (assumed)");
+  assert.equal(L.hoursText({ status: "closed", periods: [] }, fmt), "Closed");
+  assert.equal(L.hoursText({ status: "unpublished", periods: [] }, fmt), "Not published yet");
+  assert.equal(L.hoursText({ status: "unverified", periods: [] }, fmt), "Unverified");
 });

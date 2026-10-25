@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { browserErrors } from "./diagnostics.js";
 
-// The minimal prototype (web/proto.html) on a fixed Monday 3 PM, Boston time.
+// The BU-sy app (web/index.html) on a fixed Monday 3 PM, Boston time.
 const NOW = new Date("2026-10-26T15:00:00-04:00");
 const ics = (events) => Buffer.from(`BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n${events.map(([uid, title, start, end]) =>
   `BEGIN:VEVENT\r\nUID:${uid}\r\nDTSTAMP:20261001T000000Z\r\nSUMMARY:${title}\r\nDTSTART;TZID=America/New_York:${start}\r\nDTEND;TZID=America/New_York:${end}\r\nEND:VEVENT\r\n`).join("")}END:VCALENDAR\r\n`);
@@ -13,7 +13,7 @@ async function onboard(page, { at = MUGAR } = {}) {
   if (at) { await page.context().grantPermissions(["geolocation"]); await page.context().setGeolocation(at); }
   await page.clock.setFixedTime(NOW);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/proto.html");
+  await page.goto("/");
   await page.getByRole("link", { name: "Get started" }).click();
   await expect(page.getByRole("switch")).toHaveCount(3);       // wait for the access screen, not the welcome one
   for (const s of await page.getByRole("switch").all()) await s.check();
@@ -136,4 +136,67 @@ test("press feedback and transitions are off under reduced motion", async ({ pag
   const btn = page.getByRole("link", { name: "Find a spot" });
   const duration = await btn.evaluate((el) => parseFloat(getComputedStyle(el).transitionDuration));
   expect(duration).toBeLessThan(0.01);
+});
+
+test("a place page shows live status, the busyness meter, the day chart, hours and sources", async ({ page }) => {
+  const errors = browserErrors(page);
+  await onboard(page);
+  await page.locator('.tabs a[data-tab="explore"]').click();
+  await page.locator("#results li", { hasText: "Mugar Library" }).getByRole("link").click();
+  await expect(page.getByRole("heading", { name: "Mugar Library" })).toBeVisible();
+  await expect(page.locator("#view")).toContainText("Open now · until 2:00 AM");
+  await expect(page.locator("#view .busy-icon")).toHaveAttribute("data-level", /quiet|moderate|busy/);
+  await expect(page.locator(".day-chart .col")).toHaveCount(16);
+  await expect(page.locator(".day-chart .col.now")).toHaveCount(1);                  // 3 PM is marked
+  await expect(page.locator("#view")).toContainText("Mon, Oct 26 · today");
+  await expect(page.locator("#view")).toContainText("7:00 AM–2:00 AM (next day)");
+  await expect(page.getByRole("link", { name: "Source" }).first()).toHaveAttribute("href", /bu\.edu/);
+  await expect(page.getByRole("link", { name: "Open directions" })).toBeVisible();
+  await page.locator("#view .back").click();
+  await expect(page.locator(".seg")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("a club page lets you add a meeting to your calendar and join", async ({ page }) => {
+  const errors = browserErrors(page);
+  await onboard(page);
+  await page.goto("/#/club/example-1");                                                 // Charles River Run Club (sample)
+  await expect(page.getByRole("heading", { name: "Charles River Run Club" })).toBeVisible();
+  await expect(page.locator("#view")).toContainText("Sample club");
+  const add = page.getByRole("button", { name: "Add to calendar" }).first();
+  await add.click();
+  await expect(page.getByRole("button", { name: "Added ✓" }).first()).toBeVisible();
+  await page.getByLabel("Full name").fill("Test Student");
+  await page.getByLabel("School email").fill("test@gmail.com");
+  await page.getByLabel("Year").selectOption("Junior");
+  await page.getByRole("button", { name: /Join club|Send application/ }).click();
+  await expect(page.locator("#join-error")).toContainText("name@bu.edu");               // school email only
+  await page.getByLabel("School email").fill("test@bu.edu");
+  await page.getByRole("button", { name: /Join club|Send application/ }).click();
+  await expect(page.locator("#view")).toContainText(/You're a member|Application sent/);
+  await expect(page.getByRole("button", { name: "Withdraw" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("about the data lists the datasets, their licences and how location is used", async ({ page }) => {
+  await onboard(page);
+  await page.getByRole("link", { name: "About the data" }).click();
+  await expect(page.getByRole("heading", { name: "About the data" })).toBeVisible();
+  for (const name of ["Crowdedness at the Campus Gym", "ROBOD", "NOVANIMAL", "COD"]) await expect(page.locator("#view")).toContainText(name);
+  await expect(page.locator("#view")).not.toContainText("Chapel Hill");                 // evaluated, not used
+  await expect(page.locator("#view")).toContainText("never stored or sent");
+  await expect(page.getByRole("link", { name: "OpenStreetMap" })).toBeVisible();
+});
+
+test("no screen scrolls sideways, from a small phone to a laptop", async ({ page }) => {
+  await onboard(page);
+  for (const width of [320, 375, 390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    for (const hash of ["#/", "#/schedule", "#/explore", "#/place/mugar-synthetic", "#/club/example-1", "#/about", "#/answer"]) {
+      await page.goto(`/${hash}`);
+      await page.waitForTimeout(250);
+      const over = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+      expect(over, `${hash} at ${width}px`).toBeLessThanOrEqual(1);
+    }
+  }
 });

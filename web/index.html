@@ -2,122 +2,32 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>BU-sy</title>
-  <meta name="description" content="Find a spot for your free time between classes. A student prototype using sample campus data.">
-  <meta name="theme-color" content="#cc0000">
-  <link rel="icon" href="assets/terrier.svg" type="image/svg+xml">
-  <!-- Installable PWA: add to home screen for a standalone, app-like launch. -->
+  <meta name="description" content="Plan the gap between classes in one sentence: a campus spot that fits your free time. A student prototype; busyness is simulated.">
+  <meta name="theme-color" content="#F6F1EA">
+  <link rel="icon" href="app/pin-clock.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" href="assets/icon-maskable.svg">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="BU-sy">
-  <meta name="mobile-web-app-capable" content="yes">
-  <link rel="preload" href="assets/fonts/IBMPlexSans-Variable.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="assets/fonts/SourceSerif4-Variable.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="apple-touch-icon" href="app/icon-maskable.svg">
+  <link rel="stylesheet" href="app/app.css">
 </head>
 <body>
   <a class="skip" href="#view">Skip to content</a>
-
-  <!-- Liquid Glass rim-refraction filter. Bends content only at the rim band
-       (the displacement map is strong at the edges, ~0 in the center) and adds a
-       specular rim highlight. Center stays undistorted for legibility. The glass
-       chrome references this via filter: url(#liquid-glass). Decorative only;
-       hidden from assistive tech and from layout. -->
-  <svg class="glass-defs" aria-hidden="true" focusable="false" width="0" height="0">
-    <defs>
-      <radialGradient id="glass-rim-map" cx="50%" cy="50%" r="50%">
-        <stop offset="0%"   stop-color="#808080"/>  <!-- 0x80 = no displacement -->
-        <stop offset="62%"  stop-color="#808080"/>
-        <stop offset="88%"  stop-color="#b0b0b0"/>   <!-- rim: push outward -->
-        <stop offset="100%" stop-color="#4a4a4a"/>   <!-- extreme edge: pull in -->
-      </radialGradient>
-      <filter id="liquid-glass" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
-        <!-- A soft edge-weighted displacement map rendered from the gradient. -->
-        <feImage href="#glass-rim-map" result="map" preserveAspectRatio="none"/>
-        <feGaussianBlur in="map" stdDeviation="2" result="mapBlur"/>
-        <!-- Bend the backdrop at the rim. scale is small so the center is clean. -->
-        <feDisplacementMap in="SourceGraphic" in2="mapBlur" scale="14"
-          xChannelSelector="R" yChannelSelector="G" result="refracted"/>
-        <!-- Specular rim light: a highlight that reads as glass catching light. -->
-        <feSpecularLighting in="mapBlur" surfaceScale="3" specularConstant="0.9"
-          specularExponent="18" lighting-color="#ffffff" result="spec">
-          <fePointLight x="80" y="-40" z="140"/>
-        </feSpecularLighting>
-        <feComposite in="spec" in2="refracted" operator="in" result="specClip"/>
-        <feComposite in="refracted" in2="specClip" operator="over"/>
-      </filter>
-    </defs>
-  </svg>
-
-  <div class="app">
-    <header class="side">
-      <a class="brand" href="#/" aria-label="BU-sy home"><span class="brand-mark"></span><span class="brand-name">BU-<em>sy</em></span></a>
-      <nav class="nav" aria-label="Main">
-        <a href="#/plan" data-section="plan"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Plan</span></a>
-        <a href="#/places" data-section="places"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg><span>Places</span></a>
-        <a href="#/calendar" data-section="calendar"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg><span>Calendar</span></a>
-        <a href="#/clubs" data-section="clubs" class="nav-extra"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg><span>Clubs</span></a>
-      </nav>
-      <a class="demo-pill" href="#/sources" title="Campus busyness is simulated, not live BU data. Sources & Simulation">Simulated</a>
-      <div class="side-card">
-        <p class="side-card-title"><span class="dot" aria-hidden="true"></span>Simulated data</p>
-        <p>Campus busyness is simulated from outside datasets and models. Not live BU data.</p>
-        <a href="#/sources" data-section="sources">Sources &amp; Simulation</a>
-      </div>
-    </header>
-
-    <div class="main">
-      <div class="offline-bar" id="offline-bar" role="status" hidden>You're offline — showing the built-in demo data saved on this device.</div>
-      <div class="notice" id="notice" role="status" hidden></div>
-      <main id="view" tabindex="-1"></main>
-      <footer class="foot">
-        Student prototype · not affiliated with Boston University · <a href="#/sources">Sources &amp; Simulation</a> · <a href="#/about">About this data</a> · <a href="#/clubs">Clubs</a>
-        <span class="source-mode" id="source-mode"></span>
-        <details class="version" id="version" hidden></details>
-      </footer>
-    </div>
-
-    <!-- Primary tab bar at every viewport width, aligned with the phone frame.
-         Drives the hash routes; active state shares data-section. -->
-    <nav class="tabbar" aria-label="Primary">
-      <a href="#/plan" data-section="plan">
-        <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        <span>Plan</span>
-      </a>
-      <a href="#/places" data-section="places">
-        <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
-        <span>Places</span>
-      </a>
-      <a href="#/calendar" data-section="calendar">
-        <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>
-        <span>Calendar</span>
-      </a>
-      <a href="#/clubs" data-section="clubs">
-        <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg>
-        <span>Clubs</span>
-      </a>
+  <div class="phone">
+    <main id="view" tabindex="-1"></main>
+    <nav class="tabs" aria-label="Primary">
+      <a href="#/" data-tab="plan"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Plan</a>
+      <a href="#/schedule" data-tab="schedule"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>Schedule</a>
+      <a href="#/explore" data-tab="explore"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>Explore</a>
     </nav>
   </div>
-
-  <noscript><p class="foot">BU-sy needs JavaScript to plan your free time.</p></noscript>
-  <script type="module" src="js/app.js"></script>
+  <div id="sheet-root"></div>
+  <p class="sr-only" role="status" id="announce"></p>
+  <script type="module" src="app/app.js"></script>
   <script>
-    // Register the service worker for offline + installable app. Progressive:
-    // the site works fully without it, so failures are ignored.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
     }
-    // Honest offline indicator (E5): tells the student data is the on-device demo copy.
-    (function () {
-      var bar = document.getElementById("offline-bar");
-      var sync = function () { bar.hidden = navigator.onLine; };
-      window.addEventListener("online", sync);
-      window.addEventListener("offline", sync);
-      sync();
-    })();
   </script>
 </body>
 </html>

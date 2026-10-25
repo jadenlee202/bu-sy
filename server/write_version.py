@@ -83,14 +83,14 @@ def stamp_assets(web: Path, revision: str) -> None:
     Run only on the deployment artifact. Source modules keep normal local imports.
     Versioning every import avoids mixing a new entry point with cached old modules.
     """
-    imports = re.compile(r'''(\bfrom\s*|\bimport\s*)(["'])(\./[^"'?]+\.js)(?:\?v=[^"']*)?\2''')
-    for path in (web / "js").rglob("*.js"):
+    imports = re.compile(r'''(\bfrom\s*|\bimport\s*)(["'])(\.\.?/[^"'?]+\.js)(?:\?v=[^"']*)?\2''')
+    for path in [*(web / "js").rglob("*.js"), *(web / "app").rglob("*.js")]:
         source = path.read_text(encoding="utf-8")
         source = imports.sub(lambda m: f"{m[1]}{m[2]}{m[3]}?v={revision}{m[2]}", source)
         path.write_text(source, encoding="utf-8", newline="\n")
     index = web / "index.html"
     html = index.read_text(encoding="utf-8")
-    html = re.sub(r'((?:src|href)=")((?:js/app\.js|styles\.css))(?:\?v=[^"]*)?"',
+    html = re.sub(r'((?:src|href)=")((?:app/app\.js|app/app\.css|js/app\.js|styles\.css))(?:\?v=[^"]*)?"',
                   lambda m: f'{m[1]}{m[2]}?v={revision}"', html)
     index.write_text(html, encoding="utf-8", newline="\n")
 

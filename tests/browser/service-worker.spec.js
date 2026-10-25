@@ -5,7 +5,8 @@ import { test, expect } from "@playwright/test";
 test.use({ serviceWorkers: "allow" });
 
 async function installWorker(page) {
-  await page.goto("/#/plan");
+  await page.goto("/");
+  await expect(page.locator(".welcome")).toBeVisible();
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
@@ -30,5 +31,5 @@ test("the installed app still opens offline", async ({ page, context }) => {
   await installWorker(page);
   await context.setOffline(true);
   await page.reload();
-  await expect(page.locator("#plan")).toBeVisible();
+  await expect(page.locator(".welcome")).toBeVisible();   // the app shell and its modules came from the cache
 });

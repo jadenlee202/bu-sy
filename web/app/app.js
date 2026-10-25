@@ -1,11 +1,10 @@
-// BU-sy minimal prototype: plan a gap in one sentence. Every decision comes from the
-// shared modules the main app uses: the engine (recommend.js), verified hours (hours.js),
-// the .ics import and free time (schedule.js, availability.js) and saved club meetings.
+// BU-sy: plan a gap in one sentence. Every decision comes from the shared modules in ../js/:
+// the engine (recommend.js), verified hours (hours.js), the .ics import and free time
+// (schedule.js, availability.js), saved club meetings (clubevents.js) and the data adapter (source.js).
 import { daySegments, zonedInstant } from "../js/availability.js";
 import { fmtTime, toHHMM, toMin } from "../js/clock.js";
-import { clubBusy, clubEventItems, loadClubEvents } from "../js/clubevents.js";
-import { campusDateTime, nowStatus, nowText } from "../js/hours.js";
-import { directionsURL } from "../js/plan.js";
+import { addClubEvent, clubBusy, clubEventItems, clubMeetings, loadClubEvents, removeClubEvent } from "../js/clubevents.js";
+import { addDays, campusDateTime, daySchedule, formatPeriod, nowServiceLabel, nowStatus, nowText } from "../js/hours.js";
 import * as prefs from "../js/prefs.js";
 import * as engine from "../js/recommend.js";
 import { busyOf, clearSchedule, eventsOf, importCalendarFile, loadSchedule } from "../js/schedule.js";
@@ -15,7 +14,7 @@ import * as L from "./logic.js";
 
 const TZ = "America/New_York";
 const DAY = ["08:00", "22:00"];          // the preferred window the main Calendar uses by default
-const KEY = "busy.proto.v1";
+const KEY = "busy.app.v1";
 const $view = document.getElementById("view");
 const $announce = document.getElementById("announce");
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -34,15 +33,18 @@ const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(settings)
 const sentence = { activity: "study", minutes: 60, start: null, fromSchedule: false, picked: false, patch: {}, chosen: null };
 const ui = { exploreTab: 0, showEvents: false, scheduleMsg: "" };
 
-let data = null;
-async function loadData() {
-  if (data) return data;
+let data = null, dataLoading = null;
+/** Loads everything once; every caller (including a route that starts mid-load) shares the same load. */
+function loadData() {
+  dataLoading ??= fetchData().then((d) => (data = d)).catch((err) => { dataLoading = null; throw err; });
+  return dataLoading;
+}
+async function fetchData() {
   const [campus, hours] = await Promise.all([src.getCampus(), src.getHours().catch(() => null)]);
   const ids = [...new Set(campus.places.map((p) => p.facility_id))];
   const histories = Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await src.getHistory(id)])));
-  const geo = await fetch("proto/places-geo.json").then((r) => (r.ok ? r.json() : { locations: {} })).catch(() => ({ locations: {} }));
-  data = { campus, hours, histories, geo: geo.locations, planDate: engine.demoDate(campus, histories) };
-  return data;
+  const geo = await fetch("app/places-geo.json").then((r) => (r.ok ? r.json() : { locations: {} })).catch(() => ({ locations: {} }));
+  return { campus, hours, histories, geo: geo.locations, planDate: engine.demoDate(campus, histories) };
 }
 
 /** The campus the engine plans on: from your location when we have it, else as published. */
@@ -108,10 +110,12 @@ function request() {
 }
 
 // ---------- router + transitions ----------
-const DEPTH = { welcome: 0, access: 1, plan: 2, answer: 3, options: 4 };
-const TABS = { plan: "plan", answer: "plan", options: "plan", schedule: "schedule", explore: "explore" };
+const DEPTH = { welcome: 0, access: 1, plan: 2, answer: 3, options: 4, explore: 2, place: 3, club: 3, about: 3 };
+const TABS = { plan: "plan", answer: "plan", options: "plan", schedule: "schedule", explore: "explore", place: "explore", club: "explore", about: "explore" };
 let current = null;
 const routeOf = () => (location.hash.replace(/^#\/?/, "").split("/")[0] || "plan");
+/** The id in #/place/<id> or #/club/<id>. */
+const param = () => decodeURIComponent(location.hash.replace(/^#\/?/, "").split("/")[1] ?? "");
 
 // ---------- logo: the pin clock (where to go, and when) ----------
 const pinClock = ({ size = 24, label = "" } = {}) => `<svg class="pin-clock" width="${size}" height="${size}" viewBox="0 0 64 64" ${label ? `role="img" aria-label="${label}"` : `aria-hidden="true"`}>
@@ -164,7 +168,9 @@ function openDirections(url) {
   loaderTimer = setTimeout(hideLoader, 6000);      // the Maps app may open instead and leave this page up
 }
 
+let routeSeq = 0;
 async function route() {
+  const seq = ++routeSeq;                          // a newer navigation wins, however the loads finish
   let name = routeOf();
   if (!settings.onboarded && !["welcome", "access"].includes(name)) { location.replace("#/welcome"); return; }
   if (!(name in DEPTH) && !(name in TABS)) name = "plan";
@@ -182,6 +188,7 @@ async function route() {
     $view.innerHTML = `<div class="stack"><h1>Couldn't load campus data</h1><p class="fine">${esc(err.message)}</p><button class="btn primary" onclick="location.reload()">Try again</button></div>`;
     return;
   }
+  if (seq !== routeSeq) { clearTimeout(slow); return; }   // someone navigated on while the data loaded
   const draw = () => {
     SCREENS[name]();
     document.body.classList.toggle("no-tabs", name === "welcome" || name === "access");
@@ -295,7 +302,7 @@ const SCREENS = {
       <p class="hint">Tap a red word to change it.</p>
       <a class="btn primary" href="#/answer" data-find>Find a spot</a>
       <p class="fine">${loc.here ? "Walking times are estimated from your location." : "BU-sy asks where you are to time the walk. Your location stays on this device."}
-        Busyness is simulated from a sample Monday, not live. Access: ${access.length ? esc(access.join(", ")) : "not set"} · <a href="#/access">Change</a> · <a href="index.html">Full app</a></p>
+        Busyness is simulated from a sample Monday, not live. Access: ${access.length ? esc(access.join(", ")) : "not set"} · <a href="#/access">Change</a> · <a href="#/about">About the data</a></p>
     </section>
     ${settings.tipSeen ? "" : `<div class="coach" role="dialog" aria-label="Tip"><p>Tap a <b>red word</b> to change it. That's all BU-sy needs.</p><button class="btn" type="button" data-tip>Got it</button></div>`}`;
 
@@ -427,6 +434,7 @@ const SCREENS = {
           <button role="tab" aria-selected="${ui.exploreTab === 1}" data-tab-i="1">Clubs</button>
         </div>
         <ul class="list stagger" id="results"></ul>
+        <a class="btn quiet" href="#/about" style="align-self:flex-start;padding:0">About the data</a>
       </section>`;
     const $list = $view.querySelector("#results");
     const $q = $view.querySelector("#q");
@@ -438,14 +446,14 @@ const SCREENS = {
       const level = s.status === "open" ? engine.busynessAt(p, data.histories, campusDateTime().minute).level
         : s.status === "closed" || s.status === "closed_today" ? "closed" : "unknown";
       const word = level === "unknown" ? "no data" : level;
-      return `<li data-name="${esc(p.name.toLowerCase())}"><a class="row" href="index.html#/place/${encodeURIComponent(p.facility_id)}">
+      return `<li data-name="${esc(p.name.toLowerCase())}"><a class="row" href="#/place/${encodeURIComponent(p.facility_id)}">
         <span class="main"><span class="title">${esc(p.name)}</span><span class="sub ${s.status === "open" ? "open" : ""}">${esc(nowText(s))}</span></span>
         <span class="busy">${L.busyIcon(level, `${word}${level === "closed" ? "" : ", simulated"}`)}<span class="lvl" data-level="${level}">${esc(word)}</span></span>${icon.go}</a></li>`;
     }).join("");
     const clubRows = async () => {
       try {
         const clubs = await src.clubs.list();
-        return clubs.map((c) => `<li data-name="${esc(c.name.toLowerCase())}"><a class="row" href="index.html#/club/${encodeURIComponent(c.id)}">
+        return clubs.map((c) => `<li data-name="${esc(c.name.toLowerCase())}"><a class="row" href="#/club/${encodeURIComponent(c.id)}">
           <span class="main"><span class="title">${esc(c.name)}</span><span class="sub">${c.meeting_day ? `${esc(c.meeting_day)}s${c.meeting_start ? `, ${fmtTime(toMin(c.meeting_start))}` : ""}` : "Schedule TBD"} · ${esc(c.status ?? "")}</span></span>${icon.go}</a></li>`).join("");
       } catch { return `<li class="empty">Couldn't load clubs.</li>`; }
     };
@@ -470,6 +478,158 @@ const SCREENS = {
   },
 };
 
+// ---------- place, club and about pages ----------
+const back = (href, label) => `<div class="head"><a class="back" href="${href}">${icon.back}${esc(label)}</a></div>`;
+const notFound = (what) => { $view.innerHTML = `${back("#/explore", "Explore")}<section class="stack"><h1 style="margin:0">${esc(what)} not found</h1><a class="btn primary" href="#/explore">Back to Explore</a></section>`; };
+/** Busyness now at a place: only for an open building, from its simulated history. */
+function nowLevel(p, s) {
+  if (s.status === "open") return engine.busynessAt(p, data.histories, campusDateTime().minute).level;
+  return s.status === "closed" || s.status === "closed_today" ? "closed" : "unknown";
+}
+const meter = (level, simulated = true) => { const word = level === "unknown" ? "no data" : level;
+  return `<span class="busy">${L.busyIcon(level, `${word}${simulated && level !== "closed" && level !== "unknown" ? ", simulated" : ""}`)}<span class="lvl" data-level="${level}">${esc(word)}</span></span>`; };
+const dayFmt = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+const META = [["identity", "Name"], ["address", "Address"], ["access", "Who can go"], ["payment", "Payment"], ["currentHours", "Published hours"], ["studyAmenities", "Study space"], ["plannerHours", "Hours the planner uses"]];
+const STATUS_WORD = { verified: "Verified", partial: "Partly verified", illustrative: "Illustrative", unknown: "Unknown", not_reverified: "Not re-checked" };
+
+SCREENS.place = () => {
+  const p = data.campus.places.find((x) => x.facility_id === param());
+  if (!p) return notFound("Place");
+  const loc = data.hours?.locations?.[p.facility_id];
+  const s = loc ? nowStatus(loc) : { status: "unverified", label: "Hours unverified" };
+  const dining = p.metadata?.access?.group === "dining";
+  const hist = data.histories[p.facility_id];
+  const nowHour = Math.floor(campusDateTime().minute / 60);
+  const bars = L.dayBars(hist);
+  const today = campusDateTime().date;
+  const week = Array.from({ length: 7 }, (_, i) => addDays(today, i)).map((d) => ({ d, text: loc ? L.hoursText(daySchedule(loc, d, "building"), formatPeriod) : "Unverified" }));
+  const meals = dining && loc ? daySchedule(loc, today, "service") : null;
+  const directions = L.directionsURL(p);
+  const label = (h) => (h % 12 || 12) + (h < 12 ? "a" : "p");
+  $view.innerHTML = `${back("#/explore", "Explore")}
+    <section class="stack stagger">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <h1 style="margin:0;font-size:32px;line-height:1.1;letter-spacing:-0.02em">${esc(p.name)}</h1>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+          <span class="sub ${s.status === "open" ? "open" : ""}" style="font-size:15px;font-weight:600;color:${s.status === "open" ? "var(--free)" : "var(--muted)"}">${esc(nowText(s))}</span>
+          ${meter(nowLevel(p, s))}
+        </div>
+        ${dining && loc ? `<span class="fine" style="font-size:14px">${esc(nowServiceLabel(loc))}</span>` : ""}
+      </div>
+
+      <div><p class="label">Busyness through the day</p>
+        <div class="day-chart" role="img" aria-label="Simulated busyness by hour on the sample Monday">
+          ${bars.map((b) => `<span class="col${b.hour === nowHour ? " now" : ""}"><i data-level="${b.level}" style="height:${Math.round(b.pct * 100)}%"></i><b>${b.hour % 3 === 0 ? label(b.hour) : ""}</b></span>`).join("")}
+        </div>
+        <p class="fine">Sample Monday · ${esc(hist?.simulation?.label ?? "simulated from the place's reference data")}. Not live, not a forecast.</p></div>
+
+      <div><p class="label">Building hours this week</p>
+        <ul class="list">${week.map(({ d, text }) => `<li class="row" style="min-height:48px"><span class="title" style="font-size:15px">${esc(dayFmt.format(new Date(`${d}T12:00:00Z`)))}${d === today ? " · today" : ""}</span><span class="sub" style="text-align:right">${esc(text)}</span></li>`).join("")}</ul></div>
+
+      ${meals && meals.status === "scheduled" ? `<div><p class="label">Meals today</p><ul class="list">${meals.periods.map((m) => `<li class="row" style="min-height:48px"><span class="title" style="font-size:15px">${esc(m.label ?? "Meal")}</span><span class="sub">${esc(formatPeriod(m))}</span></li>`).join("")}</ul></div>` : ""}
+
+      <div><p class="label">Facility details &amp; sources</p>
+        <ul class="list">${META.filter(([k]) => p.metadata?.[k]).map(([k, name]) => { const m = p.metadata[k];
+          return `<li class="row" style="align-items:flex-start;flex-direction:column;gap:4px"><span class="title" style="font-size:15px">${esc(name)} <span class="tag-mini">${esc(STATUS_WORD[m.status] ?? m.status)}</span></span>
+            <span class="sub">${esc(m.text)}</span>${m.url ? `<a class="sub" href="${esc(m.url)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Source</a>` : ""}</li>`; }).join("")}</ul></div>
+
+      ${directions ? `<a class="btn primary" href="${esc(directions)}" data-directions>Open directions</a>` : `<p class="fine">No verified address yet, so no directions.</p>`}
+    </section>`;
+  $view.querySelector("[data-directions]")?.addEventListener("click", (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault(); openDirections(e.currentTarget.href);
+  });
+};
+
+SCREENS.club = async () => {
+  const id = param();
+  $view.innerHTML = `${back("#/explore", "Explore")}<p class="fine">Loading the club…</p>`;
+  let c, opts;
+  try { [c, opts] = await Promise.all([src.clubs.get(id), src.clubOptions()]); } catch { return notFound("Club"); }
+  if (current !== "club" || param() !== id) return;                          // navigated away meanwhile
+  const saved = new Set(loadClubEvents().map((e) => e.id));
+  const meetings = clubMeetings(c).regular;
+  const when = c.meeting_day ? `${c.meeting_day}s${c.meeting_start ? `, ${fmtTime(toMin(c.meeting_start))}–${fmtTime(toMin(c.meeting_end))}` : ""}` : "Schedule TBD";
+  const where = [c.location_name, c.location_text].filter(Boolean).join(" · ") || "Location TBD";
+  const spots = c.capacity == null ? "No member limit" : `${c.spots_left} of ${c.capacity} spots left${c.waitlist_count ? ` · ${c.waitlist_count} on the waitlist` : ""}`;
+  const mine = c.my_application;
+  const joinBlock = mine
+    ? `<div class="card"><span style="font-weight:700">${mine.status === "approved" ? "You're a member" : mine.status === "pending" ? "Application sent" : mine.status === "waitlisted" ? `You're #${mine.position} on the waitlist` : "Not accepted this time"}</span>
+        ${mine.status !== "rejected" ? `<button class="btn" type="button" data-withdraw>Withdraw</button>` : ""}</div>`
+    : c.status === "Full" ? `<p class="fine">This club is full and isn't taking waitlist sign-ups right now.</p>`
+    : `<form class="card" id="join" novalidate>
+        <span style="font-weight:700">${c.status === "Open" ? (c.requires_approval ? "Apply to join" : "Join") : "Join the waitlist"}</span>
+        <label class="field">Full name<input name="name" autocomplete="name" required maxlength="${opts.limits.applicant_name}"></label>
+        <label class="field">School email<input name="email" type="email" inputmode="email" autocomplete="email" placeholder="name@bu.edu" required maxlength="${opts.limits.email}"></label>
+        <label class="field">Year<select name="year" required><option value="">Choose…</option>${opts.years.map((y) => `<option>${esc(y)}</option>`).join("")}</select></label>
+        <label class="field">Why you'd like to join <span class="fine">(optional)</span><textarea name="reason" rows="2" maxlength="${opts.limits.reason}"></textarea></label>
+        <p class="fine" role="alert" id="join-error" style="color:var(--accent)"></p>
+        <button class="btn primary" type="submit">${c.requires_approval ? "Send application" : "Join club"}</button>
+        <p class="fine">Your name, email and year go only to this club's organizer.${src.clubs.persistent === false ? " Storage is blocked, so this lasts until you close the tab." : ""}</p>
+      </form>`;
+  $view.innerHTML = `${back("#/explore", "Explore")}
+    <section class="stack stagger">
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span class="fine" style="font-weight:600">${esc(c.category)}${c.example ? " · Sample club, not a real BU organization" : ""}</span>
+        <h1 style="margin:0;font-size:32px;line-height:1.1;letter-spacing:-0.02em">${esc(c.name)}</h1>
+        <p style="margin:0;color:var(--muted)">${esc(c.description)}</p>
+      </div>
+      <ul class="list">
+        <li class="row" style="min-height:48px"><span class="title" style="font-size:15px">When</span><span class="sub">${esc(when)}</span></li>
+        <li class="row" style="min-height:48px"><span class="title" style="font-size:15px">Where</span><span class="sub" style="text-align:right">${esc(where)}</span></li>
+        <li class="row" style="min-height:48px"><span class="title" style="font-size:15px">Spots</span><span class="sub">${esc(spots)}</span></li>
+        ${c.requirements ? `<li class="row" style="min-height:48px"><span class="title" style="font-size:15px">Requirements</span><span class="sub" style="text-align:right">${esc(c.requirements)}</span></li>` : ""}
+      </ul>
+      ${meetings.length ? `<div><p class="label">Next meetings</p><ul class="list">${meetings.map((m) => `<li class="row" style="min-height:52px">
+        <span class="main"><span class="title" style="font-size:15px">${esc(dayFmt.format(new Date(`${m.date}T12:00:00Z`)))}</span><span class="sub">${fmtTime(toMin(m.start))}–${fmtTime(toMin(m.end))}</span></span>
+        <button class="btn${saved.has(m.id) ? "" : " quiet"}" type="button" data-cal="${esc(m.id)}" aria-pressed="${saved.has(m.id)}" style="min-height:40px;padding:0 14px;font-size:14px">${saved.has(m.id) ? "Added ✓" : "Add to calendar"}</button></li>`).join("")}</ul>
+        <p class="fine">Added meetings count as busy when BU-sy finds your free time.</p></div>` : ""}
+      ${joinBlock}
+    </section>`;
+  for (const b of $view.querySelectorAll("[data-cal]")) b.addEventListener("click", () => {
+    const m = meetings.find((x) => x.id === b.dataset.cal);
+    if (saved.has(m.id)) removeClubEvent(m.id); else addClubEvent(m);
+    SCREENS.club();
+  });
+  $view.querySelector("[data-withdraw]")?.addEventListener("click", async () => {
+    if (!confirm(`Withdraw from ${c.name}?`)) return;
+    await src.clubs.withdraw(c.id); SCREENS.club();
+  });
+  $view.querySelector("#join")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    try {
+      await src.clubs.apply(c.id, { name: f.get("name"), email: f.get("email"), year: f.get("year"), reason: f.get("reason") ?? "" });
+      $announce.textContent = `Sent to ${c.name}.`;
+      SCREENS.club();
+    } catch (err) { $view.querySelector("#join-error").textContent = err.message; }
+  });
+};
+
+SCREENS.about = async () => {
+  $view.innerHTML = `${back("#/explore", "Explore")}<p class="fine">Loading…</p>`;
+  let s;
+  try { s = await src.getSources(); } catch { s = null; }
+  if (current !== "about") return;
+  const used = (s?.datasets ?? []).filter((d) => d.status === "used" || d.status === "reference_only");
+  $view.innerHTML = `${back("#/explore", "Explore")}
+    <section class="stack stagger">
+      <h1 style="margin:0;font-size:32px;letter-spacing:-0.02em">About the data</h1>
+      <div class="card"><p style="margin:0">${esc(s?.summary ?? "Busyness at BU-named places is simulated and labeled that way.")}</p>
+        <p class="fine" style="margin:0">BU-sy is an independent student prototype, not affiliated with Boston University.</p></div>
+      <div><p class="label">Datasets</p><ul class="list">${used.map((d) => `<li class="row" style="align-items:flex-start;flex-direction:column;gap:4px">
+        <span class="title" style="font-size:15px">${esc(d.title)}</span>
+        <span class="sub">${esc(d.creators ?? "")}${d.publisher ? ` · ${esc(d.publisher)}` : ""} · ${esc(d.original_location ?? "")}</span>
+        <span class="sub">Measures: ${esc(d.measures ?? d.metric ?? "")} · <a href="${esc(d.license_url ?? d.url)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">${esc(d.license ?? "License")}</a> · <a href="${esc(d.url)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Source</a></span></li>`).join("")}</ul></div>
+      ${s?.illustrative?.length ? `<div><p class="label">Still illustrative</p><ul class="list">${s.illustrative.map((t) => `<li class="row" style="min-height:44px"><span class="sub">${esc(t)}</span></li>`).join("")}</ul></div>` : ""}
+      <div><p class="label">Walking times and your location</p><div class="card">
+        <p style="margin:0">Walks are estimated on your phone: the straight-line distance to each building × 1.2, at about 5 km/h. Your location is used only for that, kept for this visit, never stored or sent. Open directions hands the real route to Google Maps.</p>
+        <p class="fine" style="margin:0">Building points © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (ODbL), geocoded once from BU's verified addresses.</p></div></div>
+      <div><p class="label">Your data</p><div class="card">
+        <p style="margin:0">No accounts. An uploaded calendar is read on this device and never uploaded. Club sign-ups (name, school email, year) go only to that club's organizer. The people counter never saves or uploads video.</p></div></div>
+    </section>`;
+};
+
 // ---------- answer pieces ----------
 function bar(o) {
   const parts = o.budget.filter((b) => b.minutes > 0);
@@ -481,7 +641,7 @@ function renderAnswer(o, result, count, back) {
   const req = result.request;
   const act = actInfo(req.activity);
   const busy = L.visitWords(o);
-  const directions = directionsURL(o.place);
+  const directions = L.directionsURL(o.place);
   const steps = [
     [o.depart, o.there ? `Walk there <span class="muted">· about ${o.there} min${req.from === L.HERE ? " from you (estimate)" : ` from ${esc(locName(req.from))}`}</span>` : `You're already there`],
     [o.activityStart, `${esc(act.label)} until ${fmtTime(o.activityEnd)}`],
@@ -494,7 +654,7 @@ function renderAnswer(o, result, count, back) {
       <ol class="steps">${steps.map(([t, text]) => `<li><time>${fmtTime(t)}</time><span>${text}</span></li>`).join("")}</ol>
       <div class="spacer"></div>
       <div class="btn-col">
-        ${directions ? `<a class="btn primary" href="${esc(directions)}" data-directions>Open directions</a>` : `<a class="btn primary" href="index.html#/place/${encodeURIComponent(o.place.facility_id)}">See this place</a>`}
+        ${directions ? `<a class="btn primary" href="${esc(directions)}" data-directions>Open directions</a>` : `<a class="btn primary" href="#/place/${encodeURIComponent(o.place.facility_id)}">See this place</a>`}
         ${count > 1 ? `<a class="btn" href="#/options">See all ${count} options</a>` : ""}
         <p class="fine" style="text-align:center">Busyness is simulated, not live. Walks are estimates; check hours before you go.</p>
       </div>

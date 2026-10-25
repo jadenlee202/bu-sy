@@ -1,7 +1,6 @@
 // People counter app: camera lifecycle, the per-frame loop
 // (detect → track → count → draw), and the controls.
 
-import { terrier } from "../../js/icons.js";
 import { createPersonDetector } from "./detector.js";
 import { Tracker } from "./tracker.js";
 import { LineCounter, PRESETS, measure } from "./line.js";
@@ -39,7 +38,7 @@ try {
   const m = localStorage.getItem(MIRROR_KEY);
   if (m) mirrorChoice = m === "1";
 } catch { /* storage blocked: defaults */ }
-document.querySelector(".brand-mark").innerHTML = terrier({ size: 30 });
+document.querySelector(".brand-mark").innerHTML = `<svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><path d="M32 61S11 41 11 26a21 21 0 0 1 42 0c0 15-21 35-21 35z" fill="var(--red)"/><circle cx="32" cy="26" r="12" fill="var(--surface)"/><path d="M32 26v-7M32 26l5 3" fill="none" stroke="var(--ink)" stroke-width="3.2" stroke-linecap="round"/></svg>`;
 
 // ---------- camera ----------
 async function start() {

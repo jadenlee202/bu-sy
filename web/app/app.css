@@ -1,4 +1,4 @@
-/* BU-sy minimal prototype: Brownstone palette, one sentence per screen.
+/* BU-sy: Brownstone palette, one sentence per screen.
    Motion: press feedback on every control, page transitions, sliding sheets.
    All of it is switched off under prefers-reduced-motion. */
 @font-face {
@@ -125,6 +125,26 @@ button.row { width: calc(100% + 16px); border: none; background: none; text-alig
 .lvl[data-level="quiet"] { color: var(--free); }
 .lvl[data-level="moderate"] { color: #8A4B00; }
 .lvl[data-level="busy"] { color: var(--accent); }
+/* place page: busyness through the sample day, one bar per hour */
+.day-chart { display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 3px; height: 120px; align-items: end; padding: 8px 0 18px; }
+.day-chart .col { position: relative; height: 100%; display: flex; align-items: flex-end; }
+.day-chart i { display: block; width: 100%; border-radius: 3px 3px 1px 1px; background: var(--line); transform-origin: 50% 100%;
+  animation: bar-grow 520ms var(--ease) both; }
+.day-chart i[data-level="quiet"] { background: color-mix(in srgb, var(--free) 70%, var(--surface)); }
+.day-chart i[data-level="moderate"] { background: #C8925A; }
+.day-chart i[data-level="busy"] { background: var(--accent); }
+.day-chart .now i { box-shadow: 0 0 0 2px var(--ink); }
+.day-chart b { position: absolute; left: 0; bottom: -18px; font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.tag-mini { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--busy); color: var(--muted); font-size: 11px; font-weight: 600; vertical-align: 1px; }
+.row .sub { overflow-wrap: anywhere; }
+
+/* club sign-up form */
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
+.field input, .field select, .field textarea { font: inherit; font-weight: 400; font-size: 16px; color: var(--ink); background: var(--ground);
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-height: 48px; transition: border-color var(--fast) ease, box-shadow var(--fast) ease; }
+.field textarea { min-height: 72px; resize: vertical; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--free); box-shadow: 0 0 0 3px var(--free-soft); }
+
 /* busyness icon: three ascending bars; the word beside it always says the level */
 .busy { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .row .busy { margin-left: auto; font-size: 13px; }

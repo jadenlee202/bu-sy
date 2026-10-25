@@ -15,38 +15,31 @@
 //     data must stay live, and we never want to serve stale API data as if it were fresh.
 //
 // Bumping CACHE busts the old one on activate.
-const CACHE = "busy-v11";
+const CACHE = "busy-v12";
 const SCOPE = new URL("./", self.location).pathname;
 
 const SHELL = [
   "./",
   "./index.html",
-  "./styles.css",
   "./manifest.webmanifest",
-  "./js/app.js",
+  "./app/app.css",
+  "./app/app.js",
+  "./app/logic.js",
+  "./app/pin-clock.svg",
+  "./app/icon-maskable.svg",
+  "./app/places-geo.json",
   "./js/availability.js",
-  "./js/calendar.js",
   "./js/clock.js",
   "./js/clubevents.js",
-  "./js/clubs.js",
-  "./js/findtime.js",
   "./js/hours.js",
-  "./js/ics.js",
   "./js/icons.js",
-  "./js/monthview.js",
-  "./js/plan.js",
-  "./js/plan-session.js",
+  "./js/ics.js",
   "./js/prefs.js",
   "./js/recommend.js",
   "./js/schedule.js",
-  "./js/skyline.js",
   "./js/source.js",
   "./js/ui.js",
-  "./assets/terrier.svg",
-  "./assets/icon-maskable.svg",
-  "./assets/campus/boston-hero.jpg",
   "./assets/fonts/IBMPlexSans-Variable.woff2",
-  "./assets/fonts/SourceSerif4-Variable.woff2",
   "./data/facilities.json",
   "./data/campus.json",
   "./data/hours.json",

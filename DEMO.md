@@ -1,10 +1,10 @@
 # BU-sy demo runbook
 
-Checks (October 25, 2026): 166 Python, 192 JavaScript and 19 Chromium browser tests pass locally,
-and CI runs the same suites on every push; the Pages deploy waits for them. The browser tests cover
-the phone frame at 375–1280 px in both themes, motion, the custom-duration planner field and the service worker. Calendar requires the
-declared cryptography dependency and optional OAuth configuration described in README; no Google
-account was connected. Firefox, Safari and physical phones remain unverified.
+Checks (October 25, 2026): 167 Python, 199 JavaScript and 14 Chromium browser tests pass locally,
+and CI runs the same suites on every push; the Pages deploy waits for them. The browser tests drive the app's
+flows (onboarding, planning from a simulated location, location refused, nothing fits, schedule import, Explore,
+place and club pages, About, directions), check that no screen scrolls sideways from 320 to 1280 px, and test the
+service worker. Firefox, Safari and physical phones remain unverified.
 Historical browser reports in section 4 below belong to older builds and are not new verification.
 
 ## 0. Before the demo (once, with internet)
@@ -20,9 +20,9 @@ git clone https://github.com/jadenlee202/bu-sy.git
 cd bu-sy
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
-.venv\Scripts\python -m pytest -q                           # expect 166 passed
+.venv\Scripts\python -m pytest -q                           # expect 167 passed
 npm ci                                                      # dev tools for the JS checks
-npm test                                                    # expect 192 passed
+npm test                                                    # expect 199 passed
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 
@@ -32,57 +32,42 @@ No API keys, accounts or secrets are needed. `.env` files are ignored by git any
 ```bash
 python -m http.server 8000 -d web
 ```
-Open http://localhost:8000. The footer should read *Data source: built-in demo files, no server*.
+Open http://localhost:8000. Location works here because it is `localhost`.
 
 **B. With the API** (clubs and sign-ups are then shared between devices):
 ```bash
 .venv\Scripts\python -m uvicorn main:app --app-dir server --port 8000
 ```
-Open http://localhost:8000. The footer should read *Data source: BU-sy API*. API docs are at `/docs`.
+Open http://localhost:8000. Club sign-ups now go to the server. API docs are at `/docs`.
 This command works from the repo root and doesn't need `activate`, which PowerShell often blocks.
 
 **On a phone (same Wi-Fi).** Add `--bind 0.0.0.0` (option A) or `--host 0.0.0.0` (option B), then open
 `http://<laptop-ip>:8000` on the phone. Windows may ask to allow Python through the firewall.
-Verified with the laptop's LAN address in a desktop browser; *not verified on a physical phone*.
-This exposes the server to that network, so stop it after the demo.
+Browsers only share location with `https://` or `localhost`, so on a LAN address the app falls back to *I'm near a
+campus building*; for location on a phone, demo the live site (HTTPS). This exposes the server to that network, so
+stop it after the demo.
 
 ## 2. Demo sequence (about 3 minutes)
 
-The home URL opens the planner, with no large hero ahead of the controls. Both static and API
-modes use the same campus payload and recommendation engine. These sample outputs were checked
-through the real engine in Node; the browser interaction sequence still needs visual verification.
+Time of day matters: the plan starts now, and at night most places are closed (that's correct, not a bug). Away from
+campus every walk is long, so for a demo set a campus location: Chrome DevTools → ⋮ → More tools → **Sensors** →
+Location → *Other…* → **42.351012, -71.107992** (Mugar), or deny location and pick *I'm near a campus building*.
 
-1. Choose **Study** and **60 min**. Leave the starting point unset: options are browsable, travel
-   is not checked and no plan can be chosen. Set **Mugar Library** as the start.
-2. Under **Preferences**, set the demo time to **15:00**, next stop **Warren Towers**, minimum
-   activity **30**, preparation **3**, cleanup **2**, buffer **10**. Check the library entry
-   requirements in **Facility details & sources**, then confirm access for this session.
-   Do not confirm access for a real visit without checking it.
-3. Choose **Mugar Library**. The evaluated timeline is: depart/arrive **3:00 PM**, prepare
-   **3:00-3:03**, study **3:03-3:44** (41 minutes), clean up **3:44-3:46**, leave by **3:46**,
-   reach Warren **3:50**, protect **3:50-4:00** as buffer. Every minute is counted once.
-   **Open directions** uses the verified address; it does not validate the sample walk.
-4. **Change plan** returns to options. **Edit inputs** preserves inputs and opens settings.
-   Change the next stop to **Fenway**. The old selection is invalidated; for Mugar only 25
-   activity minutes remain, below the 30-minute minimum. Choose a suggested change explicitly
-   or revise the plan. Never treat the former timeline as current.
-5. Try **80 free minutes, workout + changing, then class (access checked)**. This sample
-   explicitly assumes eligibility. It used to be a 70-minute window; that no longer meets
-   the unchanged 35-minute workout minimum after changing/cleanup. At 80 minutes, FitRec
-   gives **36 activity minutes**: walk 3:00-3:10, prepare 3:10-3:15, exercise 3:15-3:51,
-   cleanup 3:51-3:56, walk onward to Warren 3:56-4:10, buffer 4:10-4:20.
-6. Try **30-minute lunch across campus**. Nothing fits. Each proposed fix is checked by the
-   engine with preparation/cleanup included; the form changes only when you choose one.
-7. Open a facility's sources and current weekly schedule. Current published dining weeks
-   do not establish October 19 historical hours. Fenway planner hours remain unknown,
-   and its entrance is unverified, so it has no confirmed plan or directions action.
-8. Browse **Sources & Simulation** and the historical references under **Places**. ROBOD,
-   NOVANIMAL, COD and campus-gym attribution remains. References never become campus plans.
+1. Open the site. **Get started** → switch on Mugar, FitRec and dining → **Continue** → the tip → **Got it**.
+2. The sentence: *I have **1 hr** to **study**.* Tap **1 hr** and **study** to show the sheets.
+3. **Find a spot** → allow location → the pin loader → the answer. From Mugar on a weekday afternoon:
+   **Marciano Commons**, *about 12 min from you (estimate)*, then study until the hour is up, *quiet*. Only the walk
+   and the activity are counted. **See all options** compares them; **Choose** picks another.
+4. **Open directions**: the pin drops and bursts, then Google Maps opens the walking route.
+5. Nothing fits: change to **30 min** to **eat** from far away (or set the Sensors location off campus). BU-sy says
+   why and offers a fix the engine has checked (*Extend to N minutes*).
+6. **Schedule**: upload an `.ics` file. *Free now* and *Later today* appear; **Plan this time** fills the sentence.
+7. **Explore** → **Mugar Library**: open status, the busyness meter, the sample day hour by hour, this week's hours,
+   official sources. Back → **Clubs** → a club: **Add to calendar**, then join with an `@bu.edu` email.
+8. **About the data**: every dataset with its licence, what's illustrative, how location is used.
+9. `/counter/`: the on-device people counter (camera; nothing is uploaded).
 
 For the pending human study use [the five-task script](team/usability/test_script.md).
-Pending browser checks: at 390, 768 and 1280 px in both themes, verify planner-first order,
-no horizontal overflow, visible keyboard focus, readable timeline, back/edit preservation,
-accurate provenance labels, and supported directions links. No results are invented here.
 
 ## 3. After changing data or server code
 
@@ -162,24 +147,26 @@ The only console error in static mode is an expected 404: the app checking wheth
 | Problem | Do this |
 |---|---|
 | API won't start or crashes | Ctrl+C, then run option A. The demo results are identical. |
-| API dies mid-demo | The planner keeps working with data already loaded. Other screens show *"Can't reach the data source"* with **Try again**. Restart the API and press Try again, or switch to option A. Nothing is ever relabeled as live. |
-| No internet | Nothing needed: the app makes no external requests. Only `pip install` and the DOI link on About need the internet, and the people counter (`/counter/`) unless `python web/counter/get_model.py` was run beforehand. |
+| API dies mid-demo | The app keeps working with data already loaded. A reload shows *Couldn't load campus data* with **Try again**: restart the API, or switch to option A. Nothing is ever relabeled as live. |
+| No internet | Planning works: the app makes no external requests. Only *Open directions* (Google Maps), source links, `pip install` and the people counter (unless `python web/counter/get_model.py` was run beforehand) need the internet. |
 | `?api=https://host` is wrong or down | A notice says the API couldn't be reached, and the app uses the built-in demo files. |
 | Port 8000 busy | Use another port, e.g. `8080`. |
 | Phone can't connect | Same Wi-Fi? Firewall prompt accepted? Using the laptop's IP, not `localhost`? Otherwise demo from the laptop. |
-| Old version showing | Hard refresh (Ctrl+Shift+R). |
+| Old version showing | Reload once more (the offline copy updates in the background), or hard refresh (Ctrl+Shift+R). |
+| Location blocked or far away | Tap *I'm near a campus building*, or set a campus location in DevTools → Sensors (section 2). |
+| Want the first-run screens again | Clear this site's data in the browser. |
 | Clubs cluttered | Static mode: clear this site's data in the browser. API mode: stop the server, delete `server/clubs.json` (sample clubs come back). |
 
 ## 6. What is local-only
 
 | Feature | Static mode | API mode |
 |---|---|---|
-| Planner, Places, playback, About | same data and results in both | same |
+| Plan, Explore, place pages, About | same data and results in both | same |
 | Clubs (created, signed up) | this browser only (localStorage) | shared via `server/clubs.json` (git-ignored) |
 | Uploaded schedule (.ics): event titles and times, busy times | this tab, or this browser if remembered; never sent to the server | same |
 | Club meetings added to the calendar | this browser (localStorage) until removed | same |
-| Planner inputs | this tab only; cleared on reload | same |
-| Light/dark choice | this browser (localStorage) | same |
+| Onboarding and access answers | this browser (`busy.app.v1` in localStorage) | same |
+| Your location | memory only, for this visit; never stored or sent | same |
 
 ## 7. Known limitations
 
@@ -190,6 +177,8 @@ The only console error in static mode is an expected 404: the app checking wheth
 - `--host 0.0.0.0` and the API's open CORS (`*`, no credentials) suit a demo network. Restrict CORS with
   `BUSY_CORS_ORIGINS` for anything public.
 - pytest prints a Starlette deprecation warning about `httpx` in the test client. It's harmless today.
-- Data: one sample Monday; walking times, amenities and capacities are illustrative, and so are hours except the verified BU hours in `web/data/hours.json`. FitRec is one
-  building-level count (no courts, pools, rooms or reservations). Busyness is read at the selected time (and, with a starting point, profiled over the estimated visit),
-  not forecast.
+- Data: one sample Monday; amenities and capacities are illustrative, and so are hours except the verified BU hours in
+  `web/data/hours.json`. Walks are straight-line estimates (× 1.2 at 84 m/min), not routed. FitRec is one
+  building-level count (no courts, pools, rooms or reservations). Busyness is simulated over the planned visit, not a
+  forecast.
+- Creating a club and reviewing applications exist in the API but not in the app's screens.

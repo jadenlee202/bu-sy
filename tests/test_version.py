@@ -72,3 +72,20 @@ def test_deployment_versions_entrypoint_styles_and_transitive_modules(tmp_path):
     wv.stamp_assets(web, "def5678")
     assert "?v=abc1234" not in app.read_text()
     assert "?v=def5678" in app.read_text()
+
+
+def test_deployment_versions_the_app_folder_and_its_shared_imports(tmp_path):
+    web = tmp_path / "web"
+    (web / "js").mkdir(parents=True); (web / "app").mkdir()
+    index = web / "index.html"
+    index.write_text('<link href="app/app.css"><script type="module" src="app/app.js"></script>')
+    app = web / "app" / "app.js"
+    app.write_text('import { a } from "../js/hours.js";\nimport * as L from "./logic.js";\nfetch("app/places-geo.json");')
+    hours = web / "js" / "hours.js"
+    hours.write_text('import { b } from "./clock.js";')
+    wv.stamp_assets(web, "abc1234")
+    assert 'app/app.css?v=abc1234' in index.read_text() and 'app/app.js?v=abc1234' in index.read_text()
+    assert '"../js/hours.js?v=abc1234"' in app.read_text()           # a shared module from the app folder
+    assert '"./logic.js?v=abc1234"' in app.read_text()
+    assert 'fetch("app/places-geo.json")' in app.read_text()          # data stays unversioned
+    assert '"./clock.js?v=abc1234"' in hours.read_text()
