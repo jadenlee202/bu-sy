@@ -22,7 +22,12 @@ const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ---------- remembered settings (this browser only) ----------
 const saved = (() => { try { return JSON.parse(localStorage.getItem(KEY)) ?? {}; } catch { return {}; } })();
-const settings = { onboarded: false, tipSeen: false, from: "", to: "", access: { library: "", fitness: "", dining: "" }, ...saved };
+const settings = { onboarded: false, tipSeen: false, access: { library: "", fitness: "", dining: "" }, ...saved };
+delete settings.from; delete settings.to;            // the sentence no longer has a start or a next stop
+
+// Where you are: asked for when you tap "Find a spot", kept in memory for this visit only, never stored or sent.
+// `near` is the fallback when location is off: a building you say you're next to.
+const loc = { here: null, status: "idle", near: "" };
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { /* storage blocked */ } };
 
 // The sentence for this visit. minutes/start come from the schedule until someone picks a time.
@@ -35,8 +40,23 @@ async function loadData() {
   const [campus, hours] = await Promise.all([src.getCampus(), src.getHours().catch(() => null)]);
   const ids = [...new Set(campus.places.map((p) => p.facility_id))];
   const histories = Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await src.getHistory(id)])));
-  data = { campus, hours, histories, planDate: engine.demoDate(campus, histories) };
+  const geo = await fetch("proto/places-geo.json").then((r) => (r.ok ? r.json() : { locations: {} })).catch(() => ({ locations: {} }));
+  data = { campus, hours, histories, geo: geo.locations, planDate: engine.demoDate(campus, histories) };
   return data;
+}
+
+/** The campus the engine plans on: from your location when we have it, else as published. */
+const tripCampus = () => (loc.here ? L.campusFrom(data.campus, loc.here, data.geo) : data.campus);
+const plan = () => engine.recommend(request(), tripCampus(), data.histories, { hours: data.hours });
+
+/** Ask the browser for your position once; resolves either way. */
+function locate() {
+  if (!navigator.geolocation) { loc.status = "unavailable"; return Promise.resolve(false); }
+  loc.status = "asking";
+  return new Promise((resolve) => navigator.geolocation.getCurrentPosition(
+    (p) => { loc.here = { lat: p.coords.latitude, lon: p.coords.longitude }; loc.status = "ok"; resolve(true); },
+    (e) => { loc.status = e.code === 1 ? "denied" : "unavailable"; resolve(false); },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 }));
 }
 
 // ---------- small formatters ----------
@@ -122,7 +142,7 @@ function syncFromSchedule() {
 function request() {
   const d = prefs.defaults(data.campus, prefs.loadPrefs(data.campus), sentence.activity);
   const start = sentence.start ?? toHHMM(L.roundUp5(campusDateTime().minute));
-  return L.buildRequest({ ...sentence, from: settings.from, to: settings.to, access: settings.access }, d, start, data.planDate);
+  return L.buildRequest({ ...sentence, from: loc.here ? L.HERE : loc.near, access: settings.access }, d, start, data.planDate);
 }
 
 // ---------- router + transitions ----------
@@ -313,12 +333,11 @@ const SCREENS = {
     <section class="plan stagger">
       ${chip}
       <p class="sentence">I have <button class="word" data-pick="time" aria-label="Free time: ${esc(L.durationText(sentence.minutes))}. Change">${esc(L.durationText(sentence.minutes))}</button>
-        to <button class="word" data-pick="activity" aria-label="Activity: ${esc(act.verb)}. Change">${esc(act.verb)}</button>,
-        starting from <button class="word" data-pick="from" aria-label="Starting point: ${esc(locName(settings.from) || "not set")}. Change">${esc(locName(settings.from) || "somewhere")}</button>.</p>
-      <p class="sentence then">Then I'm off to <button class="word" data-pick="to" aria-label="Next stop: ${esc(locName(settings.to) || "none")}. Change">${esc(locName(settings.to) || "wherever")}</button>.</p>
+        to <button class="word" data-pick="activity" aria-label="Activity: ${esc(act.verb)}. Change">${esc(act.verb)}</button>.</p>
       <p class="hint">Tap a red word to change it.</p>
-      <a class="btn primary" href="#/answer">Find a spot</a>
-      <p class="fine">Busyness is simulated from a sample Monday, not live. Access: ${access.length ? esc(access.join(", ")) : "not set"} · <a href="#/access">Change</a> · <a href="index.html">Full app</a></p>
+      <a class="btn primary" href="#/answer" data-find>Find a spot</a>
+      <p class="fine">${loc.here ? "Walking times are estimated from your location." : "BU-sy asks where you are to time the walk. Your location stays on this device."}
+        Busyness is simulated from a sample Monday, not live. Access: ${access.length ? esc(access.join(", ")) : "not set"} · <a href="#/access">Change</a> · <a href="index.html">Full app</a></p>
     </section>
     ${settings.tipSeen ? "" : `<div class="coach" role="dialog" aria-label="Tip"><p>Tap a <b>red word</b> to change it. That's all BU-sy needs.</p><button class="btn" type="button" data-tip>Got it</button></div>`}`;
 
@@ -329,10 +348,19 @@ const SCREENS = {
       const b = e.target.closest("[data-pick]");
       if (b) PICKERS[b.dataset.pick]();
     });
+    // The first "Find a spot" asks for your location (the loader covers the wait), then plans from it.
+    $view.querySelector("[data-find]").addEventListener("click", async (e) => {
+      if (loc.here || loc.near || loc.status === "denied" || loc.status === "unavailable") return;
+      e.preventDefault();
+      showLoader("Finding where you are");
+      await locate();
+      hideLoader();
+      go("#/answer");
+    });
   },
 
   answer() {
-    const result = engine.recommend(request(), data.campus, data.histories, { hours: data.hours });
+    const result = plan();
     const back = `<div class="head"><a class="back" href="#/">${icon.back}Change</a></div>`;
     if (!result.ok) {
       $view.innerHTML = `${back}<section class="stack stagger"><h1 style="margin:0;font-size:28px">Let's adjust that</h1>
@@ -347,13 +375,13 @@ const SCREENS = {
   },
 
   options() {
-    const result = engine.recommend(request(), data.campus, data.histories, { hours: data.hours });
+    const result = plan();
     const fits = result.ok ? [...result.options, ...result.more] : [];
     const act = actInfo(sentence.activity);
     $view.innerHTML = `<div class="head"><a class="back" href="#/answer">${icon.back}Back</a></div>
       <section class="stack">
         <div><h1 style="margin:0 0 6px;font-size:26px">${fits.length} place${fits.length === 1 ? "" : "s"} fit</h1>
-          <ul class="legend"><li><i class="k-there"></i>Walk</li><li><i class="k-preparation"></i>Set up / pack up</li><li><i class="k-activity"></i>${esc(act.label)}</li><li><i class="k-buffer"></i>Buffer</li></ul></div>
+          <ul class="legend"><li><i class="k-there"></i>Walk</li><li><i class="k-activity"></i>${esc(act.label)}</li></ul></div>
         <div class="stack stagger" style="gap:14px">${fits.map((f, i) => optionCard(f, i === 0)).join("") || `<p class="empty">Nothing fits this window.</p>`}</div>
       </section>`;
     $view.querySelector("section").addEventListener("click", (e) => {
@@ -686,9 +714,8 @@ function renderAnswer(o, result, count, back) {
   const busy = L.visitWords(o);
   const directions = directionsURL(o.place);
   const steps = [
-    [o.depart, o.there ? `Leave ${esc(locName(req.from))} <span class="muted">· ${o.there} min walk</span>` : `You're already there`],
+    [o.depart, o.there ? `Walk there <span class="muted">· about ${o.there} min${req.from === L.HERE ? " from you (estimate)" : ` from ${esc(locName(req.from))}`}</span>` : `You're already there`],
     [o.activityStart, `${esc(act.label)} until ${fmtTime(o.activityEnd)}`],
-    [o.leaveBy, req.to ? `Head to ${esc(locName(req.to))} <span class="muted">· there by ${fmtTime(o.arriveNext)}</span>` : `Pack up <span class="muted">· free until ${fmtTime(o.windowEnd)}</span>`],
   ];
   $view.innerHTML = `${back}<section class="answer stagger">
       <div><span class="fine" style="font-size:14px;font-weight:600">${sentence.chosen && o !== result.options[0] ? "Your pick" : "Go to"}</span>
@@ -719,7 +746,7 @@ function optionCard(o, first) {
     <div class="top"><h2>${esc(o.place.name)}</h2>${L.busyBadge(busy.peak ?? "unknown", { text: busy.text, label: `${busy.text} during your visit, simulated` })}</div>
     ${bar(o)}
     <div class="facts"><span>Leave<b>${o.there ? fmtTime(o.depart) : "Here"}</b></span><span>${esc(actInfo(req.activity).label)}<b>${o.activity} min</b></span>
-      <span>${req.to ? `At ${esc(locName(req.to))}` : "Free until"}<b>${fmtTime(req.to ? o.arriveNext : o.windowEnd)}</b></span></div>
+      <span>Done at<b>${fmtTime(o.activityEnd)}</b></span></div>
     <button class="btn${first ? " primary" : ""}" type="button" data-choose="${esc(o.place.place_id)}">Choose</button>
   </article>`;
 }
@@ -728,9 +755,14 @@ function renderNoFit(result, back) {
   const names = (list) => list.map((o) => esc(o.place.name)).join(", ");
   let body;
   if (result.browse.length) {
-    body = `<h1 style="margin:0;font-size:28px">Where are you starting?</h1>
-      <p class="fine" style="font-size:15px">These could work, but the walk can't be checked without a starting point: ${names(result.browse)}.</p>
-      <button class="btn primary" type="button" data-fix-from>Set a starting point</button>`;
+    const why = loc.status === "denied" ? "Location is turned off for this site, so the walk to each place can't be timed."
+      : loc.status === "unavailable" ? "Your location couldn't be found, so the walk to each place can't be timed."
+      : "BU-sy needs your location to time the walk to each place.";
+    body = `<h1 style="margin:0;font-size:28px">Where are you?</h1>
+      <p class="fine" style="font-size:15px">${why} These could work: ${names(result.browse)}.</p>
+      <div class="btn-col"><button class="btn primary" type="button" data-locate>Use my location</button>
+        <button class="btn" type="button" data-near>I'm near a campus building</button></div>
+      ${loc.status === "denied" ? `<p class="fine">To turn it back on, allow location for this site in your browser's settings.</p>` : ""}`;
   } else if (result.checkAccess.length) {
     body = `<h1 style="margin:0;font-size:28px">Can you get in?</h1>
       <p class="fine" style="font-size:15px">${names(result.checkAccess)} would fit, but you haven't said you can use ${result.checkAccess.length === 1 ? "it" : "them"}.</p>
@@ -744,7 +776,13 @@ function renderNoFit(result, back) {
         : result.reasons.some((r) => r.code === "access") ? `<a class="btn primary" href="#/access">Update access</a>` : `<a class="btn primary" href="#/">Change my plan</a>`}`;
   }
   $view.innerHTML = `${back}<section class="stack stagger">${body}</section>`;
-  $view.querySelector("[data-fix-from]")?.addEventListener("click", () => PICKERS.from(() => SCREENS.answer()));
+  $view.querySelector("[data-locate]")?.addEventListener("click", async () => {
+    showLoader("Finding where you are");
+    await locate();
+    hideLoader();
+    SCREENS.answer();
+  });
+  $view.querySelector("[data-near]")?.addEventListener("click", () => PICKERS.near(() => SCREENS.answer()));
   for (const b of $view.querySelectorAll("[data-fix]")) b.addEventListener("click", () => {
     Object.assign(sentence, L.applySuggestion(sentence, result.suggestions[Number(b.dataset.fix)].patch), { picked: true });
     SCREENS.answer();
@@ -775,22 +813,10 @@ const PICKERS = {
       SCREENS.plan(); pop('[data-pick="activity"]');
     });
   },
-  from(after) {
-    const options = [{ value: "", label: "Not set", note: "walks can't be checked", pressed: !settings.from },
-      ...data.campus.locations.map((l) => ({ value: l.id, label: l.name, pressed: l.id === settings.from }))];
-    openSheet("Where are you now?", options, (v) => {
-      settings.from = v; persist(); sentence.chosen = null;
-      if (typeof after === "function") { after(); return; }
-      SCREENS.plan(); pop('[data-pick="from"]');
-    });
-  },
-  to() {
-    const options = [{ value: "", label: "Wherever", note: "no walk after", pressed: !settings.to },
-      ...data.campus.locations.map((l) => ({ value: l.id, label: l.name, pressed: l.id === settings.to }))];
-    openSheet("Where do you need to be after?", options, (v) => {
-      settings.to = v; persist(); sentence.chosen = null;
-      SCREENS.plan(); pop('[data-pick="to"]');
-    });
+  // Fallback only, when location is off: a building you're next to, for this visit (not remembered).
+  near(after) {
+    const options = data.campus.locations.map((l) => ({ value: l.id, label: l.name, pressed: l.id === loc.near }));
+    openSheet("Which building are you near?", options, (v) => { loc.near = v; sentence.chosen = null; after(); });
   },
 };
 

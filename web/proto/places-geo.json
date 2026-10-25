@@ -1,0 +1,38 @@
+{
+ "source": "OpenStreetMap Nominatim, geocoded once from the verified addresses in web/data/campus.json",
+ "license": "\u00a9 OpenStreetMap contributors, ODbL 1.0 (https://www.openstreetmap.org/copyright)",
+ "retrieved": "2026-10-25",
+ "note": "Building points for an on-device walking estimate only. Fenway is left out: its dining entrance address is not verified, so its walk stays unknown.",
+ "locations": {
+  "mugar": {
+   "lat": 42.351012,
+   "lon": -71.107992,
+   "address": "771 Commonwealth Avenue, Boston, MA 02215",
+   "matched": "Mugar Memorial Library"
+  },
+  "warren": {
+   "lat": 42.349224,
+   "lon": -71.10312,
+   "address": "700 Commonwealth Avenue, Boston, MA 02215",
+   "matched": "700"
+  },
+  "marciano": {
+   "lat": 42.349787,
+   "lon": -71.097941,
+   "address": "100 Bay State Road, Boston, MA 02215",
+   "matched": "Yawkey Center for Student Services"
+  },
+  "fitrec": {
+   "lat": 42.35182,
+   "lon": -71.116462,
+   "address": "915 Commonwealth Avenue, Boston, MA 02215",
+   "matched": "Boston University Fitness & Recreation Center"
+  },
+  "west": {
+   "lat": 42.352523,
+   "lon": -71.119812,
+   "address": "273 Babcock Street, Boston, MA 02215",
+   "matched": "Claflin Hall"
+  }
+ }
+}
