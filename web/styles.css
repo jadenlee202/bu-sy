@@ -115,7 +115,13 @@ button { cursor: pointer; }
 .nav a { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 12px; border-radius: var(--radius-xs); text-decoration: none; font-size: 14px; font-weight: 600; color: var(--side-muted); }
 .nav a .icon { display: none; }
 .nav a:hover { color: var(--side-text); background: var(--side-hover); }
-.nav a[aria-current] { color: var(--side-text); box-shadow: inset 0 -2px 0 var(--red); }
+.nav a { position: relative; }
+.nav a::after {
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; background: var(--red);
+  transform: scaleX(0); transition: transform 280ms var(--ease-out, ease-out);
+}
+.nav a[aria-current] { color: var(--side-text); }
+.nav a[aria-current]::after { transform: scaleX(1); }
 .nav-extra { display: none !important; }
 .demo-pill { display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; border-radius: var(--radius-xs); font-size: 13px; font-weight: 600; text-decoration: none; color: var(--side-text); }
 .demo-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--red); margin-right: 6px; }
@@ -676,10 +682,10 @@ th { color: var(--muted); font-weight: 600; }
 .day-cell.is-outside { background: transparent; border-style: dashed; }
 .day-cell.is-outside .day-num, .day-cell.is-outside .day-events { opacity: 0.55; }
 .day-cell[aria-pressed="true"] { border-color: var(--selected); box-shadow: inset 0 0 0 1px var(--selected); }
-.day-num { align-self: flex-start; min-width: 26px; height: 24px; padding: 0 6px; display: grid; place-items: center; border-radius: 999px; font-size: 13px; font-weight: 650; }
+.day-num { align-self: flex-start; min-width: 26px; height: 24px; padding: 0 6px; display: grid; place-items: center; border-radius: var(--radius-xs); font-size: 13px; font-weight: 650; }
 .day-cell.is-today .day-num { background: var(--red); color: var(--on-red); }
 .day-events { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.day-event { display: block; padding: 2px 6px; border-radius: 6px; font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: color-mix(in srgb, var(--red) 14%, var(--surface)); }
+.day-event { display: block; padding: 2px 6px; border-radius: var(--radius-xs); font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: color-mix(in srgb, var(--red) 14%, var(--surface)); }
 .day-event-time { color: var(--muted); }
 .day-event.is-allday { background: var(--red); color: var(--on-red); }
 .day-event.is-free { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
@@ -695,7 +701,7 @@ th { color: var(--muted); font-weight: 600; }
   .day-cell { min-height: 52px; padding: 4px; align-items: center; gap: 2px; }
   .day-num { align-self: center; }
   .day-events { display: none; }
-  .day-count { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; font-size: 11px; font-weight: 700; background: color-mix(in srgb, var(--red) 18%, var(--surface)); }
+  .day-count { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--radius-xs); font-size: 11px; font-weight: 700; background: color-mix(in srgb, var(--red) 18%, var(--surface)); }
 }
 .calendar-total { margin: 0; }
 .calendar-timeline, .calendar-matches { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -918,7 +924,9 @@ main > .hint, main > .form { max-width: 720px; }
   .brand { margin: 0 0 22px; padding: 0 22px; }
   .nav { gap: 0; }
   .nav a { border-radius: 0; padding: 10px 22px; min-height: 44px; }
-  .nav a[aria-current] { background: var(--side-hover); box-shadow: inset 3px 0 0 var(--red); }
+  .nav a[aria-current] { background: var(--side-hover); }
+  .nav a::after { left: 0; right: auto; top: 0; bottom: 0; width: 3px; height: auto; transform: scaleY(0); }
+  .nav a[aria-current]::after { transform: scaleY(1); }
   /* The simulated-data note reads as a footnote, not a red promo block. */
   .side-card {
     margin: auto 16px 8px; padding: 14px 0 0; border-radius: 0; background: transparent; color: var(--side-muted);
@@ -940,13 +948,14 @@ main > .hint, main > .form { max-width: 720px; }
 .planner-skyline .hero-body { padding: 4px 0 18px; gap: 6px; max-width: none; }
 .planner-skyline .title, .planner-skyline .tagline, .planner-skyline a { color: inherit; }
 .planner-skyline .tagline { color: var(--muted); }
-.planner-skyline .hero-bg { inset: auto 0 0 auto; width: min(460px, 55%); height: 72px; opacity: 0.5; }
+.planner-skyline .hero-bg { inset: auto 0 0 auto; width: min(520px, 55%); height: 96px; }
 @media (max-width: 40rem) { .planner-skyline .hero-bg { display: none; } }   /* phones: it would sit under the text */
 .hero-skyline.hero-skyline::after, .hero-skyline::after { content: none; }
 :root .planner-skyline.hero-skyline {
   --sky-top: transparent; --sky-bottom: transparent; --sun: transparent;
-  --city-far: var(--line); --city-near: var(--line-strong); --city-glass: transparent;
-  --window: transparent; --sail: transparent;
+  --city-far: color-mix(in srgb, var(--line-strong) 70%, transparent);
+  --city-near: color-mix(in srgb, var(--muted) 55%, transparent); --city-glass: transparent;
+  --window: transparent; --sail: var(--red);   /* red sails: the one accent, gliding in last */
   --river-top: transparent; --river-bottom: transparent; --river-line: transparent;
 }
 /* Section headings share the serif with page titles. */
@@ -967,7 +976,14 @@ main > .hint, main > .form { max-width: 720px; }
 :is(.pick, .preset-row) input:active + span { transform: scale(0.98); }
 .pick span .icon { transition: transform var(--dur) var(--ease-out); }
 .pick input:checked + span .icon { transform: translateY(-1px); }
-a.row { transition: border-color var(--dur) var(--ease); }
+a.row { position: relative; transition: border-color var(--dur) var(--ease); }
+a.row::before {
+  content: ""; position: absolute; left: -1px; top: -1px; bottom: -1px; width: 3px; background: var(--red);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm); transform: scaleY(0); transform-origin: 50% 0;
+  transition: transform 260ms var(--ease-out);
+}
+a.row:focus-visible::before { transform: scaleY(1); }
+@media (hover: hover) { a.row:hover::before { transform: scaleY(1); } }
 a.row:hover { border-color: var(--line-strong); }
 .row-side > .icon { transition: transform var(--dur) var(--ease); }
 a.row:hover .row-side > .icon { transform: translateX(3px); }
@@ -980,6 +996,7 @@ a.row:hover .row-side > .icon { transform: translateX(3px); }
 .src-item, .rec { transition: border-color var(--dur) var(--ease); }
 @media (hover: hover) { .src-item:hover, .rec:hover, .schedule-day:hover { border-color: var(--line-strong); } }
 #avail-chips:empty, .avail-panel:empty { display: none; }
+.pb-speed-btn, .day-cell { transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
 
 /* Disclosures: where supported, <details> content animates its height. */
 :root { interpolate-size: allow-keywords; }
@@ -1001,19 +1018,73 @@ details > summary { transition: color var(--dur-fast) var(--ease); }
 @keyframes bar-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 @keyframes line-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 
+@keyframes rise-in-lg { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes count-rise { from { opacity: 0; transform: translateY(0.4em); } to { opacity: 1; transform: none; } }
+@keyframes value-flash { from { color: var(--red); transform: translateY(-0.18em); } 45% { color: var(--red); transform: none; } }
+@keyframes meter-fill { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.3) rotate(-6deg); } 100% { transform: translateY(-1px); } }
+@keyframes sweep-in { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes sky-rise { from { opacity: 0; transform: translateY(70px); } to { opacity: 1; transform: none; } }
+@keyframes sky-glide { from { opacity: 0; transform: translateX(-120px); } to { opacity: 1; transform: none; } }
+
 @media (prefers-reduced-motion: no-preference) {
-  /* New screen: a quick fade and 6px rise; content is interactive at once. */
-  main.view-enter { animation: view-enter 260ms var(--ease-out) both; }
-  /* Result cards rise in, slightly staggered, when a recommendation renders. */
-  .recs > .rec { animation: rise-in 280ms var(--ease-out) both; }
-  .recs > .rec:nth-child(2) { animation-delay: 40ms; }
-  .recs > .rec:nth-child(3) { animation-delay: 80ms; }
-  .selected-plan { animation: rise-in 280ms var(--ease-out) both; }
-  /* Replay: a count that changed gets a short settle cue; the value itself is never animated. */
-  .row-count.is-changed, .big.is-changed { animation: value-change 220ms var(--ease-out); }
-  /* Charts: bars grow and the typical line draws once, on first render only. */
-  .chart svg.is-entering .bar { transform-box: fill-box; transform-origin: 50% 100%; animation: bar-grow 420ms var(--ease-out) both; }
-  .chart svg.is-entering .typical { stroke-dasharray: 1; animation: line-draw 600ms var(--ease) 180ms both; }
+  /* New screen: its parts cascade in, top to bottom. Content is interactive at once. */
+  main.view-enter > * { animation: rise-in-lg 560ms var(--ease-out) both; }
+  main.view-enter > :nth-child(2) { animation-delay: 70ms; }
+  main.view-enter > :nth-child(3) { animation-delay: 140ms; }
+  main.view-enter > :nth-child(4) { animation-delay: 210ms; }
+  main.view-enter > :nth-child(5) { animation-delay: 280ms; }
+  main.view-enter > :nth-child(n+6) { animation-delay: 340ms; }
+
+  /* Lists, cards and day rows follow, one after another. */
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > * {
+    animation: rise-in 480ms var(--ease-out) both; animation-delay: calc(200ms + var(--n, 8) * 55ms);
+  }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(1) { --n: 0; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(2) { --n: 1; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(3) { --n: 2; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(4) { --n: 3; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(5) { --n: 4; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(6) { --n: 5; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(7) { --n: 6; }
+
+  /* Numbers arrive by sliding up into place (always the real value), then meters fill bar by bar. */
+  main.view-enter :is(.big, .row-count, .dash-count, .stat-num) { display: inline-block; animation: count-rise 620ms var(--ease-out) 260ms both; }
+  main.view-enter .meter i { transform-origin: 50% 100%; animation: meter-fill 420ms var(--ease-out) 420ms both; }
+  main.view-enter .meter i:nth-child(2) { animation-delay: 500ms; }
+  main.view-enter .meter i:nth-child(3) { animation-delay: 580ms; }
+
+  /* Planner skyline builds itself: far towers, near towers, windows and bridge, river, then the sails glide in. */
+  main.view-enter .planner-skyline .skyline > g { animation: sky-rise 1000ms var(--ease-out) both; }
+  main.view-enter .planner-skyline .skyline > g:nth-of-type(1) { animation-delay: 120ms; }
+  main.view-enter .planner-skyline .skyline > g:nth-of-type(2) { animation-delay: 300ms; }
+  main.view-enter .planner-skyline .skyline > g:nth-of-type(n+3) { animation-delay: 520ms; }
+  main.view-enter .planner-skyline .skyline > g:nth-of-type(n+6) { animation: sky-glide 1300ms var(--ease-out) 700ms both; }
+
+  /* Recommendations: cards rise in with a clear stagger; the best match's badge sweeps in after it lands. */
+  .recs > .rec { animation: rise-in-lg 420ms var(--ease-out) both; }
+  .recs > .rec:nth-child(2) { animation-delay: 80ms; }
+  .recs > .rec:nth-child(3) { animation-delay: 160ms; }
+  .recs > .rec:nth-child(n+4) { animation-delay: 220ms; }
+  .badge { display: inline-block; animation: sweep-in 520ms var(--ease-out) 260ms both; }
+  .selected-plan { animation: rise-in-lg 420ms var(--ease-out) both; }
+
+  /* Choosing an activity: its icon pops. */
+  .pick input:checked + span .icon { animation: pop 440ms var(--ease-out); }
+
+  /* Replay: a count that changed flashes red and settles; the value itself is never animated. */
+  :is(.row-count, .big, .dash-count).is-changed { animation: value-flash 700ms var(--ease-out); }
+
+  /* Charts: bars grow left to right in a wave, then the typical line draws, on first render only. */
+  .chart svg.is-entering .bar {
+    transform-box: fill-box; transform-origin: 50% 100%;
+    animation: bar-grow 560ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 24ms);
+  }
+  .chart svg.is-entering .typical { stroke-dasharray: 1; animation: line-draw 800ms var(--ease) 420ms both; }
+
+  /* Sections below the fold rise in as they scroll into view (app.js adds .reveal / .in-view). */
+  .reveal { opacity: 0; transform: translateY(22px); transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out); }
+  .reveal.in-view { opacity: 1; transform: none; }
 }
 
 /* Reduced motion: no entrances, no growth, no smooth height; state changes stay instant. */

@@ -251,6 +251,7 @@ function markChanged(root, selector, keyOf, before) {
 const snapshot = (root, selector, keyOf) => new Map([...root.querySelectorAll(selector)].map((el) => [keyOf(el), el.textContent]));
 
 function setPlaying(on) {
+  settleView();   // scrubbing or playing ends any entrance animation, so replay ticks never re-animate
   clearInterval(state.timer);
   state.playing = on;
   if (on) {
@@ -754,7 +755,7 @@ function barChart(el, hist) {
       if (b.occupancy == null || b.occupancy <= 0) return "";
       const top = y(b.occupancy), bottom = y(0), h = bottom - top;
       const rr = Math.min(r, h);
-      return `<path class="bar" data-hour="${b.hour}" d="M${x(i)},${bottom}V${top + rr}q0,-${rr} ${rr},-${rr}h${bw - 2 * rr}q${rr},0 ${rr},${rr}V${bottom}Z"/>`;
+      return `<path class="bar" data-hour="${b.hour}" style="--i:${i}" d="M${x(i)},${bottom}V${top + rr}q0,-${rr} ${rr},-${rr}h${bw - 2 * rr}q${rr},0 ${rr},${rr}V${bottom}Z"/>`;
     }).join("");
     const labels = bars.map((b, i) => (b.hour % 3 === 0
       ? `<text class="axis" x="${x(i) + bw / 2}" y="${H - 6}" text-anchor="middle">${fmtHour(b.hour)}</text>` : "")).join("");
@@ -936,17 +937,50 @@ async function route() {
     : section === "plan" || section === "" ? planView($view, clock)
     : placesView();
   const mounted = await next;
-  if (location.hash.replace(/^#\/?/, "") === hash) view = mounted;
+  if (location.hash.replace(/^#\/?/, "") === hash) {
+    view = mounted;
+    revealBelowFold();
+  }
 }
 
-// Entrance cue for a new screen: restart a short CSS animation on <main>. It runs once per
-// navigation (never on replay ticks), uses only opacity/transform, and is off under reduced motion.
+// Entrance cue for a new screen. While <main> has .view-enter, the CSS staggers the screen's
+// parts in (title, sections, list items, numbers, meters, the planner skyline). It runs once per
+// navigation, uses only opacity/transform, never animates a value, and is off under reduced motion.
+// It ends after ENTER_MS, or at once when the replay clock moves (settleView), so ticks don't re-animate.
+const ENTER_MS = 1800;
+let enterTimer;
 function enterView() {
+  clearTimeout(enterTimer);
   $view.classList.remove("view-enter");
-  void $view.offsetWidth; // restart the animation
+  void $view.offsetWidth; // restart the animations
   $view.classList.add("view-enter");
+  enterTimer = setTimeout(settleView, ENTER_MS);
 }
-$view.addEventListener("animationend", (e) => { if (e.target === $view) $view.classList.remove("view-enter"); });
+function settleView() {
+  clearTimeout(enterTimer);
+  $view.classList.remove("view-enter");
+}
+
+// Sections that start below the fold rise in as they scroll into view, once each.
+const motionOK = () => !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+let revealer;
+function revealBelowFold() {
+  if (!motionOK() || !("IntersectionObserver" in window)) return;
+  revealer?.disconnect();
+  revealer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      entry.target.classList.add("in-view");
+      revealer.unobserve(entry.target);
+    }
+  }, { threshold: 0.12, rootMargin: "0px 0px -6% 0px" });
+  const fold = window.innerHeight;
+  for (const el of $view.querySelectorAll(":scope > *, :scope > * > .card, .src-section > *, .refs, .place-grid > *")) {
+    if (el.getBoundingClientRect().top < fold || el.classList.contains("reveal")) continue;
+    el.classList.add("reveal");
+    revealer.observe(el);
+  }
+}
 
 // ---------- theme ----------
 const root = document.documentElement;
