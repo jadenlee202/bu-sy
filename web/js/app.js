@@ -21,17 +21,19 @@ const DAY_START = 0;
 const DAY_END = 24 * 60 - 1;       // 11:59 PM
 const FIRST_VIEW = 17 * 60 + 30;   // open on a busy moment instead of an empty morning
 const STEP_MIN = 5;                // each playback tick; the slider itself moves by the minute
-const TICK_MS = 300;
+const TICK_MS = 300;               // at 1×; faster speeds tick more often, so the step stays 5 minutes
+const SPEEDS = [1, 2, 4, 6];
 
 const CATEGORY = { fitness: "Fitness", dining: "Dining", library: "Library", office: "Office" };
 const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], ["library", "Library"], ["historical", "Historical"]];
-// Availability filters combine with the category chips. Only "open_now" works without an uploaded schedule.
+// Availability filters combine with the category chips. Without an uploaded schedule the free-time
+// filters treat the student as free for their whole preferred window.
 const AVAIL_FILTERS = [["any", "Any time"], ["open_now", "Open now"], ["free", "Open during my free time"],
   ["breakfast", "Serving breakfast during my free time"], ["brunch", "Serving brunch during my free time"],
   ["lunch", "Serving lunch during my free time"], ["dinner", "Serving dinner during my free time"]];
 const CALENDAR_FILTERS = new Set(["free", "breakfast", "brunch", "lunch", "dinner"]);
 
-const state = { minute: FIRST_VIEW, playing: false, timer: null, filter: "all", query: "", avail: "any" };
+const state = { minute: FIRST_VIEW, playing: false, speed: 1, timer: null, filter: "all", query: "", avail: "any" };
 const $view = document.getElementById("view");
 let view = null; // the mounted screen: { update?(), resize?() }
 
@@ -196,7 +198,10 @@ function playbackBar() {
   return `<div class="playback" role="group" aria-label="Historical playback">
     <button class="icon-btn pb-toggle" data-pb="toggle"></button>
     <div class="pb-main">
-      <div class="pb-row"><span><span class="pb-time num"></span><span class="pb-time-label">Replay time</span></span><span class="pb-status"></span></div>
+      <div class="pb-row"><span><span class="pb-time num"></span><span class="pb-time-label">Replay time</span></span>
+        <span class="pb-speed" role="group" aria-label="Playback speed">${SPEEDS.map((x) =>
+          `<button class="pb-speed-btn num" type="button" data-pb-speed="${x}" aria-label="${x}× speed">${x}×</button>`).join("")}</span>
+        <span class="pb-status"></span></div>
       <input class="pb-range" type="range" min="${DAY_START}" max="${DAY_END}" step="1" aria-label="Playback time">
       <div class="pb-ends num" aria-hidden="true"><span>${fmtTime(DAY_START)}</span><span>${fmtTime(DAY_END)}</span></div>
     </div>
@@ -214,7 +219,10 @@ function syncPlayback() {
   }
   for (const el of document.querySelectorAll(".pb-time")) el.textContent = fmtTime(state.minute);
   for (const el of document.querySelectorAll(".pb-status")) {
-    el.textContent = state.playing ? "Replay running" : ended ? "End of replay" : "Replay paused";
+    el.textContent = state.playing ? `Replay running${state.speed > 1 ? ` at ${state.speed}×` : ""}` : ended ? "End of replay" : "Replay paused";
+  }
+  for (const el of document.querySelectorAll("[data-pb-speed]")) {
+    el.setAttribute("aria-pressed", Number(el.dataset.pbSpeed) === state.speed);
   }
   for (const el of document.querySelectorAll(".pb-range")) {
     el.style.setProperty("--pct", pct);
@@ -251,7 +259,7 @@ function setPlaying(on) {
     state.timer = setInterval(() => {
       state.minute = Math.min(DAY_END, state.minute + STEP_MIN);
       if (state.minute >= DAY_END) setPlaying(false); else syncPlayback();
-    }, TICK_MS);
+    }, TICK_MS / state.speed);
   }
   syncPlayback();
 }
@@ -260,6 +268,12 @@ document.addEventListener("click", (e) => {
   const action = e.target.closest("[data-pb]")?.dataset.pb;
   if (action === "toggle") setPlaying(!state.playing);
   if (action === "reset") { state.minute = DAY_START; setPlaying(false); }
+  const speed = e.target.closest("[data-pb-speed]")?.dataset.pbSpeed;
+  if (speed) {
+    state.speed = Number(speed);
+    // A running replay switches speed in place; a paused one keeps it for the next play.
+    if (state.playing) setPlaying(true); else syncPlayback();
+  }
 });
 document.addEventListener("input", (e) => {
   if (!e.target.matches(".pb-range")) return;
@@ -294,7 +308,8 @@ async function placesView() {
     return {};
   }
 
-  // Free-time filters read the schedule uploaded on the Calendar page (kept in this browser).
+  // Free-time filters read the schedule uploaded on the Calendar page (kept in this browser);
+  // with none, it's an empty schedule.
   const schedule = loadSchedule();
   const prefs = loadCalendarPrefs();
   const zone = prefs.timezone ?? DEFAULT_TZ;
@@ -304,9 +319,7 @@ async function placesView() {
   const $availPanel = $view.querySelector("#avail-panel");
 
   const renderAvailControls = () => {
-    if (CALENDAR_FILTERS.has(state.avail) && !schedule) state.avail = "any";
-    const offered = AVAIL_FILTERS.filter(([id]) => !CALENDAR_FILTERS.has(id) || schedule);
-    $availChips.innerHTML = offered.map(([id, label]) =>
+    $availChips.innerHTML = AVAIL_FILTERS.map(([id, label]) =>
       `<button class="chip" data-avail="${id}" aria-pressed="${state.avail === id}">${label}</button>`).join("");
     if (CALENDAR_FILTERS.has(state.avail)) {
       $availPanel.innerHTML = `<div class="calendar-controls calendar-controls-grid">
@@ -314,12 +327,14 @@ async function placesView() {
           <label>Free for at least<select data-free="minimum">${MIN_OPTIONS.map((minutes) =>
             `<option value="${minutes}"${minutes === freeFilter.minimum ? " selected" : ""}>${minutes} minutes</option>`).join("")}</select></label>
         </div>
-        <p class="help">Using your uploaded schedule (${esc(schedule.fileName)}) within ${esc(freeFilter.from)}–${esc(freeFilter.until)} (${esc(zone)}). <a href="#/calendar">Change on the Calendar page</a>. Travel time isn't included.</p>`;
+        <p class="help">${schedule
+          ? `Using your uploaded schedule (${esc(schedule.fileName)}) within ${esc(freeFilter.from)}–${esc(freeFilter.until)} (${esc(zone)}). <a href="#/calendar">Change on the Calendar page</a>.`
+          : `No schedule uploaded, so you're treated as free for all of ${esc(freeFilter.from)}–${esc(freeFilter.until)} (${esc(zone)}). <a href="#/calendar">Upload your class schedule (.ics)</a> to use your real one.`} Travel time isn't included.</p>`;
     } else if (state.avail === "open_now") {
       $availPanel.innerHTML = `<p class="help">Open right now by each place's published hours (campus time), not the replay slider.</p>`;
     } else {
       $availPanel.innerHTML = schedule ? ""
-        : `<p class="help"><a href="#/calendar">Upload your class schedule (.ics)</a> to find places open during your free time. It's read in this browser and never uploaded.</p>`;
+        : `<p class="help">Free-time filters treat you as free for your whole preferred window until you <a href="#/calendar">upload your class schedule (.ics)</a>. It's read in this browser and never uploaded.</p>`;
     }
   };
   renderAvailControls();
@@ -336,7 +351,7 @@ async function placesView() {
   const applyAvailability = (rows) => {
     if (state.avail === "any") return { rows, windows: {}, unchecked: [], notice: "" };
     const calendarMode = CALENDAR_FILTERS.has(state.avail);
-    if (calendarMode) {
+    if (calendarMode && schedule) {
       let covered = false;
       try {
         covered = covers(schedule, zonedInstant(freeFilter.date, freeFilter.from, zone), zonedInstant(freeFilter.date, freeFilter.until, zone));
@@ -349,7 +364,7 @@ async function placesView() {
       }
     }
     const context = calendarMode
-      ? { busy: busyOf(schedule), date: freeFilter.date, timezone: zone, from: freeFilter.from, until: freeFilter.until, minimum: freeFilter.minimum, now: Date.now() }
+      ? { busy: schedule ? busyOf(schedule) : [], date: freeFilter.date, timezone: zone, from: freeFilter.from, until: freeFilter.until, minimum: freeFilter.minimum, now: Date.now() }
       : { now: Date.now() };
     const kept = [];
     const windows = {};

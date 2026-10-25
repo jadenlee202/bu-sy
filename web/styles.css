@@ -505,15 +505,20 @@ a.row-name, .row-name a { text-decoration: none; }
 .playback [data-pb="reset"] .icon { transition: transform var(--dur) var(--ease); }
 .playback [data-pb="reset"]:active .icon { transform: rotate(-90deg); }
 .pb-main { flex: 1; min-width: 0; }
-.pb-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pb-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 10px; }
 .pb-row > span:first-child { white-space: nowrap; }
 .pb-time { font-weight: 650; font-size: 16px; }
 .pb-time-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 6px; }
-.pb-status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.pb-status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .pb-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; box-sizing: border-box; transition: background-color var(--dur) var(--ease); }
 .playback.is-playing .pb-status { color: var(--text); }
 .playback.is-playing .pb-status::before { background: var(--red); border-color: var(--red); }
 @container (max-width: 30rem) { .pb-time-label { display: none; } }   /* the status already says "Replay" */
+/* speed: small chips; selected = solid neutral fill, like the filter chips */
+.pb-speed { display: inline-flex; gap: 4px; }
+.pb-speed-btn { min-width: 36px; min-height: 30px; padding: 2px 8px; border-radius: var(--radius-xs); border: 1px solid var(--line); background: var(--surface); font-size: 13px; font-weight: 600; color: var(--muted); }
+.pb-speed-btn:hover { border-color: var(--line-strong); color: var(--text); }
+.pb-speed-btn[aria-pressed="true"] { background: var(--selected); color: var(--on-selected); border-color: var(--selected); }
 .pb-range { --pct: 0%; width: 100%; margin: 4px 0 0; height: 24px; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; touch-action: none; }
 .pb-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: -2px; }
 .pb-range::-webkit-slider-runnable-track { height: 4px; border-radius: var(--radius-xs); background: linear-gradient(90deg, var(--red) var(--pct), var(--line-strong) var(--pct)); }
@@ -656,6 +661,44 @@ th { color: var(--muted); font-weight: 600; }
 .how-export ul { margin: 0 0 4px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--muted); }
 .how-export strong { color: var(--text); }
 .calendar-matches a { text-underline-offset: 3px; }
+
+/* month calendar: day cells in the row style; the selected day's events are a shared list below */
+.month-card, #month { display: flex; flex-direction: column; gap: 10px; }
+.month-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.month-head h2 { margin: 0; font-size: 18px; }
+.month-nav { display: flex; align-items: center; gap: 4px; }
+.month-nav .icon-btn { font-size: 22px; line-height: 1; }
+.month-weekdays, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.month-weekdays span { padding-bottom: 2px; font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; }
+.day-cell {
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px; min-width: 0; min-height: 96px; padding: 6px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); text-align: left; overflow: hidden;
+}
+.day-cell:hover { border-color: var(--line-strong); }
+.day-cell.is-outside { background: transparent; border-style: dashed; }
+.day-cell.is-outside .day-num, .day-cell.is-outside .day-events { opacity: 0.55; }
+.day-cell[aria-pressed="true"] { border-color: var(--selected); box-shadow: inset 0 0 0 1px var(--selected); }
+.day-num { align-self: flex-start; min-width: 26px; height: 24px; padding: 0 6px; display: grid; place-items: center; border-radius: 999px; font-size: 13px; font-weight: 650; }
+.day-cell.is-today .day-num { background: var(--red); color: var(--on-red); }
+.day-events { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.day-event { display: block; padding: 2px 6px; border-radius: 6px; font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: color-mix(in srgb, var(--red) 14%, var(--surface)); }
+.day-event-time { color: var(--muted); }
+.day-event.is-allday { background: var(--red); color: var(--on-red); }
+.day-event.is-free { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
+.day-more { padding: 0 6px; font-size: 12px; color: var(--muted); }
+.day-count { display: none; }
+.day-detail { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
+.day-detail h3 { margin: 0; font-size: 15px; }
+.day-detail p { margin: 0; }
+.month-empty { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); }
+.month-empty p { margin: 0; }
+/* narrow: cells keep the date and an event count; every event is in the selected day's list */
+@container (max-width: 40rem) {
+  .day-cell { min-height: 52px; padding: 4px; align-items: center; gap: 2px; }
+  .day-num { align-self: center; }
+  .day-events { display: none; }
+  .day-count { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; font-size: 11px; font-weight: 700; background: color-mix(in srgb, var(--red) 18%, var(--surface)); }
+}
 .calendar-total { margin: 0; }
 .calendar-timeline, .calendar-matches { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .calendar-interval, .calendar-matches li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--line); }

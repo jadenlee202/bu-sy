@@ -1,6 +1,7 @@
 // "Find a time to eat" / "Find free time here" on a place's detail page. It reads the busy
 // times from the schedule the student uploaded on the Calendar page (kept in this browser) and
-// the place's verified hours in hours.json, for 7 days from a chosen date.
+// the place's verified hours in hours.json, for 7 days from a chosen date. With no upload, the
+// student counts as free for their whole preferred window, and the card says so.
 import { findOpportunities } from "./availability.js";
 import { DEFAULT_TZ, durationLabel, formatInstant, loadCalendarPrefs, MIN_OPTIONS, saveCalendarPrefs } from "./calendar.js";
 import { busyOf, loadSchedule } from "./schedule.js";
@@ -38,14 +39,6 @@ export async function findTimeCard($card, facility, scheduleLocation) {
   const name = esc(facility.facility_name);
   const head = `<h2>${dining ? "Find a time to eat" : "Find free time here"}</h2>`;
   const schedule = loadSchedule();
-  if (!schedule) {
-    $card.innerHTML = `${head}
-      <p>Upload your class schedule (.ics) to find times in the next ${DAYS} days when you're free and ${name} is ${dining ? "serving a meal" : "open"}.</p>
-      <p class="help">Your calendar file is read in this browser and never uploaded. No sign-in needed.</p>
-      <a class="btn" href="#/calendar">Upload on the Calendar page</a>`;
-    return;
-  }
-
   const prefs = loadCalendarPrefs();
   const zone = prefs.timezone ?? DEFAULT_TZ;
   const today = todayIn(zone);
@@ -61,7 +54,9 @@ export async function findTimeCard($card, facility, scheduleLocation) {
       <label>Available from<input type="time" data-find="from" value="${from}"></label>
       <label>Available until<input type="time" data-find="until" value="${until}"></label>
     </div>
-    <p class="help">Using your schedule from ${esc(schedule.fileName)} (${esc(zone)}). <a href="#/calendar">Replace or remove it on the Calendar page</a>.</p>
+    <p class="help">${schedule
+      ? `Using your schedule from ${esc(schedule.fileName)} (${esc(zone)}). <a href="#/calendar">Replace or remove it on the Calendar page</a>.`
+      : `No schedule uploaded, so you're treated as free for your whole preferred window (${esc(zone)}). <a href="#/calendar">Upload your class schedule (.ics)</a> to use your real one; it's read in this browser and never uploaded.`}</p>
     <div data-find="results"></div>`;
   const $results = $card.querySelector('[data-find="results"]');
 
@@ -71,8 +66,8 @@ export async function findTimeCard($card, facility, scheduleLocation) {
       return;
     }
     const { matches, outcomes } = findOpportunities(
-      busyOf(schedule), { ...scheduleLocation, category: facility.category }, startDate, DAYS,
-      { timezone: zone, from, until, minimum, now: Date.now(), meal: meal || null, coverage: schedule.coverage },
+      schedule ? busyOf(schedule) : [], { ...scheduleLocation, category: facility.category }, startDate, DAYS,
+      { timezone: zone, from, until, minimum, now: Date.now(), meal: meal || null, coverage: schedule?.coverage ?? null },
     );
     const what = dining ? `serving ${meal || "a meal"}` : "open";
     if (!matches.length) {
@@ -90,7 +85,7 @@ export async function findTimeCard($card, facility, scheduleLocation) {
         ${durationLabel(next.end - next.start)} available. ${name} is open${dining ? ` and serving ${esc(next.label.toLowerCase())}` : ""} during this period${next.assumed ? " (assumed: repeats the published weekly hours)" : ""}.</p>
       ${later.length ? `<h3>Later</h3><ul class="calendar-matches">${later.slice(0, 4).map((match) =>
         `<li><strong>${dayName(match.date, today)}, ${range(match)}</strong><span>${detail(match)}</span></li>`).join("")}</ul>` : ""}
-      <p class="help">Travel time isn't included. Based on your uploaded schedule and ${name}'s published hours (campus time).</p>`;
+      <p class="help">Travel time isn't included. Based on ${schedule ? "your uploaded schedule" : "no uploaded schedule (free for your whole window)"} and ${name}'s published hours (campus time).</p>`;
   };
 
   $card.addEventListener("change", (event) => {

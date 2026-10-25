@@ -5,7 +5,7 @@ import { beforeEach, test } from "node:test";
 import { findOpportunities, freeWindows, matchFreeWindows, usableWindows, zonedInstant } from "../web/js/availability.js";
 import { IcsError, parseIcs } from "../web/js/ics.js";
 import {
-  busyOf, clearSchedule, covers, importCalendarFile, ImportError, importWindow, loadSchedule, saveSchedule,
+  busyOf, clearSchedule, covers, eventsOf, importCalendarFile, ImportError, importWindow, loadSchedule, saveSchedule,
 } from "../web/js/schedule.js";
 
 const fixture = (name) => readFileSync(new URL(`./fixtures/ics/${name}`, import.meta.url), "utf8");
@@ -108,9 +108,29 @@ test("rejects files that aren't usable calendars", () => {
   assert.deepEqual(empty.busy, []);
 });
 
-test("never puts event titles, descriptions, locations or attendees in the result", () => {
-  const text = JSON.stringify(parse("weekly-class.ics"));
-  for (const secret of ["CS 111", "Private note", "CAS 522", "student@example.edu"]) assert.ok(!text.includes(secret), secret);
+test("keeps event titles for the calendar, never descriptions, locations or attendees", () => {
+  const result = parse("weekly-class.ics");
+  const text = JSON.stringify(result);
+  assert.ok(text.includes("CS 111 Lecture (sample)"));
+  for (const secret of ["Private note", "CAS 522", "student@example.edu"]) assert.ok(!text.includes(secret), secret);
+});
+
+test("lists each occurrence with its own title, all-day and free flags", () => {
+  const weekly = parse("weekly-class.ics");
+  const onDay = (result, day) => result.items.filter(({ start }) => iso(start).startsWith(day));
+  assert.deepEqual(onDay(weekly, "2026-10-20").map(({ title, allDay, free }) => [title, allDay, free]), [["CS 111 Lecture (sample)", false, false]]);
+  assert.deepEqual(onDay(weekly, "2026-10-22").map(({ title, start }) => [title, iso(start)]), [["CS 111 Lecture (moved)", "2026-10-22T15:00:00Z"]]);
+  assert.deepEqual(onDay(weekly, "2026-10-27"), [], "cancelled occurrence isn't listed");
+  assert.deepEqual(onDay(weekly, "2026-10-13"), [], "excluded occurrence isn't listed");
+  assert.equal(weekly.items.length, weekly.busy.length, "every busy occurrence is listed");
+
+  const mixed = parse("all-day-and-overnight.ics");
+  const fieldTrip = mixed.items.find(({ title }) => title === "Field trip (busy all day)");
+  assert.deepEqual([fieldTrip.allDay, fieldTrip.free, iso(fieldTrip.start), iso(fieldTrip.end)], [true, false, "2026-10-28T04:00:00Z", "2026-10-29T04:00:00Z"]);
+  const reminder = mixed.items.find(({ title }) => title === "Midterm week reminder");
+  assert.deepEqual([reminder.allDay, reminder.free], [true, true], "free events are listed but not busy");
+  assert.ok(!mixed.busy.some(({ start }) => start === reminder.start));
+  assert.equal(parse("outlook.ics").items.find(({ free }) => free).title, "Tentative hold shown as free");
 });
 
 // ---------- matching free time to campus hours ----------
@@ -175,12 +195,16 @@ beforeEach(() => {
   clearSchedule();
 });
 
-test("imports into this tab by default, or this device when remembered, storing only busy times", async () => {
+test("imports into this tab by default, or this device when remembered, storing titles and times only", async () => {
   const imported = await importCalendarFile(file("weekly-class.ics"), { now: NOW });
   assert.equal(imported.storedIn, "session");
   assert.equal(localStorage.size, 0);
   const raw = sessionStorage.getItem("busy.schedule.v1");
-  for (const secret of ["CS 111", "Private note", "CAS 522", "student@example.edu", "VEVENT"]) assert.ok(!raw.includes(secret), secret);
+  assert.equal(raw.split("CS 111 Lecture (sample)").length, 2, "a repeated title is stored once");
+  for (const secret of ["Private note", "CAS 522", "student@example.edu", "VEVENT"]) assert.ok(!raw.includes(secret), secret);
+  const events = eventsOf(loadSchedule());
+  assert.equal(events.length, loadSchedule().busy.length);
+  assert.deepEqual(Object.keys(events[0]).sort(), ["allDay", "end", "free", "start", "title"]);
   const loaded = loadSchedule();
   assert.equal(loaded.fileName, "weekly-class.ics");
   assert.equal(loaded.stats.events, 1);
@@ -193,6 +217,7 @@ test("imports into this tab by default, or this device when remembered, storing 
   assert.equal(remembered.storedIn, "local");
   assert.equal(sessionStorage.size, 0, "replacing removes the old copy");
   assert.equal(loadSchedule().fileName, "tuesday.ics");
+  assert.deepEqual(eventsOf(loadSchedule()).map(({ title }) => title), ["Class A", "Class B", "Class C"], "replaced, not merged");
 });
 
 test("merges overlapping busy times before storing them", async () => {
@@ -228,7 +253,7 @@ test("removing the schedule clears every place it could be stored", async () => 
   clearSchedule();
   assert.equal(localStorage.size, 0);
   assert.equal(sessionStorage.size, 0);
-  assert.equal(loadSchedule(), null);
+  assert.equal(loadSchedule(), null, "events and busy times are both gone, so a reload restores nothing");
 });
 
 test("falls back to memory when storage is blocked, and still clears it", async () => {
@@ -248,4 +273,12 @@ test("ignores a corrupted stored schedule and deletes it", () => {
   assert.equal(localStorage.size, 0);
   saveSchedule({ v: 1, fileName: "x.ics", importedAt: NOW, coverage: { start: 0, end: 1 }, busy: [[5, 3]] }, true);
   assert.equal(loadSchedule(), null, "a backwards busy range fails validation");
+  saveSchedule({ v: 1, fileName: "x.ics", importedAt: NOW, coverage: { start: 0, end: 9 }, busy: [], events: { titles: [], items: [[1, 2, 0, 0]] } }, true);
+  assert.equal(loadSchedule(), null, "an event pointing at a missing title fails validation");
+});
+
+test("a schedule saved before event details still loads, with no events", () => {
+  saveSchedule({ v: 1, fileName: "old.ics", importedAt: NOW, coverage: { start: 0, end: 9 }, busy: [[1, 2]] }, true);
+  assert.equal(loadSchedule().fileName, "old.ics");
+  assert.equal(eventsOf(loadSchedule()), null);
 });
