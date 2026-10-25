@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { placeAvailability } from "../web/js/availability.js";
 import {
   buildingHoursSummary, campusDateTime, daySchedule, displaySchedule, nowServiceLabel, nowStatus, nowText,
-  selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekStart,
+  openStatus, selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekStart,
 } from "../web/js/hours.js";
 
 const hours = JSON.parse(readFileSync(new URL("../web/data/hours.json", import.meta.url), "utf8"));
@@ -53,7 +53,9 @@ test("weekly hours repeat beyond the published dates and are marked assumed", ()
   assert.deepEqual(nextWeek.periods, published.periods);
   assert.deepEqual(weekBefore.periods, published.periods);
   assert.equal(buildingHoursSummary(marciano, "2026-11-07"), "9:00 AM–9:00 PM (assumed)");
-  assert.equal(selectedBuildingStatus(marciano, "2026-11-07", 12 * 60).status, "open");
+  // An assumed (projected) day is never a definitive Open/Closed, only the summary is shown.
+  assert.equal(selectedBuildingStatus(marciano, "2026-11-07", 12 * 60).status, "unverified");
+  assert.equal(selectedBuildingStatus(marciano, "2026-11-07", 12 * 60).assumed, true);
   assert.deepEqual(displaySchedule(marciano, "2026-11-07", "dining").periods.map(({ label }) => label),
     ["Breakfast", "Lunch", "Dinner"]);
 });
@@ -176,6 +178,35 @@ test("an open hall between meal periods says no meal service is scheduled", () =
   };
   assert.equal(mealAt(hall, "2026-10-26", "11:00"), "No meal service currently scheduled");
   assert.equal(mealAt(hall, "2026-10-26", "12:00"), "Serving lunch");
+});
+
+test("an overnight period from an ASSUMED (unverified) prior day never shows open", () => {
+  // SYNTHETIC FIXTURE: a late venue open 18:00 -> 02:00, published only for one week.
+  const lateVenue = (effectiveThrough) => ({
+    category: "fitness",
+    buildingHours: {
+      status: "verified", effectiveFrom: "2026-10-19", effectiveThrough, repeatsWeekly: true,
+      weeklyHours: Object.fromEntries(
+        ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+          .map((d) => [d, [{ label: "Building hours", start: "18:00", end: "02:00" }]]),
+      ),
+      specialHours: [],
+    },
+    serviceHours: { status: "not_applicable", weeklyHours: null, specialHours: [] },
+  });
+
+  // 01:00 on Oct 24 is inside the previous day's overnight period.
+  // (a) When the prior day is VERIFIED (date within range), the carryover is open.
+  const verified = lateVenue("2026-10-31");
+  assert.equal(selectedBuildingStatus(verified, "2026-10-24", 60).status, "open");
+  assert.equal(openStatus(verified, at("2026-10-24T01:00:00-04:00")).status, "open");
+
+  // (b) When the prior day is ASSUMED (date outside the published range), it must NOT be open.
+  const assumed = lateVenue("2026-10-20");   // Oct 23 (the prior day) is past the range -> assumed
+  assert.equal(selectedBuildingStatus(assumed, "2026-10-24", 60).status, "unverified");
+  assert.notEqual(openStatus(assumed, at("2026-10-24T01:00:00-04:00")).status, "open");
+  // nowStatus already guards the current day; this confirms the carryover path agrees.
+  assert.notEqual(nowStatus(assumed, at("2026-10-24T01:00:00-04:00")).label, "Open now");
 });
 
 test("dining weekly display uses named service periods while non-dining keeps building hours", () => {
