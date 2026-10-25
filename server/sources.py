@@ -6,19 +6,27 @@ Replace this module (keep the Facility shape) to plug in a real campus feed.
                                         FitRec by area + dining + Mugar
     clean_cod_occupancy.csv             REAL office occupancy events (COD),
                                         made by data/clean_cod.py
+    clean_campus_gym_occupancy.csv      REAL counts from a non-BU campus gym
+                                        (Kaggle, ODbL), made by
+                                        data/import_campus_gym.py; optional
 
 Synthetic timestamps use an explicit America/New_York demo clock. COD
 timestamps are source-local with an unverified timezone, so they stay naive and
-are never converted.
+are never converted. Campus-gym timestamps keep their supplied UTC offset (no
+named timezone is assigned); weekday and hour come from that local clock.
+
+Only synthetic facilities can become campus suggestions (`campus_eligible`).
+Historical references are for playback and comparison only.
 """
 import csv
+import json
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Optional
 
-from analytics import Series, classify, hourly_time_weighted, time_weighted_percentile
+from analytics import Series, classify, hour_sums, hourly_time_weighted, time_weighted_percentile
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 SYNTHETIC_CSV = DATA_DIR / "bu_campus_synthetic_occupancy.csv"
@@ -29,6 +37,14 @@ COD_PLAYBACK_DAY = date(2015, 11, 9)  # a Monday with a clear midday dip
 COD_WINDOW = (7, 20)                  # every recorded day is anchored at 07:00 and 20:00
 COD_REFERENCE_PERCENTILE = 0.95
 SYNTHETIC_WINDOW = (8, 23)            # hourly rows 08:00-22:00, each holding one hour
+
+GYM_CSV = DATA_DIR / "clean_campus_gym_occupancy.csv"
+GYM_IMPORT_JSON = DATA_DIR / "campus_gym_import.json"
+GYM_ID = "CAMPUS_GYM_HISTORICAL_REFERENCE"
+GYM_REFERENCE_PERCENTILE = 0.95
+GYM_MIN_TYPICAL_HOURS = 5.0           # a weekday-hour needs this much recorded time to get a typical value
+GYM_INSIGHT_HOURS = (6, 23)           # quieter-time insight: daytime only (opening hours are unknown)
+GYM_NOTICE = "Historical gym data — not live and not BU FitRec."
 
 
 @dataclass
@@ -50,7 +66,7 @@ class Facility:
     facility_name: str
     category: str
     data_mode: str              # synthetic | historical_playback
-    measurement_method: str     # synthetic | estimated
+    measurement_method: str     # synthetic | estimated | unspecified
     source: str
     timezone: Optional[str]
     time_note: str
@@ -64,9 +80,35 @@ class Facility:
     default_day: Optional[date] = None
     typical_by_weekday: dict[int, list[Optional[float]]] = field(default_factory=dict)
     typical_days: dict[int, int] = field(default_factory=dict)  # weekday -> days averaged
+    # Historical references with sampled data (campus gym); unused elsewhere.
+    max_hold: Optional[timedelta] = None                  # gap policy, see analytics.py
+    day_bounds: dict[date, tuple[datetime, datetime]] = field(default_factory=dict)
+    playback_days: list[date] = field(default_factory=list)
+    typical_hours: dict[int, list[float]] = field(default_factory=dict)  # weekday -> recorded hours per hour
+    typical_basis: str = ""
+    insight_hours: Optional[tuple[int, int]] = None
+    show_percent: bool = True        # % of the typical high in the busyness text (never % full)
+    notice: Optional[str] = None
+    measurement_note: str = ""
+    busyness_label: Optional[str] = None   # short line shown under the busyness word
+
+    @property
+    def campus_eligible(self) -> bool:
+        """Only synthetic campus facilities may be suggested by the planner."""
+        return self.data_mode == "synthetic"
 
     def coverage_end(self, day: date) -> datetime:
+        if day in self.day_bounds:
+            return self.day_bounds[day][1]
         return datetime.combine(day, time()) + timedelta(hours=self.window[1])
+
+    def coverage_start(self, day: date) -> time:
+        return self.day_bounds[day][0].time() if day in self.day_bounds else time(self.window[0])
+
+    def at(self, day: date, tod: time) -> datetime:
+        """`tod` on `day`, on the same clock as that day's observations (keeps a supplied offset)."""
+        series = self.days.get(day)
+        return datetime.combine(day, tod, series[0][0].tzinfo if series else None)
 
     def ratio(self, count: Optional[float]) -> Optional[float]:
         base = self.capacity or self.reference
@@ -76,7 +118,7 @@ class Facility:
         return classify(self.ratio(count))
 
     def hourly(self, day: date) -> list[Optional[float]]:
-        return hourly_time_weighted(self.days[day], *self.window, self.coverage_end(day))
+        return hourly_time_weighted(self.days[day], *self.window, self.coverage_end(day), self.max_hold)
 
 
 # ---------- synthetic campus data ----------
@@ -182,6 +224,7 @@ def load_cod() -> Optional[Facility]:
         timezone=None, time_note="Source local time; timezone unverified",
         window=COD_WINDOW, days=dict(days),
         default_day=COD_PLAYBACK_DAY if COD_PLAYBACK_DAY in days else min(days),
+        busyness_label="Relative to this room's historical traffic",
     )
     cod.reference = time_weighted_percentile(
         [(s, cod.coverage_end(d)) for d, s in days.items()], COD_REFERENCE_PERCENTILE)
@@ -204,9 +247,74 @@ def load_cod() -> Optional[Facility]:
     return cod
 
 
+# ---------- real historical data (campus gym, not BU) ----------
+def load_campus_gym(csv_path: Path = GYM_CSV, import_json: Path = GYM_IMPORT_JSON) -> Optional[Facility]:
+    """None when data/import_campus_gym.py hasn't been run (the app works without it)."""
+    if not csv_path.exists() or not import_json.exists():
+        return None
+    meta = json.loads(import_json.read_text(encoding="utf-8"))
+    hold = timedelta(minutes=meta["gap_policy"]["max_hold_minutes"])
+    by_day = defaultdict(list)
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            t = datetime.fromisoformat(r["timestamp"])          # keeps the supplied offset
+            by_day[t.date()].append((t, int(r["occupancy_count"])))
+    # On a day whose offset changes, a wall-clock hour repeats or is skipped, so
+    # weekday/hour can't be read reliably: those days are left out (documented).
+    days = {d: sorted(s) for d, s in by_day.items() if len({t.utcoffset() for t, _ in s}) == 1}
+    if not days:
+        return None
+    src = meta["source"]
+    gym = Facility(
+        facility_id=GYM_ID, facility_name="Campus Gym — Historical Reference", category="fitness",
+        data_mode="historical_playback", measurement_method="unspecified",
+        source=f"{src['title']} by {src['creator']}, Kaggle; ODbL 1.0 (database), DbCL 1.0 (contents). "
+               "A non-BU university gym, 2015-2017; not BU FitRec",
+        timezone=None,
+        time_note="Source local time with its supplied UTC offset; named timezone not verified",
+        window=(0, 24), days=days, max_hold=hold, notice=GYM_NOTICE, show_percent=False,
+        insight_hours=GYM_INSIGHT_HOURS, busyness_label="Relative to this gym's historical traffic",
+        measurement_note="Counts recorded by the dataset author about every 10 minutes; collection method not documented.",
+    )
+    for d, s in days.items():
+        midnight = datetime.combine(d + timedelta(days=1), time(), s[0][0].tzinfo)
+        gym.day_bounds[d] = (s[0][0], min(s[-1][0] + hold, midnight - timedelta(seconds=1)))
+    gym.playback_days = [d for d in map(date.fromisoformat, meta["playback_days"]) if d in days]
+    gym.default_day = gym.playback_days[0] if gym.playback_days else max(days)
+
+    gym.reference = time_weighted_percentile(
+        [(s, gym.coverage_end(d)) for d, s in days.items()], GYM_REFERENCE_PERCENTILE, hold)
+    gym.reference_note = (
+        f"Relative to this gym's historical traffic: its typical high is {gym.reference} people, the "
+        f"{GYM_REFERENCE_PERCENTILE:.0%} time-weighted percentile of {len(days)} recorded days. "
+        "Capacity unknown, so this is not how full it is"
+    )
+
+    # Typical weekday x hour: total count-seconds / total covered seconds across all
+    # recorded days, so partial days and gaps count only for the time they cover.
+    sums = defaultdict(lambda: [[0.0, 0.0] for _ in range(24)])
+    for d, s in days.items():
+        for h, (w, c) in enumerate(hour_sums(s, 0, 24, gym.coverage_end(d), hold)):
+            sums[d.weekday()][h][0] += w
+            sums[d.weekday()][h][1] += c
+        gym.typical_days[d.weekday()] = gym.typical_days.get(d.weekday(), 0) + 1
+    for wd, hours in sums.items():
+        gym.typical_by_weekday[wd] = [
+            round(w / c, 2) if c / 3600 >= GYM_MIN_TYPICAL_HOURS else None for w, c in hours]
+        gym.typical_hours[wd] = [round(c / 3600, 1) for _, c in hours]
+    first, last = min(days), max(days)
+    gym.typical_basis = (
+        f"time-weighted over {first:%b %Y}-{last:%b %Y}, semesters and breaks together; "
+        f"hours with under {GYM_MIN_TYPICAL_HOURS:g} h of recordings are left blank"
+    )
+    return gym
+
+
 def load_all() -> dict[str, Facility]:
     facilities = load_synthetic()
-    cod = load_cod()
-    if cod:
-        facilities.insert(1, cod)
+    for loader in (load_cod, load_campus_gym):
+        f = loader()
+        if f:
+            facilities.append(f)
+    # Campus places first, then historical references.
     return {f.facility_id: f for f in facilities}

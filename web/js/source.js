@@ -51,17 +51,20 @@ export async function listFacilities() {
     : getJSON("data/facilities.json");
 }
 
-export async function getHistory(id) {
-  if (!historyCache.has(id)) {
+/** One recorded day; `day` ("YYYY-MM-DD") must be one of the history's playback_days. */
+export async function getHistory(id, day = null) {
+  const key = `${id}|${day ?? ""}`;
+  if (!historyCache.has(key)) {
+    const path = encodeURIComponent(id);
     const url = (await getMode()) === "api"
-      ? `${API_BASE}/facilities/${encodeURIComponent(id)}/history`
-      : `data/history/${encodeURIComponent(id)}.json`;
-    historyCache.set(id, getJSON(url).catch((e) => {
-      historyCache.delete(id);
+      ? `${API_BASE}/facilities/${path}/history${day ? `?date=${encodeURIComponent(day)}` : ""}`
+      : `data/history/${path}${day ? `/${encodeURIComponent(day)}` : ""}.json`;  // only exported playback days
+    historyCache.set(key, getJSON(url).catch((e) => {
+      historyCache.delete(key);
       throw e;
     }));
   }
-  return historyCache.get(id);
+  return historyCache.get(key);
 }
 
 // ---------- planner data ----------
@@ -85,7 +88,7 @@ const uuid = () => crypto.randomUUID?.()
   ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("")
     .replace(/^(.{8})(.{4})(.{4})(.{4})/, "$1-$2-$3-$4-");
 
-const store = {
+export const store = {
   get(key) {
     try { return localStorage.getItem(key); } catch { return null; }
   },

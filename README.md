@@ -11,9 +11,11 @@ unofficial student meetups are still there as secondary screens.
 Independent student project, **not affiliated with Boston University**.
 
 > **Data honesty:** every campus place, count, capacity, opening hour, amenity and walking time is
-> **demo data** (labelled *Demo · Synthetic campus data*). The one real dataset is the *Clemente Room*,
-> an office conference room from the public COD dataset. It shows the pipeline on real sensor data, and it
-> is **never** suggested as a place to go.
+> **demo data** (labelled *Demo · Synthetic campus data*). Two real datasets appear as **historical
+> references** under Places: the *Clemente Room*, an office conference room from the public COD dataset, and
+> the *Campus Gym — Historical Reference*, 2015–2017 head counts from a non-BU university gym (Kaggle, ODbL).
+> They show the pipeline on real recordings, are never presented as live, and are **never** suggested as
+> places to go.
 
 ## Run it
 
@@ -43,14 +45,15 @@ The footer always names the data source (*built-in demo files* or *BU-sy API*). 
 reached, a notice says so and the built-in demo files are used. Both modes give the same suggestions
 (see *Static and API modes* below).
 
-**Try it:** press **Try a sample scenario** (70 free minutes at 3 PM, work out, from Mugar to a class at
-Warren Towers). The other samples show a best match chosen on evidence (*study, outlets needed*) and a
+**Try it:** choose an activity and how long you're free; options appear right away. Everything else has
+a visible default under **Preferences**. Or open **Try a sample** (70 free minutes at 3 PM, work out, from
+Mugar to a class at Warren Towers). The other samples show a best match chosen on evidence (*study, outlets needed*) and a
 window where nothing fits, with a one-tap fix the engine has checked.
 
 ## Checks
 
 ```bash
-python -m pytest                        # API, data loaders, analytics, events, CORS, static export == API
+python -m pytest                        # API, data loaders + gym import, analytics, events, CORS, static export == API
 node --test "tests/*.test.mjs"          # planner engine + static meetups (Node 22+, no packages; or: npm test)
 ```
 CI runs both (`.github/workflows/tests.yml`).
@@ -78,7 +81,20 @@ isn't counted, and the app says so.
   opening; if it closes early, the unused minutes are shown.
 
 **Unknown hours.** A place that fits on time but has no hours is never shown as confirmed. It appears under
-**Check hours before going**.
+**Hours unknown**.
+
+**No starting point.** The starting point is optional. Without it the walk there can't be counted, so the
+engine only rules places out (too little time even before walking, closed, missing a need) and lists the rest
+as *could work, travel not checked*. It never calls them a fit, shows no leave/arrive times, offers no "would
+fit" fixes, and doesn't compare walks when ranking.
+
+**Quick start and remembered settings.** Only the activity and free time are required. The rest has visible
+defaults under **Preferences**: start time (the demo clock), next stop (none), minimum (per activity), buffer,
+ranking and study needs. Values you change by hand, and your last chosen starting point, are kept in this
+browser (`localStorage`, see [`web/js/prefs.js`](web/js/prefs.js)) and shown as *Last selected*, never as your
+current location. The next stop isn't kept, so a stale one can't silently add an onward walk. **Reset
+preferences** restores every default. Sample scenarios never change what's remembered. Results update after
+each choice; typed numbers update after a short pause, and errors appear only once you leave the field.
 
 **Ranking.** Comparisons are lexicographic and documented in the code:
 1. Your preference: busyness level if you chose *quieter*; total sample walking if you chose *shorter walks*;
@@ -92,8 +108,8 @@ because capacities are illustrative. A place with no count is never treated as q
 **Best match.** This label appears only when something other than the alphabetical tie-break separates
 #1 from #2, and never when #1's busyness is unavailable. Otherwise the app says the options are equal.
 
-**Busyness wording.** Labels are tied to the count's time: *"Quiet at the selected demo time"* or
-*"Busyness unavailable"*. There's no forecasting for your arrival time, and campus places have no
+**Busyness wording.** Labels are tied to the count's time: *"Quiet at 3:00 PM"* (next to a *Demo* data
+chip) or *"No busyness data"*. There's no forecasting for your arrival time, and campus places have no
 multi-day history that could support "historically quieter".
 
 **Nothing fits.** The app says why (grouped reasons, plus a per-place list) and offers changes such as a
@@ -116,9 +132,11 @@ preferShortTravel, needs}`.
 | `data/campus_sample.json` | which place supports which activity, its location, illustrative hours and amenities, demo scenarios | **illustrative** |
 | `data/sample_travel_times.csv` | sample walking minutes between 6 demo locations (West↔Fenway intentionally missing) | **illustrative** |
 | `data/clean_cod_occupancy.csv` | COD Clemente Room, cleaned by `data/clean_cod.py` | real office data, not BU |
+| `data/clean_campus_gym_occupancy.csv` | a non-BU campus gym, imported by `data/import_campus_gym.py` (optional) | real gym data, not BU |
 
 `server/campus.py` validates the planner data at startup:
-- every place must point to an existing **synthetic** facility or area, so COD can't be added;
+- every place must point to an existing campus-eligible (**synthetic**) facility or area, so COD and the
+  campus gym can't be added (`campus_eligible: false` in the API);
 - times must be valid `HH:MM`, from 00:00 up to 24:00;
 - walking times can't be listed twice and must name known locations;
 - amenities must be known.
@@ -134,6 +152,20 @@ can each replace one file without touching the rules.
 - busyness is relative to the room's own 95th-percentile time-weighted count, because capacity is unknown.
 
 It lives in **Places** as a data demo and is excluded from campus suggestions.
+
+**What the campus gym demonstrates.** Sampled counts (about every 10 minutes) over 535 days, handled honestly:
+- timestamps keep the source's UTC offset; weekday and hour are read on that clock, never converted to Boston;
+- an explicit gap rule: a reading stands for at most 30 minutes, so overnight pauses and multi-day outages show
+  as *no data*, not zero;
+- a typical-traffic grid by weekday and hour, time-weighted across all days, with thin hours left blank;
+- busyness *relative to this gym's historical traffic* (95th-percentile time-weighted count, 72 people), since
+  capacity is unknown; no "% full";
+- a week of selectable days (also in static mode) with replay time and observation time shown separately.
+
+It is labelled "Historical gym data — not live and not BU FitRec." To set it up or refresh it:
+`python data/import_campus_gym.py --download`, then `python server/export_static.py`
+(details, statistics and license in [`data/README.md`](data/README.md#campus-gym-real-historical-reference-not-bu)).
+The app runs normally without it.
 
 ## Static and API modes
 
@@ -167,11 +199,11 @@ server/    FastAPI app (main.py), data adapter (sources.py), planner data loader
            analytics.py (busyness, time-weighted averages, playback), meetups, static export
 web/       the site: index.html, styles.css, js/
              recommend.js  planner engine (single source of truth)
-             plan.js       "What fits now?" screen
+             plan.js       "What fits now?" screen     prefs.js  remembered planner settings
              app.js        router, Places, playback, meetups, About
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
-tests/     test_api.py (pytest), recommend.test.mjs + meetups_static.test.mjs (node --test)
+tests/     test_api.py, test_campus_gym.py (pytest); recommend / plan_prefs / clock / meetups_static .test.mjs (node --test)
 DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 ```
 
@@ -181,7 +213,7 @@ DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 | `GET /api/campus` | planner data: places, activities, illustrative hours/amenities, sample walking times, scenarios |
 | `GET /api/facilities?at=17:30` | all places at a playback time |
 | `GET /api/facilities/{id}?at=18:00` | one place (+ FitRec areas and sample class reservations) |
-| `GET /api/facilities/{id}/history` | the recorded day: observations, hourly averages, typical profile |
+| `GET /api/facilities/{id}/history?date=YYYY-MM-DD` | one recorded day: observations, hourly averages, typical profile; historical references add playback days, the gap rule and a weekday × hour grid |
 | `GET /api/schedule`, `GET /api/programs` | **sample** official schedule (placeholders) |
 | `GET/POST /api/community-events`, `POST …/{id}/join`, `…/leave`, `…/cancel` | unofficial student meetups (device ID in the `X-BUsy-Device` header or POST body) |
 
@@ -217,6 +249,9 @@ does **not** protect:
 
 1. **Authorized, aggregate occupancy feeds** (e.g. FitRec's existing counts), replacing `server/sources.py`
    while keeping the `Facility` shape. The wording would switch from "demo time" to "last count, N min ago".
+   The campus-gym and COD references show the handling such a feed needs (offsets, gaps, unknown capacity),
+   but neither says anything about BU: a pilot needs BU's own data, a documented counting method and an
+   agreed capacity or reference.
 2. **Verified hours and closures**, from published schedules, with `hours_basis: "verified"`.
 3. **Real walking estimates**, from campus routing data or a maps service, replacing `sample_travel_times.csv`.
 4. **Verified amenities** (outlets, quiet floors) from the facilities themselves.
@@ -227,7 +262,15 @@ does **not** protect:
 ## Data sources
 - Liu et al., *COD: A Dataset of Commercial Building Occupancy Traces*, Zenodo 2017,
   [doi:10.5281/zenodo.996587](https://doi.org/10.5281/zenodo.996587), CC BY-SA 4.0.
+- Nick Rose, *Crowdedness at the Campus Gym*, Kaggle,
+  [nsrose7224/crowdedness-at-the-campus-gym](https://www.kaggle.com/datasets/nsrose7224/crowdedness-at-the-campus-gym).
+  Contains information from that database, available under the
+  [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/) (contents: DbCL 1.0). The files
+  BU-sy derives from it are shared under the same license.
 - Synthetic campus data and planner samples made by the team. Details: [`data/README.md`](data/README.md).
+- Interface font: Plus Jakarta Sans (Tokotype), bundled in `web/assets/fonts/` under the SIL Open Font
+  License 1.1 ([`OFL.txt`](web/assets/fonts/OFL.txt)). It is served with the site, so nothing loads from
+  another server; until it arrives, text shows in the system font.
 
 BU's own [Peak & Quiet Hours](https://www.bu.edu/fitrec/peak-quiet-hours/) page already reports FitRec
 traffic. BU-sy explores planning around free time, not a replacement for it.

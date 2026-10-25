@@ -16,8 +16,8 @@ git clone https://github.com/jadenlee202/bu-sy.git
 cd bu-sy
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
-.venv\Scripts\python -m pytest -q                           # expect 55 passed
-node --test "tests/*.test.mjs"                              # expect 32 passed (or: npm test)
+.venv\Scripts\python -m pytest -q                           # expect 71 passed
+node --test "tests/*.test.mjs"                              # expect 46 passed (or: npm test)
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 
@@ -27,7 +27,7 @@ No API keys, accounts or secrets are needed. `.env` files are ignored by git any
 ```bash
 python -m http.server 8000 -d web
 ```
-Open http://localhost:8000. The footer should read *Data source: built-in demo files (no server)*.
+Open http://localhost:8000. The footer should read *Data source: built-in demo files, no server*.
 
 **B. With the API** (meetups are then shared between devices):
 ```bash
@@ -47,22 +47,30 @@ Every result below comes from the real engine (`web/js/recommend.js`) running on
 don't depend on the time of day or the viewer's timezone (verified with the browser set to Asia/Tokyo), and
 API mode gives exactly the same text as static mode (verified).
 
-1. **Home, "What fits now?"** Point out the *Demo · Synthetic campus data* label and the tagline.
-2. **Try a sample scenario** (70 min at 3 PM, work out, Mugar Library → class at Warren Towers).
+1. **Quick start.** On "What fits now?", tap **Work out** and **60 min**. With no starting point, the app
+   lists places that *could work* and says travel isn't checked. Pick **Mugar Library** as the starting point:
+   now places *fit*, with the walk counted. Open **Preferences** to show the visible defaults (start time from
+   the demo clock, minimum, 10-min buffer, ranking). Point out the persistent **Demo data** card (sidebar) or
+   **Demo** pill (phone).
+2. Open **Try a sample** under the form and choose *70 free minutes, workout, then class* (3 PM, Mugar Library →
+   class at Warren Towers).
    - Expect **"7 places fit · top 3"** and *"Fits your 70-minute window: 10 min there + 36-minute workout +
      14 min onward + 10-minute buffer."*
-   - There's no "Best match": the app explains that the options are equal on the evidence.
-   - Show "Why this fits", the timeline and the disclaimer.
-3. **"An hour to study, outlets needed"** (link under the sample button).
+   - There's no "Best match": the top card says the options are tied and listed by name.
+   - Open **Why this fits** on a card: calculation, timeline, busyness source, hours and limits.
+3. **"An hour to study, outlets needed"** (under *Try a sample*).
    - Expect **Best match: Marciano Commons** (quieter at the selected demo time), then Mugar Library (busy).
    - *Why 1 other place doesn't fit*: West Campus Dining, "Outlets not listed in sample metadata".
 4. **"30-minute lunch across campus (nothing fits)"**.
    - Expect **"Nothing fits this window"**, with reasons and a per-place list.
    - Tap **Extend to 48 minutes**: the form updates and 2 options fit.
-5. **View facility** on any card. The chart and playback open at the same demo time (3:00 PM). Press play.
-6. **Places → "Real data": Clemente Room.** Real office data from the COD dataset, "never a campus
-   suggestion", timestamps "timezone unverified".
-7. *(Optional)* **Student meetups** (footer): join an example, or create an invite-only one.
+5. **View place** on any card. The chart and playback open at the same demo time (3:00 PM). Press play.
+6. **Places → Historical references → Campus Gym — Historical Reference.** Point out the notice
+   ("Historical gym data — not live and not BU FitRec."), pick another **Recorded day** (5–11 Dec 2016), press
+   play, and show "Replay 5:30 PM · observed 5:24 PM (UTC−08:00)", the busyness line "Relative to this gym's
+   historical traffic", the typical weekday × hour grid and **How this works** (capacity unknown, 30-minute gap
+   rule, source and license). The Clemente Room (COD) is the other reference: an office room, timezone unverified.
+7. *(Optional)* **Meetups** (sidebar, or the footer on a phone): join an example, or create an invite-only one.
 
 ## 3. After changing data or server code
 
@@ -75,10 +83,31 @@ the export.
 
 ## 4. Checks and results (2026-10-24)
 
+Campus gym historical reference (`feature/historical-gym-data`):
+
 | Check | Result |
 |---|---|
-| `pytest`: analytics, API, planner data loader, CORS, meetups, static export == API | **23 passed** |
-| `node --test`: planner engine (fit maths, closures, unknown hours/routes/busyness, ranking, COD exclusion, sample scenarios) | **24 passed** |
+| `pytest`: everything below plus gym import (bad rows, zero vs missing, offsets, duplicates, reruns), gap rule, loader, API, exclusion from suggestions, static days == API | **71 passed** |
+| `node --test`: everything below plus the playback gap rule and offsets in the browser | **46 passed** |
+| Import of the real file, run twice | identical outputs (62,184 rows kept, 0 rejected) |
+| Browser: gym page in static and API mode (notice, day picker, playback, labels, grid, provenance), static == API, never in planner results or meetup places | 41/41 passed |
+| Browser: planner 66/66 and meetups 22/22 again; Places, both references and About at 375–1440 px in light and dark, no overflow or page errors | passed |
+
+Interface redesign (`feature/ui-refresh`):
+
+| Check | Result |
+|---|---|
+| `pytest`: analytics, API, planner data loader, CORS, meetups, static export == API | **55 passed** |
+| `node --test`: planner engine (incl. no starting point), remembered preferences, static meetups | **41 passed** |
+| Browser: quick start, no-start browse, persistence + reset, typed-input errors, keyboard, static == API, brand red + contrast in both themes | 66/66 passed |
+| Browser: every screen at 375, 768, 1280 and 1440 px, light and dark: no horizontal overflow, font loaded, no page errors | 48/48 passed |
+| Browser: meetups in static and API mode (honest wording, invite codes, escaping, device ID not logged) | 22/22 passed |
+| Browser: `/bu-sy/` subpath, playback, short viewport standing in for a phone keyboard | 9/9 passed |
+
+Earlier round (before the redesign):
+
+| Check | Result |
+|---|---|
 | Fresh copy of the repo → new venv → `pip install -r requirements.txt` → both suites | passed (fastapi 0.162, starlette 1.10, pydantic 2.14, uvicorn 0.54) |
 | Browser, site under `/bu-sy/` like a GitHub Pages project site: direct links + refresh on 6 routes, no broken assets, no requests leave the machine | 18/18 passed |
 | Browser: sample scenarios, results identical in static vs API mode and in another timezone, API failing mid-session, unreachable `?api=` | 12/12 passed |

@@ -24,7 +24,10 @@ def dump(model) -> dict:
 
 if __name__ == "__main__":
     write(OUT / "facilities.json", [dump(f) for f in main.list_facilities(at="12:00")])
-    for facility_id in main.FACILITIES:
+    for facility_id, facility in main.FACILITIES.items():
         write(OUT / "history" / f"{facility_id}.json", dump(main.get_history(facility_id, on=None)))
+        # Only the days the app offers for playback, not the whole recording.
+        for day in facility.playback_days:
+            write(OUT / "history" / facility_id / f"{day}.json", dump(main.get_history(facility_id, on=day)))
     write(OUT / "campus.json", dump(main.get_campus()))
     write(OUT / "community_events_seed.json", SEED_EVENTS)
