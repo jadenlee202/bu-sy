@@ -22,28 +22,32 @@
 }
 
 :root {
-  --red: #cc0000;                  /* BU scarlet: actions, links, accents only */
+  --red: #cc0000;                  /* BU scarlet: primary actions, links, accents */
   --on-red: #ffffff;
-  --bg: #f5f6f8;                   /* same as the panel: the layout is flush, nothing floats */
-  --panel: #f5f6f8;                /* light-gray content surface */
+  /* Boston-daytime blue accent (pairs with scarlet; echoes the Charles River hero). */
+  --blue: #1f6fb2;
+  --blue-soft: #e8f1f9;            /* selected/hover tint, section washes */
+  --blue-tint: #f0f5fb;            /* app backdrop + panel wash */
+  --bg: #e9f0f8;                   /* cool daytime backdrop behind the phone frame */
+  --panel: #f4f8fc;                /* light panel with a faint blue cast */
   --surface: #ffffff;             /* white cards and raised sections */
-  --subtle: #eef0f3;               /* subtle fills: inputs, chips */
-  --line: #e4e7ec;
-  --line-strong: #c7ccd4;
-  --text: #222222;                 /* dark charcoal */
-  --muted: #5b6270;
-  --red-soft: #fbe9e9;             /* soft scarlet: notices, selected, hover tint */
+  --subtle: #e9eff6;               /* subtle fills: inputs, chips */
+  --line: #dde6f0;
+  --line-strong: #c1cedd;
+  --text: #1c2733;                 /* deep charcoal with a cool cast */
+  --muted: #566475;
+  --red-soft: #fbe9e9;             /* soft scarlet: notices, hover tint */
   --red-tint: #fdf3f3;             /* very light scarlet: subtle section wash */
   --red-text: var(--red);          /* 5.9:1 on white */
   --focus: var(--red);
-  --selected: #161616;
+  --selected: #163049;             /* deep navy-blue selected fill */
   --on-selected: #ffffff;
-  --bar: #dcd8d3;
-  --side: #161616;
-  --side-text: #f3f3f3;
-  --side-muted: #b0aca7;
-  --side-hover: #262626;
-  --side-line: #333333;
+  --bar: #cdd8e4;
+  --side: #10243a;                 /* deep Boston navy top bar (was near-black) */
+  --side-text: #f2f6fb;
+  --side-muted: #9fb3c8;
+  --side-hover: #1c3550;
+  --side-line: #294662;
   --hero: #161616;
   --hero-text: #f5f5f5;
   --hero-muted: #b9b5b0;
@@ -65,19 +69,21 @@
 /* Dark: same red; surfaces, lines and text change around it. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0e0e0f; --panel: #0e0e0f; --surface: #19191b; --subtle: #232326; --line: #2b2b2f; --line-strong: #44444a;
-    --text: #f2f2f2; --muted: #a9a5a1; --red-soft: #33141a; --red-tint: #1c1012; --red-text: var(--text); --focus: #f2f2f2;
-    --selected: #f2f2f2; --on-selected: #161616; --bar: #38383d;
-    --side: #141416; --side-hover: #232326; --side-line: #2b2b2f;
-    --hero: #232326; --hero-line: #36363b; --hero-bar: #46464c; color-scheme: dark;
+    --blue: #6db0e6; --blue-soft: #16314a; --blue-tint: #0f2234;
+    --bg: #081320; --panel: #0b1a2a; --surface: #12263a; --subtle: #1a3044; --line: #243d54; --line-strong: #3a5570;
+    --text: #eef4fb; --muted: #9db2c8; --red-soft: #3a1518; --red-tint: #1c1012; --red-text: var(--text); --focus: #eef4fb;
+    --selected: #eef4fb; --on-selected: #0b1a2a; --bar: #2b4257;
+    --side: #06111d; --side-text: #eef4fb; --side-muted: #8aa2bb; --side-hover: #152a40; --side-line: #22394f;
+    --hero: #12263a; --hero-line: #2b4257; --hero-bar: #3a5570; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0e0e0f; --panel: #0e0e0f; --surface: #19191b; --subtle: #232326; --line: #2b2b2f; --line-strong: #44444a;
-  --text: #f2f2f2; --muted: #a9a5a1; --red-soft: #33141a; --red-tint: #1c1012; --red-text: var(--text); --focus: #f2f2f2;
-  --selected: #f2f2f2; --on-selected: #161616; --bar: #38383d;
-  --side: #141416; --side-hover: #232326; --side-line: #2b2b2f;
-  --hero: #232326; --hero-line: #36363b; --hero-bar: #46464c; color-scheme: dark;
+  --blue: #6db0e6; --blue-soft: #16314a; --blue-tint: #0f2234;
+  --bg: #081320; --panel: #0b1a2a; --surface: #12263a; --subtle: #1a3044; --line: #243d54; --line-strong: #3a5570;
+  --text: #eef4fb; --muted: #9db2c8; --red-soft: #3a1518; --red-tint: #1c1012; --red-text: var(--text); --focus: #eef4fb;
+  --selected: #eef4fb; --on-selected: #0b1a2a; --bar: #2b4257;
+  --side: #06111d; --side-text: #eef4fb; --side-muted: #8aa2bb; --side-hover: #152a40; --side-line: #22394f;
+  --hero: #12263a; --hero-line: #2b4257; --hero-bar: #3a5570; color-scheme: dark;
 }
 
 /* ---------- base ---------- */
@@ -969,6 +975,28 @@ main > .hint, main > .form { max-width: 720px; }
   --city-far: color-mix(in srgb, var(--text) 32%, transparent);
   --city-near: color-mix(in srgb, var(--text) 62%, transparent);
 }
+/* Planner hero with a Boston photo backdrop. */
+.hero-photo {
+  position: relative; overflow: hidden; border-radius: var(--radius); min-height: 180px;
+  display: flex; align-items: flex-end; isolation: isolate; border-bottom: 0; padding: 0;
+}
+.hero-photo .hero-bg { position: absolute; inset: 0; z-index: 0; }
+.hero-photo .hero-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.hero-photo .skyline { width: 100%; height: 100%; display: block; }
+/* Readability: darken the lower-left where the white title + subtitle sit. */
+.hero-photo::after {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(0deg, rgba(8, 18, 34, 0.82), rgba(8, 18, 34, 0.32) 55%, rgba(8, 18, 34, 0.08));
+}
+.hero-photo .hero-body { position: relative; z-index: 2; max-width: none; padding: 20px 22px; gap: 4px; }
+.hero-photo .title { color: #fff; }
+.hero-photo .tagline { color: rgba(255, 255, 255, 0.92); font-weight: 500; }
+.hero-credit {
+  position: absolute; right: 8px; bottom: 6px; z-index: 2; margin: 0;
+  font-size: 11px; color: rgba(255, 255, 255, 0.82); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+@media (min-width: 48rem) { .hero-photo { min-height: 220px; } .hero-photo .hero-body { padding: 28px 28px; } }
+
 /* Section headings share the serif with page titles. */
 .section-title, .dash-title { font-family: var(--font-display); font-weight: 600; letter-spacing: 0; }
 .section-title { font-size: 20px; }
@@ -1348,3 +1376,13 @@ main {
   .version { position: static !important; right: auto; bottom: auto; }
   .version-panel { position: static !important; width: auto; }
 }
+
+/* ---------- Boston-blue accent touches (palette carried app-wide) ---------- */
+/* Scarlet stays the primary action color; blue is the ambient campus accent. */
+.home-wash { background: var(--blue-tint); }
+/* Bottom-tab active state uses the blue accent pill + text, so navigation reads
+   "Boston blue" while buttons/links stay scarlet. */
+.tabbar a[aria-current] { color: var(--blue); }
+.tabbar a[aria-current] .icon { color: var(--blue); }
+.tabbar a[aria-current]::before { background: var(--blue-soft); }
+/* The "Simulated" honesty pill and sidebar accents pick up the navy top bar. */

@@ -13,7 +13,7 @@
 //     live, and we never want to serve stale API data as if it were fresh.
 //
 // Bumping CACHE busts the old one on activate.
-const CACHE = "busy-v3";
+const CACHE = "busy-v5";
 
 const SHELL = [
   "./",
@@ -40,6 +40,7 @@ const SHELL = [
   "./js/ui.js",
   "./assets/terrier.svg",
   "./assets/icon-maskable.svg",
+  "./assets/campus/boston-hero.jpg",
   "./assets/fonts/IBMPlexSans-Variable.woff2",
   "./assets/fonts/SourceSerif4-Variable.woff2",
   "./data/facilities.json",
