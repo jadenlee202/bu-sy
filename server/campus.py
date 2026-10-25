@@ -20,7 +20,6 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
-from schedule_data import SCHEDULE
 from sources import DATA_DIR, Facility
 
 PLACES_JSON = DATA_DIR / "campus_sample.json"
@@ -44,25 +43,16 @@ class Location(BaseModel):
     name: str
 
 
-class Closure(BaseModel):
-    start: str
-    end: str
-    reason: str
-    source: str
-
-
 class Place(BaseModel):
     place_id: str
     name: str
     facility_id: str
     facility_name: str
-    area_id: Optional[str]
     location_id: str
     activities: list[Activity]
     data_mode: Literal["synthetic", "live"]   # never historical_playback
     hours: Optional[list[tuple[str, str]]]    # None = unknown
     hours_basis: Literal["illustrative", "verified", "unknown"]
-    closures: list[Closure]
     amenities: dict[str, bool]                # missing key = not listed (unknown)
     amenities_basis: Literal["illustrative", "verified"]
 
@@ -139,27 +129,16 @@ def load_travel(path: Path, location_ids: set[str]) -> list[TravelTime]:
     return rows
 
 
-def _closures(area_id: Optional[str], weekday: int) -> list[Closure]:
-    """Sample schedule reservations (server/schedule_data.py) block an area."""
-    if not area_id:
-        return []
-    return [
-        Closure(start=f"{e['start']:%H:%M}", end=f"{e['end']:%H:%M}",
-                reason=f"Reserved: {e['title']}", source="sample schedule")
-        for e in SCHEDULE
-        if area_id in e["area_ids"] and e["day_of_week"] == weekday
-    ]
-
-
 def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON,
                 travel_path: Path = TRAVEL_CSV) -> Campus:
     raw = json.loads(places_path.read_text(encoding="utf-8"))
-    weekday = WEEKDAYS.index(raw["demo_day"])
+    if raw["demo_day"] not in WEEKDAYS:
+        raise ValueError(f"demo_day: {raw['demo_day']!r} is not a weekday name")
     locations = [Location(**loc) for loc in raw["locations"]]
     location_ids = {loc.id for loc in locations}
     activities = [ActivityInfo(**a) for a in raw["activities"]]
 
-    places = []
+    places, seen = [], set()
     for p in raw["places"]:
         fid = p["facility_id"]
         f = facilities.get(fid)
@@ -170,14 +149,9 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
         meta = raw["facilities"][fid]
         if meta["location"] not in location_ids:
             raise ValueError(f"place: {fid} has unknown location {meta['location']}")
-        area_id = p.get("area_id")
-        if area_id:
-            area = next((a for a in f.areas if a.area_id == area_id), None)
-            if area is None:
-                raise ValueError(f"place: {fid} has no area {area_id}")
-            name = area.name
-        else:
-            name = f.facility_name
+        if fid in seen:
+            raise ValueError(f"place: {fid} is listed twice")
+        seen.add(fid)
         hours = meta["hours"]
         if hours is not None:
             _check_intervals(hours, f"hours for {fid}")
@@ -185,11 +159,9 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
         if unknown_amenity:
             raise ValueError(f"place: {fid} lists unknown amenities {sorted(unknown_amenity)}")
         places.append(Place(
-            place_id=f"{fid}:{area_id}" if area_id else fid,
-            name=name, facility_id=fid, facility_name=f.facility_name, area_id=area_id,
+            place_id=fid, name=f.facility_name, facility_id=fid, facility_name=f.facility_name,
             location_id=meta["location"], activities=p["activities"], data_mode=f.data_mode,
             hours=hours, hours_basis="illustrative" if hours is not None else "unknown",
-            closures=_closures(area_id, weekday),
             amenities=p.get("amenities", {}), amenities_basis="illustrative",
         ))
 
@@ -213,8 +185,9 @@ def load_campus(facilities: dict[str, Facility], places_path: Path = PLACES_JSON
         travel=load_travel(travel_path, location_ids),
         scenarios=scenarios,
         notes=[
-            "Places, counts, capacities, hours and amenities are demo data, not BU measurements.",
+            "Counts are simulated (FitRec from a real non-BU campus gym, dining and Mugar modeled); "
+            "capacities, hours and amenities are illustrative. None of it measures BU.",
             "Busyness is read at the selected demo time. It is not a forecast for when you arrive.",
-            "The COD Clemente Room is an office dataset and is never suggested as a campus place.",
+            "Historical references (the COD Clemente Room, the campus gym) are never suggested as campus places.",
         ],
     )

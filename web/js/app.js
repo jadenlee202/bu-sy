@@ -25,7 +25,7 @@ let view = null; // the mounted screen: { update?(), resize?() }
 const isHistorical = (f) => f.data_mode === "historical_playback";
 const tag = (f) => (isHistorical(f)
   ? `<span class="tag tag-real" title="Real recorded data from elsewhere, replayed. Not live, not BU.">Historical</span>`
-  : `<span class="tag">Sample</span>`);
+  : `<span class="tag tag-sim" title="${esc(f.simulation?.label ?? "Simulated")}. Not a BU measurement.">Simulated</span>`);
 const backToPlaces = `<a class="back" href="#/places">${icon("back", 16)} All places</a>`;
 const offsetText = (o) => (obsOffset(o) ? `UTC${obsOffset(o).replace("-", "−")}` : "timezone unverified");
 
@@ -54,7 +54,7 @@ function quieterTime(hist, minute) {
  */
 function openingHours(campus, facilityId) {
   const p = campus.places.find((x) => x.facility_id === facilityId && x.hours);
-  return p ? { segs: openSegments({ hours: p.hours, closures: [] }), text: hoursText(p), basis: p.hours_basis } : null;
+  return p ? { segs: openSegments(p), text: hoursText(p), basis: p.hours_basis } : null;
 }
 
 /** Closed at `minute` by those hours: { opens } (null = not again today); null when open or unknown. */
@@ -135,7 +135,7 @@ document.addEventListener("input", (e) => {
 async function placesView() {
   $view.innerHTML = `
     <div class="page-head"><h1 class="title">How busy is it?</h1>
-      <p class="tagline">Replays of recorded days. Tags show where each place's data comes from.</p></div>
+      <p class="tagline">Campus places on a simulated demo Monday, plus recorded references. <a href="#/sources">Sources &amp; Simulation</a></p></div>
     ${playbackBar()}
     <label class="search">${icon("search")}<input type="search" placeholder="Search places" aria-label="Search places" value="${esc(state.query)}"></label>
     <div class="chips" role="group" aria-label="Filter places">
@@ -223,7 +223,8 @@ async function placeView(id) {
   $view.innerHTML = `
     ${backToPlaces}
     <div class="page-head"><h1 class="title">${esc(f.facility_name)}</h1>
-      <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${historical ? `<span class="muted">${office ? "Office room, not BU" : "Not BU"} · never suggested</span>` : ""}</p></div>
+      <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${historical ? `<span class="muted">${office ? "Office room, not BU" : "Not BU"} · never suggested</span>`
+        : f.simulation ? `<span class="muted">${esc(f.simulation.label)}</span> <a class="sub-link" href="#/sources/${encodeURIComponent(f.simulation.id)}">How it's simulated</a>` : ""}</p></div>
     ${hist.notice ? `<p class="banner" role="note">${icon("info", 16)}<span>${esc(hist.notice)}</span></p>` : ""}
     <div class="replay-row">
       ${days.length > 1 ? `<label class="field day-pick"><span class="field-label">Recorded day</span>
@@ -236,7 +237,6 @@ async function placeView(id) {
         <section class="suggest" id="suggest"></section>
       </div>
       <section class="card place-chart" id="day-card"></section>
-      ${hist.areas.length ? `<section class="card place-areas"><h2>Areas</h2><ul class="list" id="areas"></ul></section>` : ""}
       ${hist.typical_week ? `<section class="card place-week" id="week"></section>` : ""}
     </div>
     <details class="about" id="how"></details>`;
@@ -244,7 +244,6 @@ async function placeView(id) {
 
   const $hero = $view.querySelector("#hero");
   const $suggest = $view.querySelector("#suggest");
-  const $areas = $view.querySelector("#areas");
   const $dayCard = $view.querySelector("#day-card");
   let chart;
 
@@ -289,14 +288,6 @@ async function placeView(id) {
     }</div>`;
 
     chart.mark(Math.floor(state.minute / 60));
-
-    if ($areas) {
-      $areas.innerHTML = hist.areas.map((a) => {
-        const ao = latestAt(a.observations, state.minute, hist.coverage_end);
-        return `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(a.name)}</span></span>
-          <span class="row-count num">${closed ? "" : fmtCount(ao?.occupancy_count)}</span>${level(ao?.busyness ?? (closed ? "closed" : "unknown"))}</li>`;
-      }).join("");
-    }
   };
 
   $view.querySelector("#day")?.addEventListener("change", async (e) => {
@@ -329,7 +320,7 @@ function howItWorks(f, hist) {
       <dt>Capacity</dt><dd>${capacity}</dd>
       <dt>Time</dt><dd>${esc(hist.time_note)}. ${hist.day_label}: recorded ${fmtHHMM(hist.coverage_start)}–${fmtHHMM(hist.coverage_end)}.</dd>
       ${hist.max_hold_minutes ? `<dt>Gaps</dt><dd>A count stands for at most ${hist.max_hold_minutes} minutes and never past midnight; longer gaps show as no data, not zero.</dd>` : ""}
-      <dt>Source</dt><dd>${esc(f.source)}</dd>
+      <dt>Source</dt><dd>${esc(f.source)}${f.simulation ? ` · <a href="#/sources/${encodeURIComponent(f.simulation.id)}">Sources &amp; Simulation</a>` : ""}</dd>
       ${hist.measurement_note ? `<dt>Counts</dt><dd>${esc(hist.measurement_note)}</dd>` : ""}
       ${f.measurement_method === "estimated" ? `<dt>Counts</dt><dd>Estimated by doorway sensors at each entry or exit, so a count can stay the same for a while when nobody moves.</dd>` : ""}
     </dl>
@@ -540,10 +531,7 @@ async function newEventView() {
   let places;
   try {
     const facilities = await src.listFacilities();
-    const fitrec = facilities.find((f) => f.category === "fitness" && f.campus_eligible);
-    const areas = fitrec ? (await src.getHistory(fitrec.facility_id)).areas.map((a) => a.name) : [];
-    const others = facilities.filter((f) => f.campus_eligible && f !== fitrec).map((f) => f.facility_name);
-    places = { FitRec: areas, "Elsewhere on campus": [...others, "Somewhere else on campus"] };
+    places = [...facilities.filter((f) => f.campus_eligible).map((f) => f.facility_name), "Somewhere else on campus"];
   } catch (err) {
     $view.innerHTML = `<a class="back" href="#/events">${icon("back", 16)} Meetups</a>${failure(err)}`;
     return {};
@@ -564,9 +552,9 @@ async function newEventView() {
     <form class="form panel" id="new-event" novalidate>
       <label>What<input name="title" required maxlength="${L.title}" placeholder="Basketball run"></label>
       <label>Where<select name="place" required>
-        ${Object.entries(places).map(([group, list]) => `<optgroup label="${esc(group)}">${list.map((p) => `<option>${esc(p)}</option>`).join("")}</optgroup>`).join("")}
+        ${places.map((p) => `<option>${esc(p)}</option>`).join("")}
       </select></label>
-      <label><span>Details <span class="opt">optional</span></span><input name="note" maxlength="${L.note}" placeholder="Court 4, bring a ball"></label>
+      <label><span>Details <span class="opt">optional</span></span><input name="note" maxlength="${L.note}" placeholder="Floor 2 courts, bring a ball"></label>
       <div class="form-row">
         <label>Date<input name="date" type="date" required min="${now.date}" max="${lastDay}" value="${now.date}"></label>
         <label>Start<input name="start" type="time" required value="${pad(nextHour)}:00"></label>
@@ -623,17 +611,95 @@ function aboutView() {
     <div class="page-head"><h1 class="title">About this data</h1>
       <p class="tagline">What's sample, what's real, and how suggestions are worked out.</p></div>
     <div class="about-grid prose">
-      ${item("Sample places", `<p>FitRec, dining and Mugar use synthetic counts from one made-up Monday. They are not BU measurements, and capacities are illustrative.</p>`)}
+      ${item("Simulated campus places", `<p>Busyness at FitRec, the dining halls and Mugar is simulated on one demo Monday: FitRec follows a real campus gym elsewhere, rescaled; dining and Mugar follow documented models. None of it measures BU. Datasets, mappings and steps: <a href="#/sources">Sources &amp; Simulation</a>.</p>`)}
       ${item("One real room", `<p>The Clemente Room is an office conference room from the public COD dataset (Liu et al., 2017, ${doi}). It shows the app on real sensor data, is never suggested as a place to go, and keeps its unverified source timezone.</p>`)}
-      ${item("A real campus gym (not BU)", `<p>Campus Gym — Historical Reference replays <a href="https://www.kaggle.com/datasets/nsrose7224/crowdedness-at-the-campus-gym" target="_blank" rel="noopener">Crowdedness at the Campus Gym</a> (Nick Rose, Kaggle, 2015–2017): head counts about every 10 minutes at an unnamed university gym. It is not BU FitRec, not live, and never suggested. Collection method and capacity aren't documented, so busyness is relative to the gym's own history. Times keep the source's UTC offset. A count stands for at most 30 minutes; longer gaps are no data. Contains information from that dataset, available under the <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">Open Database License</a>; the derived files in BU-sy are shared under the same license.</p>`)}
+      ${item("A real campus gym (not BU)", `<p>Campus Gym — Historical Reference replays head counts taken about every 10 minutes at an unnamed university gym, 2015–2017, as recorded. It is not BU FitRec, not live, and never suggested. Capacity and counting method aren't documented, so busyness is relative to the gym's own history; a count stands for at most 30 minutes. Citation and license (ODbL): <a href="#/sources">Sources &amp; Simulation</a>.</p>`)}
       ${item("How a place fits", `<p>The walk there, at least your minimum time, the walk to your next stop and your buffer must all fit your free time, and the place must be open. With no starting point, BU-sy only lists places that could work and says travel isn't checked.</p>`)}
       ${item("Walks, hours, amenities", `<p>Illustrative samples, not routed or verified. A missing walking time is unknown, never zero. Places with unknown hours are listed separately, never as confirmed.</p>`)}
-      ${item("Busyness", `<p>A count compared with capacity (sample places) or the room's usual high (Clemente): under 40% quiet, under 75% moderate, above that busy. These are demo thresholds. Suggestions use the count at the selected demo time, which is not a forecast for when you arrive, and a building count doesn't show free seats or equipment.</p>`)}
+      ${item("Busyness", `<p>A count compared with illustrative capacity (campus places) or a place's usual high (historical references): under 40% quiet, under 75% moderate, above that busy. These are demo thresholds. Suggestions use the count at the selected demo time, which is not a forecast for when you arrive, and a building count doesn't show free seats or equipment.</p>`)}
       ${item("Hourly averages", `<p>Time-weighted: each count holds until the next one, and never past the end of the recorded day.</p>`)}
       ${item("Your settings", `<p>Preferences and your last chosen starting point stay in this browser. Reset them under Preferences. BU-sy never detects your location.</p>`)}
       ${item("Meetups", `<p>Created by students and unofficial. We store only a nickname and a random device ID.</p>`)}
     </div>
     <p class="fineprint">BU-sy is an independent student prototype, not affiliated with Boston University. A real version would need verified hours, real walking routes and an authorized, aggregate campus count.</p>`;
+  return {};
+}
+
+// ---------- screen: sources & simulation ----------
+async function sourcesView(openId) {
+  $view.innerHTML = `<div class="page-head"><h1 class="title">Sources &amp; Simulation</h1></div>${loading()}`;
+  let p;
+  try {
+    p = await src.getSources();
+  } catch (err) {
+    $view.innerHTML = `<div class="page-head"><h1 class="title">Sources &amp; Simulation</h1></div>${failure(err)}`;
+    return {};
+  }
+  const datasets = Object.fromEntries(p.datasets.map((d) => [d.id, d]));
+  const BASIS = { reference_dataset: "Reference dataset", modeled: "Modeled (no dataset)" };
+  const STATUS = { used: "Used", evaluated_not_used: "Evaluated, not used", reference_only: "Shown as a reference only" };
+  const link = (url, text) => `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>`;
+  const list = (items, tag = "ul") => `<${tag}>${items.map((t) => `<li>${esc(t)}</li>`).join("")}</${tag}>`;
+  const facts = (rows) => `<dl class="facts">${rows.filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
+
+  const mapRow = (s, name) => {
+    const d = datasets[s.dataset_id];
+    return `<tr><td>${name}</td><td><span class="basis basis-${esc(s.basis)}">${BASIS[s.basis]}</span></td>
+      <td>${d ? link(d.url, d.title) : "—"}</td><td>${d ? esc(d.original_location) : "—"}</td>
+      <td><a href="#/sources/${encodeURIComponent(s.id)}">Steps</a></td></tr>`;
+  };
+  const mapping = p.simulations.flatMap((s) => s.targets.map((t) => mapRow(s, esc(t.name)))).join("");
+
+  const sim = (s) => {
+    const d = datasets[s.dataset_id];
+    return `<details class="src-item" id="sim-${esc(s.id)}"${s.id === openId ? " open" : ""}>
+      <summary><span>${esc(s.targets.map((t) => t.name).join(", "))}</span>
+        <span class="basis basis-${esc(s.basis)}">${BASIS[s.basis]}</span></summary>
+      <div class="src-body">
+        ${facts([
+          ["Source", d ? `${link(d.url, d.title)} (${esc(d.creators)}): ${esc(d.original_location)}` : "No dataset. A documented model."],
+          ["Fields", s.source_fields.length ? esc(s.source_fields.join(", ")) : null],
+          ["Period", s.source_period ? esc(s.source_period) : null],
+          ["Simulated", `${esc(s.window[0])}:00–${esc(s.window[1])}:00 on the demo Monday, every ${p.grid_minutes} minutes`],
+          ["Units", esc(s.units)],
+          ["Parameters", `<code>${esc(JSON.stringify(s.parameters))}</code>`],
+        ])}
+        <h3>Steps</h3>${list(s.transformations, "ol")}
+        <h3>Assumptions</h3>${list(s.assumptions)}
+        <h3>Limits</h3>${list(s.limits)}
+      </div></details>`;
+  };
+
+  const dataset = (d) => `<details class="src-item" id="data-${esc(d.id)}"${d.id === openId ? " open" : ""}>
+    <summary><span>${esc(d.title)}</span><span class="basis status-${esc(d.status)}">${STATUS[d.status] ?? esc(d.status)}</span></summary>
+    <div class="src-body">${facts([
+      ["Creators", esc(d.creators)], ["Publisher", esc(d.publisher)], ["Link", link(d.url, d.url)],
+      ["Version", esc(d.version)], ["Retrieved", esc(d.retrieved)],
+      ["License", d.license_url ? link(d.license_url, d.license) : esc(d.license)], ["Obligations", esc(d.obligations)],
+      ["Location", esc(d.original_location)], ["Metric", esc(d.metric)], ["Sampling", esc(d.sampling)],
+      ["Time", esc(d.timezone)], ["Method", esc(d.measurement)], ["Notes", esc(d.notes)],
+    ])}</div></details>`;
+
+  $view.innerHTML = `
+    <div class="page-head"><h1 class="title">Sources &amp; Simulation</h1>
+      <p class="tagline">Where campus busyness comes from, and how it's simulated.</p></div>
+    <p class="banner" role="note">${icon("info", 16)}<span>${esc(p.summary)}</span></p>
+    <section class="card src-card"><h2>Which data drives each place</h2>
+      <div class="table-scroll"><table class="map-table"><thead><tr><th>Place</th><th>Basis</th><th>Dataset</th><th>Original location</th><th></th></tr></thead>
+        <tbody>${mapping}</tbody></table></div>
+      <p class="help">A reference dataset gives a real time-of-day pattern from somewhere else; it is not a measurement of the BU place. ${esc(p.demo_clock)}</p>
+    </section>
+    <section class="src-section"><h2 class="section-title">How each simulation is made</h2>${p.simulations.map(sim).join("")}</section>
+    <section class="src-section"><h2 class="section-title">Datasets</h2>${p.datasets.map(dataset).join("")}</section>
+    <div class="src-grid">
+      <section class="card src-card"><h2>Still illustrative</h2>${list(p.illustrative)}</section>
+      <section class="card src-card"><h2>Historical references</h2>
+        <ul>${p.historical_references.map((r) => `<li><a href="#/place/${encodeURIComponent(r.facility_id)}">${esc(r.facility_id === "COD_Bosch_Office_1_Clemente" ? "Clemente Room — COD demo" : "Campus Gym — Historical Reference")}</a>: ${esc(r.note)}</li>`).join("")}</ul></section>
+    </div>
+    <details class="src-item"><summary><span>Reproduce the data</span></summary>
+      <div class="src-body"><pre class="code">${esc(p.reproduce.join("\n"))}</pre>
+      <p class="help">Downloads happen only when you ask (<code>--download</code>); the app and tests never fetch data. Generated by <code>${esc(p.generated_by)}</code>.</p></div></details>`;
+  if (openId) $view.querySelector(`#sim-${CSS.escape(openId)}, #data-${CSS.escape(openId)}`)?.scrollIntoView({ block: "start" });
   return {};
 }
 
@@ -656,6 +722,7 @@ async function route() {
     : section === "events" && id === "new" ? newEventView()
     : section === "events" ? eventsView()
     : section === "about" ? aboutView()
+    : section === "sources" ? sourcesView(id ? decodeURIComponent(id) : null)
     : section === "places" ? placesView()
     : planView($view, clock);
   const mounted = await next;

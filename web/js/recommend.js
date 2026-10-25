@@ -23,8 +23,7 @@
 //   needs               amenity ids a place must list (e.g. "outlets")
 //
 // Fit rule: minutes >= travel there + activity (>= minActivity) + onward + buffer,
-// and the place is open (illustrative hours, minus sample reservations) for the
-// whole activity. Unknown hours are never "confirmed": they go to checkHours.
+// and the place is open (illustrative hours) for the whole activity. Unknown hours are never "confirmed": they go to checkHours.
 // Without a starting point the same rule runs with the walk there left out, so
 // it can only rule places out (too little time even before walking, closed).
 
@@ -79,15 +78,9 @@ export function travelMinutes(campus, a, b) {
   return t ? t.minutes : null;
 }
 
-/** Open intervals [start, end) in minutes: hours minus closures. null = hours unknown. */
+/** Open intervals [start, end) in minutes. null = hours unknown. */
 export function openSegments(place) {
-  if (!place.hours) return null;
-  let segs = place.hours.map(([a, b]) => [toMin(a), toMin(b)]);
-  for (const c of place.closures) {
-    const ca = toMin(c.start), cb = toMin(c.end);
-    segs = segs.flatMap(([a, b]) => (cb <= a || ca >= b ? [[a, b]] : [[a, ca], [cb, b]].filter(([x, y]) => y > x)));
-  }
-  return segs;
+  return place.hours ? place.hours.map(([a, b]) => [toMin(a), toMin(b)]) : null;
 }
 
 export const hoursText = (place) =>
@@ -96,14 +89,9 @@ export const hoursText = (place) =>
 /** Busyness at the selected demo minute: the latest observation at or before it, or unknown. */
 export function busynessAt(place, histories, minute) {
   const hist = histories[place.facility_id];
-  const area = place.area_id ? hist?.areas.find((a) => a.area_id === place.area_id) : null;
-  const series = place.area_id ? area?.observations : hist?.observations;
-  const o = series ? latestAt(series, minute, hist.coverage_end) : null;
+  const o = hist ? latestAt(hist.observations, minute, hist.coverage_end, hist.max_hold_minutes) : null; // a value covers its slot only
   if (!o) return { level: "unknown", count: null, capacity: null, observedAt: null };
-  return {
-    level: o.busyness, count: o.occupancy_count,
-    capacity: area ? area.capacity : hist.capacity, observedAt: o.observed_at.slice(11, 16),
-  };
+  return { level: o.busyness, count: o.occupancy_count, capacity: hist.capacity, observedAt: o.observed_at.slice(11, 16) };
 }
 
 // ---------- one place ----------
@@ -177,8 +165,6 @@ function evaluate(place, req, campus, histories) {
 }
 
 function closedReason(place, segs, from, to) {
-  const c = place.closures.find((k) => toMin(k.start) < to && toMin(k.end) > from);
-  if (c) return `${c.reason}, ${fmtShort(toMin(c.start))}–${fmtShort(toMin(c.end))}`;
   const overlaps = segs.some(([a, b]) => a < to && b > from);
   return `${overlaps ? "Not open long enough during your window" : "Closed then"} (illustrative hours ${hoursText(place)})`;
 }
@@ -270,7 +256,7 @@ export function recommend(req, campus, histories, { suggest = true } = {}) {
 
 const REASON_TEXT = {
   time: "not enough time once walking and your buffer are counted",
-  closed: "closed or reserved during the visit (illustrative hours)",
+  closed: "closed during the visit (illustrative hours)",
   route: "no sample walking time for the route",
   amenity: "missing a study need you picked",
   not_campus: "not a campus destination",
@@ -327,7 +313,7 @@ export function busynessText(o, req) {
   const demo = o.place.data_mode === "synthetic";
   return {
     label: `${LEVEL_WORD[b.level]} at ${at}`,
-    basis: `${demo ? "Sample count" : "Count"} ${b.count.toLocaleString("en-US")} of ${b.capacity?.toLocaleString("en-US") ?? "?"}`
+    basis: `${demo ? "Simulated count" : "Count"} ${b.count.toLocaleString("en-US")} of ${b.capacity?.toLocaleString("en-US") ?? "?"}`
       + `${demo ? " (illustrative capacity)" : ""} at ${at}. Not a forecast for when you arrive.`,
   };
 }
@@ -365,11 +351,9 @@ export function whyItFits(o, req, campus, featured) {
 }
 
 export function hoursStatus(place) {
-  const reserved = place.closures.map((c) => `${c.reason.replace(/^Reserved: /, "")} ${fmtShort(toMin(c.start))}–${fmtShort(toMin(c.end))}`);
   if (!place.hours) return { known: false, text: "Hours unknown · check before going" };
   return {
     known: true,
-    text: `Open ${hoursText(place)} · ${place.hours_basis === "verified" ? "verified hours" : "illustrative demo hours"}`
-      + (reserved.length ? ` · reserved for ${reserved.join(", ")} (sample schedule)` : ""),
+    text: `Open ${hoursText(place)} · ${place.hours_basis === "verified" ? "verified hours" : "illustrative demo hours"}`,
   };
 }

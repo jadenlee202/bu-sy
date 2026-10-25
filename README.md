@@ -10,8 +10,10 @@ unofficial student meetups are still there as secondary screens.
 
 Independent student project, **not affiliated with Boston University**.
 
-> **Data honesty:** every campus place, count, capacity, opening hour, amenity and walking time is
-> **demo data** (labelled *Demo · Synthetic campus data*). Two real datasets appear as **historical
+> **Data honesty:** busyness at BU-named places is **simulated** (labelled *Simulated*): FitRec follows one
+> recorded day at a real campus gym elsewhere, rescaled; dining halls and Mugar follow documented models
+> because no usable dataset was found. Capacities, hours, amenities and walking times are illustrative. The
+> **Sources & Simulation** page (`#/sources`) maps every place to its source. Two real datasets appear as **historical
 > references** under Places: the *Clemente Room*, an office conference room from the public COD dataset, and
 > the *Campus Gym — Historical Reference*, 2015–2017 head counts from a non-BU university gym (Kaggle, ODbL).
 > They show the pipeline on real recordings, are never presented as live, and are **never** suggested as
@@ -76,9 +78,8 @@ isn't counted, and the app says so.
 - it lacks a study need you required (an amenity that isn't listed is treated as unknown, not as present);
 - the sample walking time is missing (unknown, never zero; the same location is zero);
 - there isn't enough time;
-- it is closed or reserved during any part of the visit. Illustrative hours, minus sample-schedule
-  reservations such as intramural basketball 7–9 PM. If a place opens a little later, the visit waits for
-  opening; if it closes early, the unused minutes are shown.
+- it is closed during any part of the visit (illustrative hours). If a place opens a little later, the
+  visit waits for opening; if it closes early, the unused minutes are shown.
 
 **Unknown hours.** A place that fits on time but has no hours is never shown as confirmed. It appears under
 **Hours unknown**.
@@ -128,14 +129,15 @@ preferShortTravel, needs}`.
 
 | File | What | Real? |
 |---|---|---|
-| `data/bu_campus_synthetic_occupancy.csv` | one sample Monday, hourly, FitRec areas, 4 dining halls, Mugar | **synthetic** |
+| `data/campus_simulation_occupancy.csv` | one demo Monday every 15 min: FitRec as one building (from the campus gym), 4 dining halls and Mugar (modeled); made by `data/generate_campus_simulation.py` | **simulated** |
+| `data/simulation_provenance.json` | dataset-to-place mapping, steps, parameters, limits (also `/api/sources`) | — |
 | `data/campus_sample.json` | which place supports which activity, its location, illustrative hours and amenities, demo scenarios | **illustrative** |
 | `data/sample_travel_times.csv` | sample walking minutes between 6 demo locations (West↔Fenway intentionally missing) | **illustrative** |
 | `data/clean_cod_occupancy.csv` | COD Clemente Room, cleaned by `data/clean_cod.py` | real office data, not BU |
 | `data/clean_campus_gym_occupancy.csv` | a non-BU campus gym, imported by `data/import_campus_gym.py` (optional) | real gym data, not BU |
 
 `server/campus.py` validates the planner data at startup:
-- every place must point to an existing campus-eligible (**synthetic**) facility or area, so COD and the
+- every place must point to an existing campus-eligible (**synthetic**) facility, once, so COD and the
   campus gym can't be added (`campus_eligible: false` in the API);
 - times must be valid `HH:MM`, from 00:00 up to 24:00;
 - walking times can't be listed twice and must name known locations;
@@ -212,9 +214,8 @@ DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 |---|---|
 | `GET /api/campus` | planner data: places, activities, illustrative hours/amenities, sample walking times, scenarios |
 | `GET /api/facilities?at=17:30` | all places at a playback time |
-| `GET /api/facilities/{id}?at=18:00` | one place (+ FitRec areas and sample class reservations) |
+| `GET /api/facilities/{id}?at=18:00` | one place |
 | `GET /api/facilities/{id}/history?date=YYYY-MM-DD` | one recorded day: observations, hourly averages, typical profile; historical references add playback days, the gap rule and a weekday × hour grid |
-| `GET /api/schedule`, `GET /api/programs` | **sample** official schedule (placeholders) |
 | `GET/POST /api/community-events`, `POST …/{id}/join`, `…/leave`, `…/cancel` | unofficial student meetups (device ID in the `X-BUsy-Device` header or POST body) |
 
 ## Meetups (unofficial, secondary)
@@ -252,7 +253,9 @@ does **not** protect:
    The campus-gym and COD references show the handling such a feed needs (offsets, gaps, unknown capacity),
    but neither says anything about BU: a pilot needs BU's own data, a documented counting method and an
    agreed capacity or reference.
-2. **Verified hours and closures**, from published schedules, with `hours_basis: "verified"`.
+2. **Verified hours**, from published schedules, with `hours_basis: "verified"`. FitRec is tracked as one
+   building: per-court, pool or room occupancy, classes and reservations aren't modelled, because no data
+   could support them.
 3. **Real walking estimates**, from campus routing data or a maps service, replacing `sample_travel_times.csv`.
 4. **Verified amenities** (outlets, quiet floors) from the facilities themselves.
 5. **Calendar-derived free windows** (opt-in, read-only, processed on device where possible), feeding the
@@ -267,7 +270,8 @@ does **not** protect:
   Contains information from that database, available under the
   [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/) (contents: DbCL 1.0). The files
   BU-sy derives from it are shared under the same license.
-- Synthetic campus data and planner samples made by the team. Details: [`data/README.md`](data/README.md).
+- Simulation models, illustrative capacities and planner samples made by the team.
+  Details: [`data/README.md`](data/README.md#simulated-campus-places) and the app's Sources & Simulation page.
 - Interface font: Plus Jakarta Sans (Tokotype), bundled in `web/assets/fonts/` under the SIL Open Font
   License 1.1 ([`OFL.txt`](web/assets/fonts/OFL.txt)). It is served with the site, so nothing loads from
   another server; until it arrives, text shows in the system font.

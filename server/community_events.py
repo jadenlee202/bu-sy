@@ -43,11 +43,11 @@ def _now() -> datetime:
 
 # Example events, dated relative to "today" so the demo never looks stale.
 SEED_EVENTS = [
-    {"title": "Pickup basketball run", "place": "Basketball · Floor 2 (4 courts)", "note": "Court 4",
+    {"title": "Pickup basketball run", "place": "FitRec", "note": "Floor 2 courts",
      "day_offset": 0, "start": "18:00", "end": "20:00", "spots": 10, "invite_only": False, "going": 6},
-    {"title": "Morning lift partners", "place": "Weight Room · Floor 1", "note": "Meet by the racks",
+    {"title": "Morning lift partners", "place": "FitRec", "note": "Floor 1 weight room, by the racks",
      "day_offset": 1, "start": "07:00", "end": "08:00", "spots": 4, "invite_only": False, "going": 1},
-    {"title": "Bouldering crew", "place": "Climbing Wall", "note": "Beginners welcome",
+    {"title": "Bouldering crew", "place": "FitRec", "note": "Climbing wall, beginners welcome",
      "day_offset": 2, "start": "19:00", "end": "21:00", "spots": 8, "invite_only": True, "going": 3},
 ]
 

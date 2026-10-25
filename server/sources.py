@@ -1,16 +1,19 @@
-"""Data adapter: loads the two CSVs in data/ into facilities with day series.
+"""Data adapter: loads the CSVs in data/ into facilities with day series.
 
 Replace this module (keep the Facility shape) to plug in a real campus feed.
 
-    bu_campus_synthetic_occupancy.csv   SYNTHETIC, one sample Monday, hourly,
-                                        FitRec by area + dining + Mugar
+    campus_simulation_occupancy.csv     SIMULATED campus places on one demo Monday,
+                                        every 15 min: FitRec as one building (driven
+                                        by a real non-BU campus gym), dining + Mugar
+                                        (modeled), made by data/generate_campus_simulation.py;
+                                        simulation_provenance.json says how
     clean_cod_occupancy.csv             REAL office occupancy events (COD),
                                         made by data/clean_cod.py
     clean_campus_gym_occupancy.csv      REAL counts from a non-BU campus gym
                                         (Kaggle, ODbL), made by
                                         data/import_campus_gym.py; optional
 
-Synthetic timestamps use an explicit America/New_York demo clock. COD
+Simulated timestamps use an explicit America/New_York demo clock. COD
 timestamps are source-local with an unverified timezone, so they stay naive and
 are never converted. Campus-gym timestamps keep their supplied UTC offset (no
 named timezone is assigned); weekday and hour come from that local clock.
@@ -29,14 +32,14 @@ from typing import Optional
 from analytics import Series, classify, hour_sums, hourly_time_weighted, time_weighted_percentile
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-SYNTHETIC_CSV = DATA_DIR / "bu_campus_synthetic_occupancy.csv"
+SIMULATION_CSV = DATA_DIR / "campus_simulation_occupancy.csv"
+PROVENANCE_JSON = DATA_DIR / "simulation_provenance.json"
 COD_CSV = DATA_DIR / "clean_cod_occupancy.csv"
 
 COD_ID = "COD_Bosch_Office_1_Clemente"
 COD_PLAYBACK_DAY = date(2015, 11, 9)  # a Monday with a clear midday dip
 COD_WINDOW = (7, 20)                  # every recorded day is anchored at 07:00 and 20:00
 COD_REFERENCE_PERCENTILE = 0.95
-SYNTHETIC_WINDOW = (8, 23)            # hourly rows 08:00-22:00, each holding one hour
 
 GYM_CSV = DATA_DIR / "clean_campus_gym_occupancy.csv"
 GYM_IMPORT_JSON = DATA_DIR / "campus_gym_import.json"
@@ -45,19 +48,6 @@ GYM_REFERENCE_PERCENTILE = 0.95
 GYM_MIN_TYPICAL_HOURS = 5.0           # a weekday-hour needs this much recorded time to get a typical value
 GYM_INSIGHT_HOURS = (6, 23)           # quieter-time insight: daytime only (opening hours are unknown)
 GYM_NOTICE = "Historical gym data — not live and not BU FitRec."
-
-
-@dataclass
-class Area:
-    area_id: str
-    name: str
-    category: str
-    capacity: int               # illustrative
-    crowd_tolerance: float = 1.0
-    series: Series = field(default_factory=list)
-
-    def level(self, count: int) -> str:
-        return classify(count / self.capacity, self.crowd_tolerance)
 
 
 @dataclass
@@ -75,7 +65,6 @@ class Facility:
     reference: Optional[float] = None
     reference_note: str = ""
     amenities: list[str] = field(default_factory=list)
-    areas: list[Area] = field(default_factory=list)
     days: dict[date, Series] = field(default_factory=dict)
     default_day: Optional[date] = None
     typical_by_weekday: dict[int, list[Optional[float]]] = field(default_factory=dict)
@@ -91,6 +80,7 @@ class Facility:
     notice: Optional[str] = None
     measurement_note: str = ""
     busyness_label: Optional[str] = None   # short line shown under the busyness word
+    simulation: Optional[dict] = None      # {id, basis, label} for simulated campus places
 
     @property
     def campus_eligible(self) -> bool:
@@ -100,7 +90,9 @@ class Facility:
     def coverage_end(self, day: date) -> datetime:
         if day in self.day_bounds:
             return self.day_bounds[day][1]
-        return datetime.combine(day, time()) + timedelta(hours=self.window[1])
+        end = datetime.combine(day, time()) + timedelta(hours=self.window[1])
+        # A window ending at midnight ends at 23:59:59, so it stays on the same day (and in a `time` field).
+        return end - timedelta(seconds=1) if self.window[1] == 24 else end
 
     def coverage_start(self, day: date) -> time:
         return self.day_bounds[day][0].time() if day in self.day_bounds else time(self.window[0])
@@ -121,30 +113,11 @@ class Facility:
         return hourly_time_weighted(self.days[day], *self.window, self.coverage_end(day), self.max_hold)
 
 
-# ---------- synthetic campus data ----------
-# Illustrative capacities only (not official figures). Weight rooms and
-# basketball courts get a crowd tolerance: people accept a bigger crowd there.
-TOLERANT = 1.25
-FITREC_AREAS = {
-    "WEIGHT_ROOM_FLOOR_1": ("weight-room-floor-1", "Weight Room · Floor 1", "weights", 160, TOLERANT),
-    "WEIGHT_ROOM_FLOOR_2": ("weight-room-floor-2", "Weight Room · Floor 2", "weights", 140, TOLERANT),
-    "BASKETBALL_4_COURT_FLOOR_2": ("basketball-court-floor-2", "Basketball · Floor 2 (4 courts)", "basketball", 60, TOLERANT),
-    "BASKETBALL_3_COURT_BASEMENT": ("basketball-court-basement", "Basketball · Basement (3 courts)", "basketball", 45, TOLERANT),
-    "COMPETITION_POOL": ("competition-pool", "Competition Pool", "aquatics", 50, 1.0),
-    "RECREATION_POOL_HOT_TUB": ("recreation-pool-hot-tub", "Rec Pool & Hot Tub", "aquatics", 45, 1.0),
-    "BIKING_AREA": ("biking-area", "Biking Area", "cardio", 35, 1.0),
-    "SQUASH_COURT_1": ("squash-court-1", "Squash Court 1", "racquet", 4, 1.0),
-    "SQUASH_COURT_2": ("squash-court-2", "Squash Court 2", "racquet", 4, 1.0),
-    "RACQUETBALL_ROOM_1": ("racquetball-room-1", "Racquetball 1", "racquet", 4, 1.0),
-    "RACQUETBALL_ROOM_2": ("racquetball-room-2", "Racquetball 2", "racquet", 4, 1.0),
-    "RACQUETBALL_ROOM_3": ("racquetball-room-3", "Racquetball 3", "racquet", 4, 1.0),
-    "CLIMBING_WALL": ("climbing-wall", "Climbing Wall", "climbing", 30, 1.0),
-    **{
-        f"MULTIPURPOSE_ROOM_{n}": (f"multipurpose-room-{n}", f"Multipurpose Room {n}", "multipurpose", 35, 1.0)
-        for n in range(1, 8)
-    },
-    "DANCE_THEATRE": ("dance-theatre", "Dance Theatre", "dance", 40, 1.0),
-}
+# ---------- simulated campus places ----------
+# Illustrative capacities only (not official figures). FitRec is one building-level
+# count: the data can't say which court, pool or room people are using.
+FITREC_SERIES = "SYN_BU_FITREC"
+FITREC_CAPACITY = 870
 FITREC_AMENITIES = [
     "Weight rooms (2 floors)", "Basketball courts (7)", "Competition pool",
     "Rec pool and hot tub", "Biking area", "Squash (2)", "Racquetball (3)",
@@ -158,43 +131,54 @@ OTHER_SYNTHETIC = {
     "DINING_FENWAY": ("fenway-dining-synthetic", "Fenway Dining", "dining", 200),
     "MUGAR_LIBRARY": ("mugar-synthetic", "Mugar Library", "library", 600),
 }
-SYNTHETIC_SOURCE = "Synthetic demo data (data/bu_campus_synthetic_occupancy.csv); not a BU measurement"
-SYNTHETIC_TIME_NOTE = "Sample Monday on an America/New_York demo clock"
+SIMULATED_TIME_NOTE = "Simulated Monday on an America/New_York demo clock"
 
 
-def _synthetic_facility(facility_id, name, category, capacity=None, **extra) -> Facility:
+def load_provenance(path: Path = PROVENANCE_JSON) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _simulation_for(provenance: dict, facility_id: str) -> dict:
+    sim = next(s for s in provenance["simulations"] if any(t["facility_id"] == facility_id for t in s["targets"]))
+    dataset = next((d for d in provenance["datasets"] if d["id"] == sim["dataset_id"]), None)
+    return {"sim": sim, "dataset": dataset}
+
+
+def _simulated_facility(facility_id, name, category, provenance, capacity=None, **extra) -> Facility:
+    found = _simulation_for(provenance, facility_id)
+    sim, dataset = found["sim"], found["dataset"]
+    source = (f"Simulated from {dataset['title']} ({dataset['creators']}, {dataset['license']}): "
+              f"{dataset['original_location']}. Not a BU measurement" if dataset
+              else "Modeled profile (no dataset). Not a BU measurement")
     return Facility(
         facility_id=facility_id, facility_name=name, category=category,
-        data_mode="synthetic", measurement_method="synthetic", source=SYNTHETIC_SOURCE,
-        timezone="America/New_York", time_note=SYNTHETIC_TIME_NOTE, window=SYNTHETIC_WINDOW,
-        capacity=capacity, **extra,
+        data_mode="synthetic", measurement_method="synthetic", source=source,
+        timezone="America/New_York", time_note=SIMULATED_TIME_NOTE, window=tuple(sim["window"]),
+        capacity=capacity, max_hold=timedelta(minutes=provenance["grid_minutes"]),
+        simulation={"id": sim["id"], "basis": sim["basis"], "label": sim["label"]}, **extra,
     )
 
 
 def load_synthetic() -> list[Facility]:
+    """The simulated campus places. Each value stands for one 15-minute slot (max_hold), so a
+    slot the simulation left empty (a gap in its source) shows as no data, never as the last value."""
+    provenance = load_provenance()
     rows = defaultdict(list)
-    with open(SYNTHETIC_CSV, newline="", encoding="utf-8") as f:
+    with open(SIMULATION_CSV, newline="", encoding="utf-8") as f:
         for r in csv.DictReader(f):
             rows[r["facility_id"]].append((datetime.fromisoformat(r["timestamp"]), int(r["occupancy_count"])))
 
-    areas = []
-    for suffix, (area_id, name, cat, cap, tol) in FITREC_AREAS.items():
-        areas.append(Area(area_id, name, cat, cap, tol, sorted(rows[f"SYN_BU_FITREC_{suffix}"])))
-    totals = defaultdict(int)
-    for a in areas:
-        for t, c in a.series:
-            totals[t] += c
-    fitrec = _synthetic_facility(
-        "fitrec-synthetic", "FitRec", "fitness",
-        capacity=sum(a.capacity for a in areas),
-        reference_note="Sum of 21 areas vs. the sum of their illustrative capacities",
-        amenities=FITREC_AMENITIES, areas=areas,
+    fitrec = _simulated_facility(
+        "fitrec-synthetic", "FitRec", "fitness", provenance, capacity=FITREC_CAPACITY,
+        reference_note=f"Whole building vs. an illustrative capacity of {FITREC_CAPACITY:,}",
+        amenities=FITREC_AMENITIES,
     )
-    fitrec.days[min(totals).date()] = sorted(totals.items())
+    series = sorted(rows[FITREC_SERIES])
+    fitrec.days[series[0][0].date()] = series
 
     facilities = [fitrec]
     for suffix, (fid, name, cat, cap) in OTHER_SYNTHETIC.items():
-        f = _synthetic_facility(fid, name, cat, capacity=cap,
+        f = _simulated_facility(fid, name, cat, provenance, capacity=cap,
                                 reference_note=f"Count vs. an illustrative capacity of {cap:,}")
         series = sorted(rows[f"SYN_BU_{suffix}"])
         f.days[series[0][0].date()] = series

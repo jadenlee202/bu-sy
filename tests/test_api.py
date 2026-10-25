@@ -1,4 +1,5 @@
 """Run: python -m pytest"""
+import csv
 import json
 import re
 import sys
@@ -20,6 +21,7 @@ from analytics import classify, hourly_time_weighted, latest_at, time_weighted_p
 
 client = TestClient(main.app)
 COD = "COD_Bosch_Office_1_Clemente"
+ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture(autouse=True)
@@ -64,19 +66,33 @@ def test_percentile_weights_by_time():
 
 
 # ---------- facilities ----------
+def gym_reading(day, hhmm):
+    """Latest raw gym reading at or before a local clock time, read straight from the clean file."""
+    rows = [r for r in csv.DictReader(open(ROOT / "data" / "clean_campus_gym_occupancy.csv", encoding="utf-8"))
+            if r["timestamp"].startswith(day) and r["timestamp"][11:16] <= hhmm]
+    return int(rows[-1]["occupancy_count"])
+
+
 def test_facility_list_and_playback():
     rows = {f["facility_id"]: f for f in client.get("/api/facilities?at=18:00").json()}
     fitrec = rows["fitrec-synthetic"]
-    assert fitrec["occupancy_count"] == 741 and fitrec["busyness"] == "busy"
+    sim = next(s for s in main.PROVENANCE["simulations"] if s["id"] == "fitrec-from-campus-gym")
+    # FitRec at 6 PM = the gym's 6 PM reading on the source day x the documented scale (not a fixed number).
+    expected = round(gym_reading("2016-12-05", "18:00") * sim["parameters"]["scale"])
+    assert fitrec["occupancy_count"] == expected
+    assert fitrec["busyness"] == classify(expected / fitrec["capacity"])
     assert fitrec["data_mode"] == "synthetic" and fitrec["capacity_is_illustrative"]
+    assert fitrec["simulation"] == {"id": "fitrec-from-campus-gym", "basis": "reference_dataset",
+                                    "label": "Simulated from a real campus gym (not BU)"}
     cod = rows[COD]
     assert cod["data_mode"] == "historical_playback"
     assert cod["timezone"] is None and cod["capacity"] is None
 
 
-def test_unavailable_outside_recorded_hours():
-    d = client.get("/api/facilities/fitrec-synthetic?at=06:30").json()
-    assert d["occupancy_count"] is None and d["busyness"] == "unknown" and d["areas"] == []
+def test_unavailable_outside_simulated_hours():
+    d = client.get("/api/facilities/fitrec-synthetic?at=05:30").json()   # simulated from 6 AM (sample hours)
+    assert d["occupancy_count"] is None and d["busyness"] == "unknown"
+    assert "No simulated value" in d["busyness_basis"]
 
 
 def test_cod_history_keeps_source_timestamps():
@@ -289,17 +305,14 @@ def test_static_export_has_no_codes_or_tokens():
 # ---------- planner data (/api/campus) ----------
 def test_campus_places_are_synthetic_campus_only():
     data = client.get("/api/campus").json()
-    assert data["label"] == "Demo · Synthetic campus data"
+    assert data["label"] == "Demo · Simulated campus data"
     assert data["places"] and all(p["data_mode"] == "synthetic" for p in data["places"])
     assert COD not in {p["facility_id"] for p in data["places"]}
     assert data["travel_basis"] == "Sample walking time"
 
 
-def test_campus_hours_closures_and_amenities_are_labelled():
+def test_campus_hours_and_amenities_are_labelled():
     places = {p["place_id"]: p for p in client.get("/api/campus").json()["places"]}
-    basement = places["fitrec-synthetic:basketball-court-basement"]
-    assert basement["closures"] == [{"start": "19:00", "end": "21:00", "source": "sample schedule",
-                                     "reason": "Reserved: Intramural basketball (sample)"}]
     assert places["fenway-dining-synthetic"]["hours"] is None
     assert places["fenway-dining-synthetic"]["hours_basis"] == "unknown"
     assert places["mugar-synthetic"]["hours_basis"] == "illustrative"

@@ -182,7 +182,7 @@ def test_loader_keeps_offsets_and_no_campus_attributes(tmp_path):
     g = fixture_gym(tmp_path)
     assert g.facility_id == GYM and g.facility_name == "Campus Gym — Historical Reference"
     assert (g.category, g.data_mode, g.capacity, g.timezone) == ("fitness", "historical_playback", None, None)
-    assert not g.campus_eligible and g.amenities == [] and g.areas == []
+    assert not g.campus_eligible and g.amenities == []
     assert g.measurement_method == "unspecified"
     assert g.days[date(2016, 2, 1)][0][0].utcoffset() == timedelta(hours=-8)
     assert date(2016, 3, 13) not in g.days                       # offset change day left out

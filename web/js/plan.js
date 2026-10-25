@@ -318,10 +318,13 @@ function buttonText(r) {
 }
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-const MODE = { synthetic: ["Demo", "Synthetic demo data, not a BU measurement"], historical_playback: ["Historical", "Recorded data replayed, not live"], live: ["Live", "Live feed"] };
+const MODE = { synthetic: ["Simulated", "Simulated from outside data or a model, not a BU measurement"], historical_playback: ["Historical", "Recorded data replayed, not live"], live: ["Live", "Live feed"] };
+/** Data-mode chip; for simulated places it links to Sources & Simulation. */
 const modeChip = (place) => {
   const [text, title] = MODE[place.data_mode] ?? [place.data_mode, ""];
-  return `<span class="chip-mode" title="${esc(title)}">${esc(text)}</span>`;
+  return place.data_mode === "synthetic"
+    ? `<a class="chip-mode chip-link" href="#/sources" title="${esc(title)}">${esc(text)}</a>`
+    : `<span class="chip-mode" title="${esc(title)}">${esc(text)}</span>`;
 };
 
 function resultsHTML(r, campus) {
@@ -378,7 +381,7 @@ function resultsHTML(r, campus) {
       <ul class="list">${r.excluded.map(excludedRow).join("")}</ul></details>` : "";
 
   return `${body}${check}${excluded}
-    <p class="fineprint">${icon("info", 14)} Suggestions, not reservations. <a href="#/about">About this data</a></p>`;
+    <p class="fineprint">${icon("info", 14)} Suggestions, not reservations. Busyness is simulated: <a href="#/sources">Sources &amp; Simulation</a></p>`;
 }
 
 const excludedRow = (e) => `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(e.place.name)}</span>
@@ -409,13 +412,12 @@ function card(o, { req, campus, hero = false, featured = null, reason = null }) 
     ...(toName ? [[`At ${toName}`, fmtTime(o.arriveNext)]] : []),
     ["Next commitment", fmtTime(o.windowEnd)],
   ] : [];
-  const scope = o.place.area_id ? "Counts people in this area, not free equipment." : "Counts the whole building, not free seats or equipment.";
+  const scope = "Counts the whole building, not free seats, courts or equipment.";
 
   return `<li class="rec${hero ? " rec-hero" : ""}">
     <div class="rec-top">${badge}${modeChip(o.place)}
       <a class="rec-link" href="#/place/${encodeURIComponent(o.place.facility_id)}">View place ${icon("chevron", 14)}</a></div>
     <h3 class="rec-name">${esc(o.place.name)}</h3>
-    ${o.place.area_id ? `<p class="rec-sub">${esc(o.place.facility_name)}</p>` : ""}
     <div class="stats">${time}${walk}</div>
     <div class="rec-busy">${level(o.busy.level, busy.label)}</div>
     ${why ? `<p class="rec-reason">${esc(why)}</p>` : ""}
