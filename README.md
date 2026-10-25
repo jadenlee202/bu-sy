@@ -136,6 +136,12 @@ a visible default under **Preferences**. Or open **Try a sample** (80 free minut
 Mugar to a class at Warren Towers). The other samples show a best match chosen on evidence (*study, outlets needed*) and a
 window where nothing fits, with a one-tap fix the engine has checked.
 
+**Minimal prototype** (branch `proto/minimal-brownstone`): open `http://localhost:8000/proto.html`. The planner as
+one sentence ("I have **1 hr** to **study**, starting from **Mugar Library**"), in the Brownstone palette, with three
+tabs (Plan, Schedule, Explore), a first-run guide, press feedback and page transitions (off under reduced motion).
+It uses the same engine, data, verified hours, `.ics` import and saved club meetings as the main app, so both see
+the same schedule. Its own settings (onboarding, access, start and next stop) live under `busy.proto.v1` in this browser.
+
 **People counter** (camera, on-device): open `http://localhost:8000/counter/`. It counts people crossing a line
 and never uploads video. It's a prototype for producing real counts; nothing in the planner uses it yet.
 Setup, model download and how it works: [`web/counter/README.md`](web/counter/README.md).
@@ -398,6 +404,7 @@ web/       the site: index.html, styles.css, js/
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
            counter/      on-device people counter (detector, tracker, line crossing)
+           proto.html, proto/  minimal one-sentence prototype (Brownstone)
            sw.js, manifest.webmanifest  offline support and install metadata
            vendor/       ical.js (unmodified)
 tests/     test_*.py (pytest), *.test.mjs (node --test), browser/*.spec.js (Playwright)
