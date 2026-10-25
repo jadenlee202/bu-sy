@@ -6,13 +6,12 @@ Endpoint shapes follow the shared brief:
     GET  /api/facilities/{id}/history
     GET  /api/campus                                   (planner data: places, sample hours + walking times)
     GET  /api/sources                                  (how each campus place is simulated, with citations)
-    GET  /api/schedule, /api/programs                  (sample official schedule)
     GET  /api/community-events                         (unofficial, student-run)
     POST /api/community-events, /{id}/join, /{id}/leave, /{id}/cancel
 
 How it works
     1. sources.py loads data/campus_simulation_occupancy.csv (SIMULATED: one demo
-       Monday every 15 min; FitRec by area driven by a real non-BU campus gym, dining
+       Monday every 15 min; FitRec as one building driven by a real non-BU campus gym, dining
        + Mugar modeled; provenance in data/simulation_provenance.json) and
        data/clean_cod_occupancy.csv (REAL office events from COD) and, when
        imported, data/clean_campus_gym_occupancy.csv (REAL counts from a non-BU
@@ -22,8 +21,8 @@ How it works
        The latest observation at or before it is shown; before the first one,
        or after the recorded window, occupancy is unavailable (None), never zero.
     3. Busyness = count / illustrative capacity (synthetic) or count / the
-       place's typical high (COD, gym: 95th time-weighted percentile). FitRec weight
-       rooms and basketball courts divide by a crowd tolerance of 1.25.
+       place's typical high (COD, gym: 95th time-weighted percentile). FitRec is one
+       building-level count: no court, pool, room or reservation is tracked.
        Demo thresholds: quiet < 40%, moderate < 75%, busy >= 75%.
     4. Planner ("What fits now?"): /api/campus returns normalized, validated
        planner data (campus.py). The rules that turn a free window into
@@ -52,7 +51,6 @@ from pydantic import BaseModel
 import community_events as ce
 from campus import Campus, load_campus
 from analytics import THRESHOLD_NOTE, latest_at
-from schedule_data import CLUB_SPORTS, INTRAMURALS, SCHEDULE
 from sources import Facility, load_all, load_provenance
 
 app = FastAPI(title="BU-sy API (synthetic campus demo + COD historical playback)")
@@ -78,37 +76,6 @@ class Busyness(str, Enum):
     moderate = "moderate"
     busy = "busy"
     unknown = "unknown"
-
-
-class EventType(str, Enum):
-    club_sport = "club_sport"
-    intramural = "intramural"
-    class_ = "class"
-
-
-class Event(BaseModel):
-    id: str
-    title: str
-    type: EventType
-    area_ids: list[str]
-    day_of_week: int  # 0 = Monday
-    start: time
-    end: time
-    source: str = "sample"
-
-
-class AreaEstimate(BaseModel):
-    area_id: str
-    name: str
-    category: str
-    estimate_basis: Literal["synthetic_csv"]
-    crowd_tolerance: float     # > 1: people accept a bigger crowd here
-    estimated_occupancy: Optional[int]
-    capacity: int              # illustrative
-    busyness: Busyness
-    busyness_basis: str
-    status: Literal["open", "reserved"]
-    current_event: Optional[Event]
 
 
 class SimulationRef(BaseModel):
@@ -139,10 +106,6 @@ class FacilitySummary(BaseModel):
     amenities: list[str]
 
 
-class FacilityDetail(FacilitySummary):
-    areas: list[AreaEstimate]  # FitRec only; empty when occupancy is unavailable
-
-
 class Observation(BaseModel):
     observed_at: datetime
     occupancy_count: int
@@ -169,15 +132,6 @@ class WeekdayProfile(BaseModel):
     hours: list[TypicalHour]
 
 
-class AreaHistory(BaseModel):
-    area_id: str
-    name: str
-    category: str
-    capacity: int
-    crowd_tolerance: float
-    observations: list[Observation]
-
-
 class DayHistory(BaseModel):
     facility_id: str
     day: date
@@ -193,7 +147,6 @@ class DayHistory(BaseModel):
     hourly: list[HourBucket]
     typical: Optional[list[HourBucket]]   # same-weekday historical average (COD, gym)
     typical_label: Optional[str]
-    areas: list[AreaHistory]
     # Historical references (empty/None for synthetic places)
     notice: Optional[str] = None
     busyness_label: Optional[str] = None
@@ -253,17 +206,6 @@ def basis_text(f: Facility, count: Optional[int]) -> str:
     return f"{count:,} people ({pct:.0%} of typical high); {f.reference_note}; {THRESHOLD_NOTE}"
 
 
-def active_event(area_id: str, when: datetime) -> Optional[Event]:
-    for e in SCHEDULE:
-        if (
-            area_id in e["area_ids"]
-            and e["day_of_week"] == when.weekday()
-            and e["start"] <= when.time() < e["end"]
-        ):
-            return Event(**e)
-    return None
-
-
 def facility_fields(f: Facility, tod: time) -> dict:
     day = f.default_day
     playback_at = f.at(day, tod)
@@ -290,35 +232,6 @@ def facility_fields(f: Facility, tod: time) -> dict:
         opening_hours=None,
         amenities=f.amenities,
     )
-
-
-def build_areas(f: Facility, playback_at: datetime) -> list[AreaEstimate]:
-    end = f.coverage_end(playback_at.date())
-    areas = []
-    for a in f.areas:
-        obs = latest_at(a.series, playback_at, end, f.max_hold)
-        occ = obs[1] if obs else None
-        event = active_event(a.area_id, playback_at)
-        ratio = occ / a.capacity if occ is not None else None
-        areas.append(AreaEstimate(
-            area_id=a.area_id,
-            name=a.name,
-            category=a.category,
-            estimate_basis="synthetic_csv",
-            crowd_tolerance=a.crowd_tolerance,
-            estimated_occupancy=occ,
-            capacity=a.capacity,
-            busyness=a.level(occ) if occ is not None else Busyness.unknown,
-            busyness_basis=(
-                "No data for this time" if occ is None else
-                f"Synthetic: {occ:,} of illustrative capacity {a.capacity:,} ({ratio:.0%})"
-                + (f", crowd tolerance x{a.crowd_tolerance}" if a.crowd_tolerance != 1.0 else "")
-                + f"; {THRESHOLD_NOTE}"
-            ),
-            status="reserved" if event else "open",
-            current_event=event,
-        ))
-    return areas
 
 
 def buckets(f: Facility, values: list[Optional[float]]) -> list[HourBucket]:
@@ -359,12 +272,10 @@ def list_facilities(at: Optional[str] = Query(None, description="HH:MM or ISO da
     return [FacilitySummary(**facility_fields(f, tod)) for f in FACILITIES.values()]
 
 
-@app.get("/api/facilities/{facility_id}", response_model=FacilityDetail)
+@app.get("/api/facilities/{facility_id}", response_model=FacilitySummary)
 def get_facility(facility_id: str, at: Optional[str] = Query(None, description="HH:MM or ISO datetime")):
     f = get_facility_or_404(facility_id)
-    fields = facility_fields(f, resolve_time_of_day(at))
-    areas = build_areas(f, fields["playback_at"]) if fields["occupancy_count"] is not None else []
-    return FacilityDetail(**fields, areas=areas)
+    return FacilitySummary(**facility_fields(f, resolve_time_of_day(at)))
 
 
 @app.get("/api/facilities/{facility_id}/history", response_model=DayHistory)
@@ -397,17 +308,6 @@ def get_history(facility_id: str, on: Optional[date] = Query(None, alias="date")
         hourly=buckets(f, f.hourly(day)),
         typical=buckets(f, typical) if typical else None,
         typical_label=typical_label(f, day.weekday()) if typical else None,
-        areas=[
-            AreaHistory(
-                area_id=a.area_id, name=a.name, category=a.category,
-                capacity=a.capacity, crowd_tolerance=a.crowd_tolerance,
-                observations=[
-                    Observation(observed_at=t, occupancy_count=c, busyness=a.level(c))
-                    for t, c in a.series
-                ],
-            )
-            for a in f.areas
-        ],
         notice=f.notice,
         busyness_label=f.busyness_label,
         simulation=f.simulation,
@@ -430,27 +330,6 @@ def get_campus():
 def get_sources():
     """Datasets, dataset-to-place mappings, transformations and limits behind the simulated campus places."""
     return PROVENANCE
-
-
-@app.get("/api/schedule", response_model=list[Event])
-def get_schedule(
-    area_id: Optional[str] = None,
-    event_type: Optional[EventType] = Query(None, alias="type"),
-    day: Optional[int] = Query(None, ge=0, le=6, description="0 = Monday"),
-):
-    events = SCHEDULE
-    if area_id:
-        events = [e for e in events if area_id in e["area_ids"]]
-    if event_type:
-        events = [e for e in events if e["type"] == event_type.value]
-    if day is not None:
-        events = [e for e in events if e["day_of_week"] == day]
-    return [Event(**e) for e in events]
-
-
-@app.get("/api/programs")
-def get_programs():
-    return {"club_sports": CLUB_SPORTS, "intramurals": INTRAMURALS}
 
 
 # ---------- community events (unofficial) ----------

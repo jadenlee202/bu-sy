@@ -15,9 +15,9 @@ const ACTIVITIES = [
   { id: "workout", label: "Work out", verb: "work out", noun: "workout", default_min: 35 },
 ];
 const place = (id, over = {}) => ({
-  place_id: id, name: id, facility_id: id, facility_name: id, area_id: null, location_id: "b",
+  place_id: id, name: id, facility_id: id, facility_name: id, location_id: "b",
   activities: ["workout"], data_mode: "synthetic", hours: [["06:00", "24:00"]], hours_basis: "illustrative",
-  closures: [], amenities: {}, amenities_basis: "illustrative", ...over,
+  amenities: {}, amenities_basis: "illustrative", ...over,
 });
 const makeCampus = (places) => ({
   label: "Demo · Synthetic campus data", default_buffer: 10, activities: ACTIVITIES,
@@ -29,7 +29,7 @@ const makeCampus = (places) => ({
   travel_basis: "Sample walking time", places, scenarios: [],
 });
 const hist = (count, busyness = "quiet") => ({
-  coverage_start: "08:00:00", coverage_end: "23:00:00", capacity: 100, areas: [],
+  coverage_start: "08:00:00", coverage_end: "23:00:00", capacity: 100,
   observations: count == null ? [] : [{ observed_at: "2026-10-19T08:00:00", occupancy_count: count, busyness }],
 });
 const req = (over = {}) => ({
@@ -107,13 +107,6 @@ test("buffer is protected before the next commitment", () => {
 });
 
 // ---------- hours ----------
-test("known closure during the visit excludes the place", () => {
-  const r = one({}, { closures: [{ start: "15:20", end: "16:00", reason: "Reserved: Intramurals (sample)", source: "sample schedule" }] });
-  assert.equal(r.options.length, 0);
-  assert.equal(r.excluded[0].code, "closed");
-  assert.match(r.excluded[0].reason, /Reserved: Intramurals \(sample\), 3:20 PM–4 PM/);
-});
-
 test("closing before the minimum fits excludes; closing after it shortens the visit", () => {
   assert.equal(one({}, { hours: [["06:00", "15:30"]] }).excluded[0].code, "closed");
   const r = one({ minutes: 90 }, { hours: [["06:00", "16:00"]] });

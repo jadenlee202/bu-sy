@@ -91,135 +91,8 @@
       "targets": [
         {
           "facility_id": "fitrec-synthetic",
-          "area_id": null,
-          "name": "FitRec (building total)",
+          "name": "FitRec (whole building)",
           "capacity": 870
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "weight-room-floor-1",
-          "name": "Weight Room · Floor 1",
-          "capacity": 160
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "weight-room-floor-2",
-          "name": "Weight Room · Floor 2",
-          "capacity": 140
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "basketball-court-floor-2",
-          "name": "Basketball · Floor 2 (4 courts)",
-          "capacity": 60
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "basketball-court-basement",
-          "name": "Basketball · Basement (3 courts)",
-          "capacity": 45
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "competition-pool",
-          "name": "Competition Pool",
-          "capacity": 50
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "recreation-pool-hot-tub",
-          "name": "Rec Pool & Hot Tub",
-          "capacity": 45
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "biking-area",
-          "name": "Biking Area",
-          "capacity": 35
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "squash-court-1",
-          "name": "Squash Court 1",
-          "capacity": 4
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "squash-court-2",
-          "name": "Squash Court 2",
-          "capacity": 4
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "racquetball-room-1",
-          "name": "Racquetball 1",
-          "capacity": 4
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "racquetball-room-2",
-          "name": "Racquetball 2",
-          "capacity": 4
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "racquetball-room-3",
-          "name": "Racquetball 3",
-          "capacity": 4
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "climbing-wall",
-          "name": "Climbing Wall",
-          "capacity": 30
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "multipurpose-room-1",
-          "name": "Multipurpose Room 1",
-          "capacity": 35
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "multipurpose-room-2",
-          "name": "Multipurpose Room 2",
-          "capacity": 35
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "multipurpose-room-3",
-          "name": "Multipurpose Room 3",
-          "capacity": 35
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "multipurpose-room-4",
-          "name": "Multipurpose Room 4",
-          "capacity": 35
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "multipurpose-room-5",
-          "name": "Multipurpose Room 5",
-          "capacity": 35
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "multipurpose-room-6",
-          "name": "Multipurpose Room 6",
-          "capacity": 35
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "multipurpose-room-7",
-          "name": "Multipurpose Room 7",
-          "capacity": 35
-        },
-        {
-          "facility_id": "fitrec-synthetic",
-          "area_id": "dance-theatre",
-          "name": "Dance Theatre",
-          "capacity": 40
         }
       ],
       "window": [
@@ -244,17 +117,15 @@
         "Take the gym's readings for 2016-12-05 (source local time, offset kept in the source file).",
         "Every 15 minutes from 6:00 to 24:00 (FitRec's sample hours), take the latest reading at or before that time if it is at most 30 minutes old; otherwise leave the slot empty (never zero).",
         "Place each slot at the same clock time on the demo Monday (a relabelling, not a timezone conversion).",
-        "Multiply by 9.0625: the gym's typical high (72 people, its 95% time-weighted percentile) becomes 75% of FitRec's illustrative capacity (870). Round to whole people.",
-        "Split each FitRec total across the 21 areas in proportion to their illustrative capacities (largest-remainder rounding), so the areas always add up to the building total."
+        "Multiply by 9.0625: the gym's typical high (72 people, its 95% time-weighted percentile) becomes 75% of FitRec's illustrative capacity (870). Round to whole people."
       ],
       "assumptions": [
         "FitRec's time-of-day pattern resembles this gym's on one in-semester Monday.",
-        "Area differences are modeled: every area gets the same share of the total all day, so areas don't have independent patterns and never differ in relative busyness except through crowd tolerance.",
         "The scale is a design choice for the demo, not FitRec's real size or capacity."
       ],
       "units": "people (simulated)",
       "limits": [
-        "Not a measurement of FitRec or any area; no queue, equipment or court availability can be read from it.",
+        "One count for the whole building, not a measurement of FitRec: it can't say which court, pool or room is in use, and no queue, equipment or court availability can be read from it.",
         "One source day: it shows a plausible pattern, not BU's typical traffic or a forecast.",
         "The source gym's counting method isn't documented."
       ]
@@ -267,28 +138,24 @@
       "targets": [
         {
           "facility_id": "warren-dining-synthetic",
-          "area_id": null,
           "name": "Warren Towers Dining",
           "capacity": 400,
           "hours": "07:00-23:00 (illustrative sample hours)"
         },
         {
           "facility_id": "marciano-dining-synthetic",
-          "area_id": null,
           "name": "Marciano Commons",
           "capacity": 400,
           "hours": "07:00-23:00 (illustrative sample hours)"
         },
         {
           "facility_id": "west-dining-synthetic",
-          "area_id": null,
           "name": "West Campus Dining",
           "capacity": 400,
           "hours": "07:00-23:00 (illustrative sample hours)"
         },
         {
           "facility_id": "fenway-dining-synthetic",
-          "area_id": null,
           "name": "Fenway Dining",
           "capacity": 200,
           "hours": "no sample hours; simulated 07:00-23:00 like the other halls"
@@ -375,7 +242,6 @@
       "targets": [
         {
           "facility_id": "mugar-synthetic",
-          "area_id": null,
           "name": "Mugar Library",
           "capacity": 600,
           "hours": "08:00-24:00 (illustrative sample hours)"
@@ -439,8 +305,8 @@
     }
   ],
   "illustrative": [
-    "Capacities (FitRec areas, dining halls, Mugar) and the busyness thresholds (quiet under 40%, busy from 75%).",
-    "Opening hours, closures and reservations (sample schedule), and study amenities.",
+    "Capacities (FitRec, dining halls, Mugar) and the busyness thresholds (quiet under 40%, busy from 75%).",
+    "Opening hours, the FitRec amenity list and study amenities.",
     "Walking times between demo locations (not routed).",
     "The demo Monday and its clock."
   ],

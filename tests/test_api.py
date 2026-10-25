@@ -91,7 +91,7 @@ def test_facility_list_and_playback():
 
 def test_unavailable_outside_simulated_hours():
     d = client.get("/api/facilities/fitrec-synthetic?at=05:30").json()   # simulated from 6 AM (sample hours)
-    assert d["occupancy_count"] is None and d["busyness"] == "unknown" and d["areas"] == []
+    assert d["occupancy_count"] is None and d["busyness"] == "unknown"
     assert "No simulated value" in d["busyness_basis"]
 
 
@@ -311,11 +311,8 @@ def test_campus_places_are_synthetic_campus_only():
     assert data["travel_basis"] == "Sample walking time"
 
 
-def test_campus_hours_closures_and_amenities_are_labelled():
+def test_campus_hours_and_amenities_are_labelled():
     places = {p["place_id"]: p for p in client.get("/api/campus").json()["places"]}
-    basement = places["fitrec-synthetic:basketball-court-basement"]
-    assert basement["closures"] == [{"start": "19:00", "end": "21:00", "source": "sample schedule",
-                                     "reason": "Reserved: Intramural basketball (sample)"}]
     assert places["fenway-dining-synthetic"]["hours"] is None
     assert places["fenway-dining-synthetic"]["hours_basis"] == "unknown"
     assert places["mugar-synthetic"]["hours_basis"] == "illustrative"

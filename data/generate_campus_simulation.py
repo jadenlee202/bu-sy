@@ -1,6 +1,6 @@
 """Generate BU-sy's simulated campus occupancy and its provenance.
 
-The campus places (FitRec and its areas, four dining halls, Mugar Library) are
+The campus places (FitRec as one building, four dining halls, Mugar Library) are
 BU-named *simulations*. Nothing here measures BU. Each simulation is either:
 
   reference_dataset  driven by real observations from somewhere else (the campus
@@ -11,7 +11,7 @@ BU-named *simulations*. Nothing here measures BU. Each simulation is either:
 Inputs (all local; nothing is downloaded here):
     clean_campus_gym_occupancy.csv, campus_gym_import.json   from import_campus_gym.py
     campus_sample.json                                       illustrative opening hours
-    server/sources.py                                        illustrative capacities and area list
+    server/sources.py                                        illustrative capacities
 Outputs:
     campus_simulation_occupancy.csv   facility_id,timestamp,occupancy_count on the demo clock
     simulation_provenance.json        every target, source, transformation, parameter, limit
@@ -28,7 +28,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "server"))
-from sources import FITREC_AREAS, OTHER_SYNTHETIC  # noqa: E402  (illustrative capacities live there)
+from sources import FITREC_CAPACITY, FITREC_SERIES, OTHER_SYNTHETIC  # noqa: E402  (illustrative capacities live there)
 
 GYM_CSV = HERE / "clean_campus_gym_occupancy.csv"
 GYM_IMPORT = HERE / "campus_gym_import.json"
@@ -76,16 +76,6 @@ def interpolate(knots, hour: float) -> float:
     return knots[-1][1]
 
 
-def allocate(total: int, weights: dict[str, int]) -> dict[str, int]:
-    """Split a whole number by weight (largest remainder): parts are >= 0 and add up to `total`."""
-    whole = sum(weights.values())
-    raw = {k: total * w / whole for k, w in weights.items()}
-    parts = {k: int(v) for k, v in raw.items()}
-    for k in sorted(raw, key=lambda k: (-(raw[k] - parts[k]), k))[: total - sum(parts.values())]:
-        parts[k] += 1
-    return parts
-
-
 # ---------- reference: the campus gym ----------
 def gym_day_profile(rows, hold_min: int, window) -> dict[int, int]:
     """Source count at each grid minute of the source day: the latest reading at or before it,
@@ -118,16 +108,14 @@ def generate():
     out_rows = []
 
     # FitRec: one scale factor from the gym's typical high to FitRec's busy threshold.
-    capacity = sum(a[3] for a in FITREC_AREAS.values())
+    capacity = FITREC_CAPACITY
     from sources import GYM_REFERENCE_PERCENTILE  # noqa: E402
     gym_reference = reference_from_import(meta)
     scale = round(BUSY_SHARE * capacity / gym_reference, 4)
     fit_window = window_for(hours["fitrec-synthetic"])
     profile = gym_day_profile(gym_rows, hold, fit_window)
-    weights = {suffix: a[3] for suffix, a in FITREC_AREAS.items()}
     for m, count in profile.items():
-        for suffix, n in allocate(round(count * scale), weights).items():
-            out_rows.append((f"SYN_BU_FITREC_{suffix}", demo_time(m), n))
+        out_rows.append((FITREC_SERIES, demo_time(m), round(count * scale)))
 
     # Dining halls and Mugar: modeled, no dataset.
     for suffix, (fid, _name, category, cap) in OTHER_SYNTHETIC.items():
@@ -153,8 +141,6 @@ def reference_from_import(meta) -> int:
 # ---------- provenance ----------
 def build_provenance(meta, campus, hours, scale, capacity, gym_reference, profile, offsets, fit_window, pct):
     src = meta["source"]
-    areas = [{"facility_id": "fitrec-synthetic", "area_id": a[0], "name": a[1], "capacity": a[3]}
-             for a in FITREC_AREAS.values()]
     dining = [(fid, name, cap) for fid, name, cat, cap in OTHER_SYNTHETIC.values() if cat == "dining"]
     mugar = next((fid, name, cap) for fid, name, cat, cap in OTHER_SYNTHETIC.values() if cat == "library")
     hours_note = lambda fid: (f"{hours[fid][0][0]}-{hours[fid][0][1]} (illustrative sample hours)" if hours[fid]  # noqa: E731
@@ -236,8 +222,8 @@ def build_provenance(meta, campus, hours, scale, capacity, gym_reference, profil
             {
                 "id": "fitrec-from-campus-gym", "basis": "reference_dataset", "dataset_id": "campus-gym",
                 "label": "Simulated from a real campus gym (not BU)",
-                "targets": [{"facility_id": "fitrec-synthetic", "area_id": None, "name": "FitRec (building total)",
-                             "capacity": capacity}] + areas,
+                "targets": [{"facility_id": "fitrec-synthetic", "name": "FitRec (whole building)",
+                             "capacity": capacity}],
                 "window": list(fit_window),
                 "source_fields": ["number_people", "date"],
                 "source_period": f"{GYM_SOURCE_DAY}, a Monday ({', '.join(offsets)}), the gym's default playback day",
@@ -252,18 +238,15 @@ def build_provenance(meta, campus, hours, scale, capacity, gym_reference, profil
                     "Place each slot at the same clock time on the demo Monday (a relabelling, not a timezone conversion).",
                     f"Multiply by {scale}: the gym's typical high ({gym_reference} people, its {pct:.0%} time-weighted "
                     f"percentile) becomes {BUSY_SHARE:.0%} of FitRec's illustrative capacity ({capacity:,}). Round to whole people.",
-                    "Split each FitRec total across the 21 areas in proportion to their illustrative capacities "
-                    "(largest-remainder rounding), so the areas always add up to the building total.",
                 ],
                 "assumptions": [
                     "FitRec's time-of-day pattern resembles this gym's on one in-semester Monday.",
-                    "Area differences are modeled: every area gets the same share of the total all day, so areas don't "
-                    "have independent patterns and never differ in relative busyness except through crowd tolerance.",
                     "The scale is a design choice for the demo, not FitRec's real size or capacity.",
                 ],
                 "units": "people (simulated)",
                 "limits": [
-                    "Not a measurement of FitRec or any area; no queue, equipment or court availability can be read from it.",
+                    "One count for the whole building, not a measurement of FitRec: it can't say which court, pool or "
+                    "room is in use, and no queue, equipment or court availability can be read from it.",
                     "One source day: it shows a plausible pattern, not BU's typical traffic or a forecast.",
                     "The source gym's counting method isn't documented.",
                 ],
@@ -271,7 +254,7 @@ def build_provenance(meta, campus, hours, scale, capacity, gym_reference, profil
             {
                 "id": "dining-meal-model", "basis": "modeled", "dataset_id": None,
                 "label": "Modeled (no dataset)",
-                "targets": [{"facility_id": fid, "area_id": None, "name": name, "capacity": cap, "hours": hours_note(fid)}
+                "targets": [{"facility_id": fid, "name": name, "capacity": cap, "hours": hours_note(fid)}
                             for fid, name, cap in dining],
                 "window": list(FALLBACK_WINDOW),
                 "source_fields": [], "source_period": None,
@@ -296,7 +279,7 @@ def build_provenance(meta, campus, hours, scale, capacity, gym_reference, profil
             {
                 "id": "mugar-library-model", "basis": "modeled", "dataset_id": None,
                 "label": "Modeled (no dataset)",
-                "targets": [{"facility_id": mugar[0], "area_id": None, "name": mugar[1], "capacity": mugar[2],
+                "targets": [{"facility_id": mugar[0], "name": mugar[1], "capacity": mugar[2],
                              "hours": hours_note(mugar[0])}],
                 "window": list(window_for(hours[mugar[0]])),
                 "source_fields": [], "source_period": None,
@@ -315,8 +298,8 @@ def build_provenance(meta, campus, hours, scale, capacity, gym_reference, profil
             },
         ],
         "illustrative": [
-            "Capacities (FitRec areas, dining halls, Mugar) and the busyness thresholds (quiet under 40%, busy from 75%).",
-            "Opening hours, closures and reservations (sample schedule), and study amenities.",
+            "Capacities (FitRec, dining halls, Mugar) and the busyness thresholds (quiet under 40%, busy from 75%).",
+            "Opening hours, the FitRec amenity list and study amenities.",
             "Walking times between demo locations (not routed).",
             "The demo Monday and its clock.",
         ],

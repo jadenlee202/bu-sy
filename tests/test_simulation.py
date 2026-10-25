@@ -6,7 +6,6 @@ Run: python -m pytest
 import csv
 import json
 import sys
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -54,13 +53,6 @@ def test_demo_clock_is_a_relabelling_not_a_timezone_conversion():
     assert first_fitrec == "2026-10-19T06:00:00"              # FitRec's sample hours start at 6 AM
 
 
-def test_allocation_adds_up_and_never_goes_negative():
-    for total in (0, 1, 7, 372, 869):
-        parts = gen.allocate(total, {"a": 160, "b": 4, "c": 35, "d": 4})
-        assert sum(parts.values()) == total and min(parts.values()) >= 0
-    assert gen.allocate(5, {"x": 1, "y": 1}) == gen.allocate(5, {"x": 1, "y": 1})
-
-
 def test_interpolation_follows_the_documented_knots():
     assert gen.interpolate(gen.DINING_KNOTS, 12) == 0.75
     assert gen.interpolate(gen.DINING_KNOTS, 12.5) == pytest.approx(0.70)
@@ -83,31 +75,23 @@ def test_counts_are_whole_and_nonnegative():
     assert rows and all(c >= 0 for _, _, c in rows)
 
 
-def test_fitrec_areas_add_up_to_the_scaled_gym_count():
+def test_fitrec_is_one_building_count_equal_to_the_scaled_gym_count():
     sim = next(s for s in PROV["simulations"] if s["id"] == "fitrec-from-campus-gym")
     meta, gym_rows, _ = gen.load_gym()
     profile = gen.gym_day_profile(gym_rows, meta["gap_policy"]["max_hold_minutes"], tuple(sim["window"]))
-    totals = defaultdict(int)
-    for fid, t, c in sim_rows():
-        if fid.startswith("SYN_BU_FITREC"):
-            totals[t] += c
-    assert {t: v for t, v in totals.items()} == {
+    fitrec_rows = [(fid, t, c) for fid, t, c in sim_rows() if fid.startswith("SYN_BU_FITREC")]
+    assert {fid for fid, _, _ in fitrec_rows} == {"SYN_BU_FITREC"}     # one series: no courts, pools or rooms
+    assert {t: c for _, t, c in fitrec_rows} == {
         gen.demo_time(m): round(c * sim["parameters"]["scale"]) for m, c in profile.items()}
-    fitrec = main.FACILITIES["fitrec-synthetic"]
-    day = fitrec.default_day
-    for t, total in fitrec.days[day]:
-        assert total == sum(c for a in fitrec.areas for at_, c in a.series if at_ == t)
+    assert sim["targets"] == [{"facility_id": "fitrec-synthetic", "name": "FitRec (whole building)", "capacity": 870}]
 
 
 # ---------- provenance ----------
-def test_every_simulated_place_and_area_has_exactly_one_mapping():
-    targets = [(t["facility_id"], t["area_id"]) for s in PROV["simulations"] for t in s["targets"]]
+def test_every_simulated_place_has_exactly_one_mapping():
+    targets = [t["facility_id"] for s in PROV["simulations"] for t in s["targets"]]
     assert len(targets) == len(set(targets))
-    campus = {fid for fid, f in main.FACILITIES.items() if f.campus_eligible}
-    assert {fid for fid, _ in targets} == campus
-    fitrec_areas = {a.area_id for a in main.FACILITIES["fitrec-synthetic"].areas}
-    assert {area for fid, area in targets if fid == "fitrec-synthetic" and area} == fitrec_areas
-    assert not REFERENCES & {fid for fid, _ in targets}
+    assert set(targets) == {fid for fid, f in main.FACILITIES.items() if f.campus_eligible}
+    assert not REFERENCES & set(targets)
 
 
 def test_mappings_are_complete_and_cite_only_used_datasets():
@@ -135,6 +119,15 @@ def test_api_labels_simulated_places_and_leaves_references_unsimulated():
             assert "Not a BU measurement" in f["source"]
     assert rows["mugar-synthetic"]["simulation"]["basis"] == "modeled"
     assert rows["warren-dining-synthetic"]["source"].startswith("Modeled profile (no dataset)")
+
+
+def test_no_area_schedule_or_reservation_is_served():
+    """FitRec is tracked as one building: no courts, pools, rooms, classes or reservations."""
+    assert "areas" not in client.get("/api/facilities/fitrec-synthetic?at=18:00").json()
+    assert "areas" not in client.get("/api/facilities/fitrec-synthetic/history").json()
+    assert client.get("/api/schedule").status_code == 404 and client.get("/api/programs").status_code == 404
+    places = [p for p in client.get("/api/campus").json()["places"] if p["facility_id"] == "fitrec-synthetic"]
+    assert len(places) == 1 and places[0]["place_id"] == "fitrec-synthetic" and "closures" not in places[0]
 
 
 def test_historical_references_keep_their_own_records():

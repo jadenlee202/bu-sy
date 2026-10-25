@@ -4,7 +4,7 @@ Occupancy inputs and the simulation built from them. Nothing here is live, and n
 
 | File | What it is | Real? |
 |---|---|---|
-| `campus_simulation_occupancy.csv` | Simulated campus places on one demo Monday (2026-10-19), every 15 min: FitRec's 21 areas (from the campus gym), 4 dining halls and Mugar (modeled). Made by `generate_campus_simulation.py`. | **No, simulated** |
+| `campus_simulation_occupancy.csv` | Simulated campus places on one demo Monday (2026-10-19), every 15 min: FitRec as one building (from the campus gym), 4 dining halls and Mugar (modeled). Made by `generate_campus_simulation.py`. | **No, simulated** |
 | `simulation_provenance.json` | Which data drives each simulated place, every step and parameter, limits, citations. | — |
 | `clean_cod_occupancy.csv` | Every valid event from the Clemente conference room in COD, cleaned by `clean_cod.py`. | **Yes**, but an office room, not BU |
 | `sample_10_records.csv` | The first 10 rows of the cleaned COD file (chronological, not random). | Yes |
@@ -107,24 +107,24 @@ Used by "What fits now?". Loaded and validated by `server/campus.py`, then expor
 
 | File | What |
 |---|---|
-| `campus_sample.json` | 6 demo locations; which place supports study / eat / work out (12 places, 7 of them FitRec areas); illustrative opening hours (Fenway Dining deliberately has none, so it shows "check hours"); illustrative study amenities; 3 demo scenarios. |
+| `campus_sample.json` | 6 demo locations; which place supports study / eat / work out (6 places, one per facility; FitRec is one building); illustrative opening hours (Fenway Dining deliberately has none, so it shows "check hours"); illustrative study amenities; 3 demo scenarios. |
 | `sample_travel_times.csv` | Undirected sample walking minutes between those locations. Not routed. West Campus ↔ Fenway is deliberately missing, so it is treated as unknown, never zero. |
 
-Sample-schedule reservations in `server/schedule_data.py` (e.g. intramural basketball 7–9 PM in the
-basement courts) become closures. None of this is verified BU information; replace each file with a
-verified source before a pilot.
+There is no class, intramural or reservation schedule: FitRec is tracked as one building, because no data
+could say which court, pool or room is in use. None of this is verified BU information; replace each file
+with a verified source before a pilot.
 
 ## Simulated campus places
 
 `generate_campus_simulation.py` writes `campus_simulation_occupancy.csv` (one demo Monday, every 15 minutes,
-1,832 rows, same series IDs as before) and `simulation_provenance.json` (every target, source, transformation,
+392 rows; FitRec is the single series `SYN_BU_FITREC`) and `simulation_provenance.json` (every target, source, transformation,
 parameter and limit; served at `/api/sources`, exported to `web/data/sources.json`, shown on the app's
 **Sources & Simulation** page). It reads only local files and never downloads. The hand-authored
 `bu_campus_synthetic_occupancy.csv` it replaces is retired (still in git history).
 
 | Place | Basis | Source |
 |---|---|---|
-| FitRec (total) and its 21 areas | **Reference dataset** | Campus gym, 2016-12-05 (a Monday), rescaled |
+| FitRec (whole building) | **Reference dataset** | Campus gym, 2016-12-05 (a Monday), rescaled |
 | Warren, Marciano, West Campus, Fenway dining | **Modeled, no dataset** | Meal-window profile |
 | Mugar Library | **Modeled, no dataset** | Study-day profile |
 
@@ -133,8 +133,8 @@ source file). Every 15 minutes from 6 AM to midnight (FitRec's sample hours) tak
 before that time if it is at most 30 minutes old, else leave the slot empty (never zero). Put each slot at
 the same clock time on the demo Monday: a relabelling, not a timezone conversion. Multiply by 9.0625, which
 maps the gym's typical high (72 people) to 75% of FitRec's illustrative capacity (870), the busy threshold.
-Split each total across the 21 areas by illustrative capacity (largest-remainder rounding), so the areas
-always add up to the building. Area differences are therefore modeled, not measured.
+FitRec is one building-level count: there are no per-area series (courts, pools, rooms), because nothing
+in the data could say where in the building people are.
 
 **Dining and Mugar** use documented (hour, share of illustrative capacity) knots, linearly interpolated,
 times each place's illustrative capacity. They carry no dataset citation because none was used.

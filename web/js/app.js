@@ -54,7 +54,7 @@ function quieterTime(hist, minute) {
  */
 function openingHours(campus, facilityId) {
   const p = campus.places.find((x) => x.facility_id === facilityId && x.hours);
-  return p ? { segs: openSegments({ hours: p.hours, closures: [] }), text: hoursText(p), basis: p.hours_basis } : null;
+  return p ? { segs: openSegments(p), text: hoursText(p), basis: p.hours_basis } : null;
 }
 
 /** Closed at `minute` by those hours: { opens } (null = not again today); null when open or unknown. */
@@ -237,7 +237,6 @@ async function placeView(id) {
         <section class="suggest" id="suggest"></section>
       </div>
       <section class="card place-chart" id="day-card"></section>
-      ${hist.areas.length ? `<section class="card place-areas"><h2>Areas</h2><ul class="list" id="areas"></ul></section>` : ""}
       ${hist.typical_week ? `<section class="card place-week" id="week"></section>` : ""}
     </div>
     <details class="about" id="how"></details>`;
@@ -245,7 +244,6 @@ async function placeView(id) {
 
   const $hero = $view.querySelector("#hero");
   const $suggest = $view.querySelector("#suggest");
-  const $areas = $view.querySelector("#areas");
   const $dayCard = $view.querySelector("#day-card");
   let chart;
 
@@ -290,14 +288,6 @@ async function placeView(id) {
     }</div>`;
 
     chart.mark(Math.floor(state.minute / 60));
-
-    if ($areas) {
-      $areas.innerHTML = hist.areas.map((a) => {
-        const ao = latestAt(a.observations, state.minute, hist.coverage_end);
-        return `<li class="row row-static"><span class="row-main"><span class="row-name">${esc(a.name)}</span></span>
-          <span class="row-count num">${closed ? "" : fmtCount(ao?.occupancy_count)}</span>${level(ao?.busyness ?? (closed ? "closed" : "unknown"))}</li>`;
-      }).join("");
-    }
   };
 
   $view.querySelector("#day")?.addEventListener("change", async (e) => {
@@ -541,10 +531,7 @@ async function newEventView() {
   let places;
   try {
     const facilities = await src.listFacilities();
-    const fitrec = facilities.find((f) => f.category === "fitness" && f.campus_eligible);
-    const areas = fitrec ? (await src.getHistory(fitrec.facility_id)).areas.map((a) => a.name) : [];
-    const others = facilities.filter((f) => f.campus_eligible && f !== fitrec).map((f) => f.facility_name);
-    places = { FitRec: areas, "Elsewhere on campus": [...others, "Somewhere else on campus"] };
+    places = [...facilities.filter((f) => f.campus_eligible).map((f) => f.facility_name), "Somewhere else on campus"];
   } catch (err) {
     $view.innerHTML = `<a class="back" href="#/events">${icon("back", 16)} Meetups</a>${failure(err)}`;
     return {};
@@ -565,9 +552,9 @@ async function newEventView() {
     <form class="form panel" id="new-event" novalidate>
       <label>What<input name="title" required maxlength="${L.title}" placeholder="Basketball run"></label>
       <label>Where<select name="place" required>
-        ${Object.entries(places).map(([group, list]) => `<optgroup label="${esc(group)}">${list.map((p) => `<option>${esc(p)}</option>`).join("")}</optgroup>`).join("")}
+        ${places.map((p) => `<option>${esc(p)}</option>`).join("")}
       </select></label>
-      <label><span>Details <span class="opt">optional</span></span><input name="note" maxlength="${L.note}" placeholder="Court 4, bring a ball"></label>
+      <label><span>Details <span class="opt">optional</span></span><input name="note" maxlength="${L.note}" placeholder="Floor 2 courts, bring a ball"></label>
       <div class="form-row">
         <label>Date<input name="date" type="date" required min="${now.date}" max="${lastDay}" value="${now.date}"></label>
         <label>Start<input name="start" type="time" required value="${pad(nextHour)}:00"></label>
@@ -655,23 +642,18 @@ async function sourcesView(openId) {
   const list = (items, tag = "ul") => `<${tag}>${items.map((t) => `<li>${esc(t)}</li>`).join("")}</${tag}>`;
   const facts = (rows) => `<dl class="facts">${rows.filter(([, v]) => v).map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
 
-  const mapRow = (s, name, extra = "") => {
+  const mapRow = (s, name) => {
     const d = datasets[s.dataset_id];
-    return `<tr><td>${name}${extra}</td><td><span class="basis basis-${esc(s.basis)}">${BASIS[s.basis]}</span></td>
+    return `<tr><td>${name}</td><td><span class="basis basis-${esc(s.basis)}">${BASIS[s.basis]}</span></td>
       <td>${d ? link(d.url, d.title) : "—"}</td><td>${d ? esc(d.original_location) : "—"}</td>
       <td><a href="#/sources/${encodeURIComponent(s.id)}">Steps</a></td></tr>`;
   };
-  const mapping = p.simulations.flatMap((s) => {
-    const whole = s.targets.filter((t) => !t.area_id);
-    const areas = s.targets.filter((t) => t.area_id);
-    return [...whole.map((t) => mapRow(s, esc(t.name))),
-      ...(areas.length ? [mapRow(s, `${areas.length} FitRec areas`, `<details class="inline-more"><summary>List</summary>${list(areas.map((a) => a.name))}</details>`)] : [])];
-  }).join("");
+  const mapping = p.simulations.flatMap((s) => s.targets.map((t) => mapRow(s, esc(t.name)))).join("");
 
   const sim = (s) => {
     const d = datasets[s.dataset_id];
     return `<details class="src-item" id="sim-${esc(s.id)}"${s.id === openId ? " open" : ""}>
-      <summary><span>${esc(s.targets.filter((t) => !t.area_id).map((t) => t.name).join(", "))}</span>
+      <summary><span>${esc(s.targets.map((t) => t.name).join(", "))}</span>
         <span class="basis basis-${esc(s.basis)}">${BASIS[s.basis]}</span></summary>
       <div class="src-body">
         ${facts([

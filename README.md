@@ -78,9 +78,8 @@ isn't counted, and the app says so.
 - it lacks a study need you required (an amenity that isn't listed is treated as unknown, not as present);
 - the sample walking time is missing (unknown, never zero; the same location is zero);
 - there isn't enough time;
-- it is closed or reserved during any part of the visit. Illustrative hours, minus sample-schedule
-  reservations such as intramural basketball 7–9 PM. If a place opens a little later, the visit waits for
-  opening; if it closes early, the unused minutes are shown.
+- it is closed during any part of the visit (illustrative hours). If a place opens a little later, the
+  visit waits for opening; if it closes early, the unused minutes are shown.
 
 **Unknown hours.** A place that fits on time but has no hours is never shown as confirmed. It appears under
 **Hours unknown**.
@@ -130,7 +129,7 @@ preferShortTravel, needs}`.
 
 | File | What | Real? |
 |---|---|---|
-| `data/campus_simulation_occupancy.csv` | one demo Monday every 15 min: FitRec areas (from the campus gym), 4 dining halls and Mugar (modeled); made by `data/generate_campus_simulation.py` | **simulated** |
+| `data/campus_simulation_occupancy.csv` | one demo Monday every 15 min: FitRec as one building (from the campus gym), 4 dining halls and Mugar (modeled); made by `data/generate_campus_simulation.py` | **simulated** |
 | `data/simulation_provenance.json` | dataset-to-place mapping, steps, parameters, limits (also `/api/sources`) | — |
 | `data/campus_sample.json` | which place supports which activity, its location, illustrative hours and amenities, demo scenarios | **illustrative** |
 | `data/sample_travel_times.csv` | sample walking minutes between 6 demo locations (West↔Fenway intentionally missing) | **illustrative** |
@@ -138,7 +137,7 @@ preferShortTravel, needs}`.
 | `data/clean_campus_gym_occupancy.csv` | a non-BU campus gym, imported by `data/import_campus_gym.py` (optional) | real gym data, not BU |
 
 `server/campus.py` validates the planner data at startup:
-- every place must point to an existing campus-eligible (**synthetic**) facility or area, so COD and the
+- every place must point to an existing campus-eligible (**synthetic**) facility, once, so COD and the
   campus gym can't be added (`campus_eligible: false` in the API);
 - times must be valid `HH:MM`, from 00:00 up to 24:00;
 - walking times can't be listed twice and must name known locations;
@@ -215,9 +214,8 @@ DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 |---|---|
 | `GET /api/campus` | planner data: places, activities, illustrative hours/amenities, sample walking times, scenarios |
 | `GET /api/facilities?at=17:30` | all places at a playback time |
-| `GET /api/facilities/{id}?at=18:00` | one place (+ FitRec areas and sample class reservations) |
+| `GET /api/facilities/{id}?at=18:00` | one place |
 | `GET /api/facilities/{id}/history?date=YYYY-MM-DD` | one recorded day: observations, hourly averages, typical profile; historical references add playback days, the gap rule and a weekday × hour grid |
-| `GET /api/schedule`, `GET /api/programs` | **sample** official schedule (placeholders) |
 | `GET/POST /api/community-events`, `POST …/{id}/join`, `…/leave`, `…/cancel` | unofficial student meetups (device ID in the `X-BUsy-Device` header or POST body) |
 
 ## Meetups (unofficial, secondary)
@@ -255,7 +253,9 @@ does **not** protect:
    The campus-gym and COD references show the handling such a feed needs (offsets, gaps, unknown capacity),
    but neither says anything about BU: a pilot needs BU's own data, a documented counting method and an
    agreed capacity or reference.
-2. **Verified hours and closures**, from published schedules, with `hours_basis: "verified"`.
+2. **Verified hours**, from published schedules, with `hours_basis: "verified"`. FitRec is tracked as one
+   building: per-court, pool or room occupancy, classes and reservations aren't modelled, because no data
+   could support them.
 3. **Real walking estimates**, from campus routing data or a maps service, replacing `sample_travel_times.csv`.
 4. **Verified amenities** (outlets, quiet floors) from the facilities themselves.
 5. **Calendar-derived free windows** (opt-in, read-only, processed on device where possible), feeding the

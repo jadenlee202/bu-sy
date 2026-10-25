@@ -17,7 +17,7 @@ cd bu-sy
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt     # macOS/Linux: .venv/bin/python -m pip …
 .venv\Scripts\python -m pytest -q                           # expect 85 passed
-node --test "tests/*.test.mjs"                              # expect 46 passed (or: npm test)
+node --test "tests/*.test.mjs"                              # expect 45 passed (or: npm test)
 ```
 No API keys, accounts or secrets are needed. `.env` files are ignored by git anyway.
 
@@ -48,15 +48,15 @@ don't depend on the time of day or the viewer's timezone (verified with the brow
 API mode gives exactly the same text as static mode (verified).
 
 1. **Quick start.** On "What fits now?", tap **Work out** and **60 min**. With no starting point, the app
-   lists places that *could work* and says travel isn't checked. Pick **Mugar Library** as the starting point:
-   now places *fit*, with the walk counted. Open **Preferences** to show the visible defaults (start time from
+   lists FitRec as *could work* and says travel isn't checked. Pick **Mugar Library** as the starting point:
+   now it *fits*, with the walk counted. Open **Preferences** to show the visible defaults (start time from
    the demo clock, minimum, 10-min buffer, ranking). Point out the persistent **Demo data** card (sidebar) or
    **Demo** pill (phone).
 2. Open **Try a sample** under the form and choose *70 free minutes, workout, then class* (3 PM, Mugar Library →
    class at Warren Towers).
-   - Expect **"7 places fit · top 3"** and *"Fits your 70-minute window: 10 min there + 36-minute workout +
-     14 min onward + 10-minute buffer."*
-   - There's no "Best match": the top card says the options are tied and listed by name.
+   - Expect **FitRec**, *"The only place that fits"* (quiet), and *"Fits your 70-minute window: 10 min there +
+     36-minute workout + 14 min onward + 10-minute buffer."* FitRec is one building-level count: courts, pools,
+     rooms and reservations aren't tracked.
    - Open **Why this fits** on a card: calculation, timeline, busyness source, hours and limits.
 3. **"An hour to study, outlets needed"** (under *Try a sample*).
    - Expect **Best match: Marciano Commons** (quieter at the selected demo time), then Mugar Library (moderate).
@@ -66,7 +66,7 @@ API mode gives exactly the same text as static mode (verified).
    - Tap **Extend to 48 minutes**: the form updates and 2 options fit.
 5. **View place** on any card. The chart and playback open at the same demo time (3:00 PM). Press play.
    Point out the **Simulated** tag and **How it's simulated**: it opens **Sources & Simulation**, which maps
-   FitRec to the campus gym dataset (rescaled, areas split by capacity), shows dining and Mugar as modeled with no
+   FitRec to the campus gym dataset (rescaled, whole building only), shows dining and Mugar as modeled with no
    dataset, and explains why the Chapel Hill library and UCI room datasets weren't used.
 6. **Places → Historical references → Campus Gym — Historical Reference.** Point out the notice
    ("Historical gym data — not live and not BU FitRec."), pick another **Recorded day** (5–11 Dec 2016), press
@@ -85,6 +85,16 @@ Commit `web/data/` together with the change. GitHub Pages serves those files as 
 the export.
 
 ## 4. Checks and results (2026-10-24)
+
+FitRec as one building (`feature/fitrec-building-only`): areas, the sample class/intramural schedule,
+reservations, `/api/schedule` and `/api/programs` removed.
+
+| Check | Result |
+|---|---|
+| `pytest`: one FitRec series equal to the scaled gym count, no areas/schedule/closures served, one planner place per facility | **85 passed** |
+| `node --test` (the reservation-closure test removed with the feature) | **45 passed** |
+| Browser: Sources mapping (6 rows), FitRec page without areas, one FitRec planner option, meetup places, static == API | 39/39 passed |
+| Browser: planner 66/66, closed/slider 35/35, gym 42/42, meetups 22/22, subpath/playback 9/9; 7 screens at 375–1440 px in light and dark, no overflow or page errors (56/56) | passed |
 
 Reference-driven simulations (`feature/reference-simulations`):
 
@@ -161,6 +171,6 @@ The only console error in static mode is an expected 404: the app checking wheth
 - `--host 0.0.0.0` and the API's open CORS (`*`, no credentials) suit a demo network. Restrict CORS with
   `BUSY_CORS_ORIGINS` for anything public.
 - pytest prints a Starlette deprecation warning about `httpx` in the test client. It's harmless today.
-- Data: one sample Monday; walking times, hours, amenities and capacities are illustrative. The workout
-  sample has no best match because all FitRec areas share a location. Busyness is read at the selected time,
+- Data: one sample Monday; walking times, hours, amenities and capacities are illustrative. FitRec is one
+  building-level count (no courts, pools, rooms or reservations). Busyness is read at the selected time,
   not forecast.

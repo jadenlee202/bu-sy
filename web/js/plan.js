@@ -412,13 +412,12 @@ function card(o, { req, campus, hero = false, featured = null, reason = null }) 
     ...(toName ? [[`At ${toName}`, fmtTime(o.arriveNext)]] : []),
     ["Next commitment", fmtTime(o.windowEnd)],
   ] : [];
-  const scope = o.place.area_id ? "Counts people in this area, not free equipment." : "Counts the whole building, not free seats or equipment.";
+  const scope = "Counts the whole building, not free seats, courts or equipment.";
 
   return `<li class="rec${hero ? " rec-hero" : ""}">
     <div class="rec-top">${badge}${modeChip(o.place)}
       <a class="rec-link" href="#/place/${encodeURIComponent(o.place.facility_id)}">View place ${icon("chevron", 14)}</a></div>
     <h3 class="rec-name">${esc(o.place.name)}</h3>
-    ${o.place.area_id ? `<p class="rec-sub">${esc(o.place.facility_name)}</p>` : ""}
     <div class="stats">${time}${walk}</div>
     <div class="rec-busy">${level(o.busy.level, busy.label)}</div>
     ${why ? `<p class="rec-reason">${esc(why)}</p>` : ""}

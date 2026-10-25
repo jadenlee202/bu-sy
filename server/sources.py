@@ -3,8 +3,8 @@
 Replace this module (keep the Facility shape) to plug in a real campus feed.
 
     campus_simulation_occupancy.csv     SIMULATED campus places on one demo Monday,
-                                        every 15 min: FitRec by area (driven by a
-                                        real non-BU campus gym), dining + Mugar
+                                        every 15 min: FitRec as one building (driven
+                                        by a real non-BU campus gym), dining + Mugar
                                         (modeled), made by data/generate_campus_simulation.py;
                                         simulation_provenance.json says how
     clean_cod_occupancy.csv             REAL office occupancy events (COD),
@@ -51,19 +51,6 @@ GYM_NOTICE = "Historical gym data — not live and not BU FitRec."
 
 
 @dataclass
-class Area:
-    area_id: str
-    name: str
-    category: str
-    capacity: int               # illustrative
-    crowd_tolerance: float = 1.0
-    series: Series = field(default_factory=list)
-
-    def level(self, count: int) -> str:
-        return classify(count / self.capacity, self.crowd_tolerance)
-
-
-@dataclass
 class Facility:
     facility_id: str
     facility_name: str
@@ -78,7 +65,6 @@ class Facility:
     reference: Optional[float] = None
     reference_note: str = ""
     amenities: list[str] = field(default_factory=list)
-    areas: list[Area] = field(default_factory=list)
     days: dict[date, Series] = field(default_factory=dict)
     default_day: Optional[date] = None
     typical_by_weekday: dict[int, list[Optional[float]]] = field(default_factory=dict)
@@ -128,29 +114,10 @@ class Facility:
 
 
 # ---------- simulated campus places ----------
-# Illustrative capacities only (not official figures). Weight rooms and
-# basketball courts get a crowd tolerance: people accept a bigger crowd there.
-TOLERANT = 1.25
-FITREC_AREAS = {
-    "WEIGHT_ROOM_FLOOR_1": ("weight-room-floor-1", "Weight Room · Floor 1", "weights", 160, TOLERANT),
-    "WEIGHT_ROOM_FLOOR_2": ("weight-room-floor-2", "Weight Room · Floor 2", "weights", 140, TOLERANT),
-    "BASKETBALL_4_COURT_FLOOR_2": ("basketball-court-floor-2", "Basketball · Floor 2 (4 courts)", "basketball", 60, TOLERANT),
-    "BASKETBALL_3_COURT_BASEMENT": ("basketball-court-basement", "Basketball · Basement (3 courts)", "basketball", 45, TOLERANT),
-    "COMPETITION_POOL": ("competition-pool", "Competition Pool", "aquatics", 50, 1.0),
-    "RECREATION_POOL_HOT_TUB": ("recreation-pool-hot-tub", "Rec Pool & Hot Tub", "aquatics", 45, 1.0),
-    "BIKING_AREA": ("biking-area", "Biking Area", "cardio", 35, 1.0),
-    "SQUASH_COURT_1": ("squash-court-1", "Squash Court 1", "racquet", 4, 1.0),
-    "SQUASH_COURT_2": ("squash-court-2", "Squash Court 2", "racquet", 4, 1.0),
-    "RACQUETBALL_ROOM_1": ("racquetball-room-1", "Racquetball 1", "racquet", 4, 1.0),
-    "RACQUETBALL_ROOM_2": ("racquetball-room-2", "Racquetball 2", "racquet", 4, 1.0),
-    "RACQUETBALL_ROOM_3": ("racquetball-room-3", "Racquetball 3", "racquet", 4, 1.0),
-    "CLIMBING_WALL": ("climbing-wall", "Climbing Wall", "climbing", 30, 1.0),
-    **{
-        f"MULTIPURPOSE_ROOM_{n}": (f"multipurpose-room-{n}", f"Multipurpose Room {n}", "multipurpose", 35, 1.0)
-        for n in range(1, 8)
-    },
-    "DANCE_THEATRE": ("dance-theatre", "Dance Theatre", "dance", 40, 1.0),
-}
+# Illustrative capacities only (not official figures). FitRec is one building-level
+# count: the data can't say which court, pool or room people are using.
+FITREC_SERIES = "SYN_BU_FITREC"
+FITREC_CAPACITY = 870
 FITREC_AMENITIES = [
     "Weight rooms (2 floors)", "Basketball courts (7)", "Competition pool",
     "Rec pool and hot tub", "Biking area", "Squash (2)", "Racquetball (3)",
@@ -201,20 +168,13 @@ def load_synthetic() -> list[Facility]:
         for r in csv.DictReader(f):
             rows[r["facility_id"]].append((datetime.fromisoformat(r["timestamp"]), int(r["occupancy_count"])))
 
-    areas = []
-    for suffix, (area_id, name, cat, cap, tol) in FITREC_AREAS.items():
-        areas.append(Area(area_id, name, cat, cap, tol, sorted(rows[f"SYN_BU_FITREC_{suffix}"])))
-    totals = defaultdict(int)
-    for a in areas:
-        for t, c in a.series:
-            totals[t] += c
     fitrec = _simulated_facility(
-        "fitrec-synthetic", "FitRec", "fitness", provenance,
-        capacity=sum(a.capacity for a in areas),
-        reference_note="Sum of 21 areas vs. the sum of their illustrative capacities",
-        amenities=FITREC_AMENITIES, areas=areas,
+        "fitrec-synthetic", "FitRec", "fitness", provenance, capacity=FITREC_CAPACITY,
+        reference_note=f"Whole building vs. an illustrative capacity of {FITREC_CAPACITY:,}",
+        amenities=FITREC_AMENITIES,
     )
-    fitrec.days[min(totals).date()] = sorted(totals.items())
+    series = sorted(rows[FITREC_SERIES])
+    fitrec.days[series[0][0].date()] = series
 
     facilities = [fitrec]
     for suffix, (fid, name, cat, cap) in OTHER_SYNTHETIC.items():

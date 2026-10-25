@@ -429,11 +429,6 @@ label.check { display: flex; flex-direction: row; align-items: center; gap: 12px
 .place-now { display: flex; flex-direction: column; gap: 12px; }
 @container (min-width: 52rem) {
   .place-grid { grid-template-columns: minmax(260px, 1fr) minmax(0, 1.7fr); align-items: start; }
-  .place-areas { grid-column: 1 / -1; }
-  .place-areas .list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; }
-  .place-areas .list > li:nth-child(2) { border-top: 0; }
-  .place-areas .list > li + li { border-top: 1px solid var(--line); }
-  .place-areas .list > li:nth-child(-n+2) { border-top: 0; }
 }
 .hero { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 20px 22px; border-radius: var(--radius); background: var(--hero); color: var(--hero-text); }
 .hero-count { display: flex; align-items: baseline; gap: 6px; }
@@ -511,8 +506,6 @@ th { color: var(--muted); font-weight: 600; }
 .basis { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; background: var(--subtle); color: var(--muted); }
 .basis-reference_dataset, .status-used { background: var(--selected); color: var(--on-selected); }
 .status-evaluated_not_used { border: 1px dashed var(--line-strong); background: transparent; }
-.inline-more summary { cursor: pointer; font-size: 12px; color: var(--muted); }
-.inline-more ul { margin: 4px 0 0; padding-left: 16px; font-size: 13px; color: var(--muted); }
 .src-section { display: flex; flex-direction: column; gap: 8px; }
 .src-item { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0 16px; }
 .src-item > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 52px; cursor: pointer; font-weight: 600; }

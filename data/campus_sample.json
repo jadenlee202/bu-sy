@@ -31,13 +31,7 @@
     { "facility_id": "west-dining-synthetic", "activities": ["eat", "study"] },
     { "facility_id": "warren-dining-synthetic", "activities": ["eat"] },
     { "facility_id": "fenway-dining-synthetic", "activities": ["eat"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "weight-room-floor-1", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "weight-room-floor-2", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "biking-area", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "climbing-wall", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "competition-pool", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "basketball-court-floor-2", "activities": ["workout"] },
-    { "facility_id": "fitrec-synthetic", "area_id": "basketball-court-basement", "activities": ["workout"] }
+    { "facility_id": "fitrec-synthetic", "activities": ["workout"] }
   ],
   "scenarios": [
     {
