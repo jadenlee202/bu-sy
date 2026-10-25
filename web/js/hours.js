@@ -166,31 +166,61 @@ export function todayBuildingHoursSummary(location, now = new Date()) {
   return buildingHoursSummary(location, campusDateTime(now).date);
 }
 
+// Status labels, the same on every screen:
+//   "Open now" / "Closed now" / "Closed today" / "Hours unverified" describe the real current time;
+//   "Open" / "Closed" describe a chosen time (the replay slider or a selected date), never "now";
+//   meal service is separate: "Serving lunch", "No meal service currently scheduled", ….
+
+/** Building status at a chosen date and time, e.g. the replay slider: "Open" or "Closed". */
 export function selectedStatusLabel(status) {
-  if (status.status === "open") return "Open now";
-  if (status.status === "closed") return "Closed now";
+  if (status.status === "open") return "Open";
+  if (status.status === "closed") return "Closed";
   if (status.status === "unpublished") return "Building hours not published";
   return "Building hours unverified";
 }
 
+/** Meal service at the same moment as `buildingStatus`. Dining halls between meals stay open. */
 export function serviceStatusLabel(service, buildingStatus) {
-  if (buildingStatus.status === "closed") return "No meal service — building closed";
-  if (service.status === "unverified" || service.status === "unpublished") return "Service hours unavailable";
+  if (["closed", "closed_today"].includes(buildingStatus.status)) return "No meal service — building closed";
+  if (service.status === "unverified" || service.status === "unpublished") return "Meal hours unverified";
   if (service.status === "not_applicable") return "Food service not applicable";
   if (service.status === "serving") {
-    const labels = [...new Set(service.periods.map((period) => period.label))];
+    const labels = [...new Set(service.periods.map((period) => period.label.toLowerCase()))];
     return `Serving ${labels.join(", ")}`;
   }
-  if (buildingStatus.status === "open") return "Open — no meal service currently scheduled";
   return "No meal service currently scheduled";
 }
 
-export function statusLabel(status) {
-  if (status.status === "open") return "Open now";
-  if (status.status === "opens") return `Opens at ${formatClock(status.period.start)}`;
-  if (status.status === "closed") return "Closed now";
-  return status.status === "unpublished" ? "Hours not published" : "Hours unverified";
+/**
+ * Building status at the real current time in Boston, from verified hours only. Days whose hours
+ * are just the weekly pattern projected forward (`assumed`) are "unverified", never "Open now".
+ * { status: "open" | "closed" | "closed_today" | "unverified", label, detail? }
+ */
+export function nowStatus(location, now = new Date()) {
+  const { date } = campusDateTime(now);
+  const today = daySchedule(location, date);
+  if (today.assumed) return { status: "unverified", label: "Hours unverified", detail: "today's hours aren't published yet" };
+  const current = openStatus(location, now);
+  if (current.status === "open") return { status: "open", label: "Open now", detail: `until ${formatClock(current.period.end)}` };
+  if (current.status === "opens") return { status: "closed", label: "Closed now", detail: `opens at ${formatClock(current.period.start)}` };
+  if (current.status === "closed") {
+    return today.status === "closed"
+      ? { status: "closed_today", label: "Closed today" }
+      : { status: "closed", label: "Closed now", detail: "closed for the rest of the day" };
+  }
+  return { status: "unverified", label: "Hours unverified" };
 }
+
+/** Meal service at the real current time, from verified service hours only (see nowStatus). */
+export function nowServiceLabel(location, now = new Date()) {
+  const { date, minute } = campusDateTime(now);
+  const building = nowStatus(location, now);
+  if (daySchedule(location, date, "service").assumed) return serviceStatusLabel({ status: "unpublished", periods: [] }, building);
+  return serviceStatusLabel(serviceAtTime(location, date, minute), building);
+}
+
+/** "Open now · until 9:00 PM" */
+export const nowText = (status) => (status.detail ? `${status.label} · ${status.detail}` : status.label);
 
 export function weekRangeLabel(startDate) {
   const endDate = addDays(startDate, 6);

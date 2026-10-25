@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import { placeAvailability } from "../web/js/availability.js";
 import {
-  buildingHoursSummary, campusDateTime, daySchedule, displaySchedule, selectedBuildingStatus, selectedStatusLabel,
-  serviceAtTime, serviceStatusLabel, weekStart,
+  buildingHoursSummary, campusDateTime, daySchedule, displaySchedule, nowServiceLabel, nowStatus, nowText,
+  selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekStart,
 } from "../web/js/hours.js";
 
 const hours = JSON.parse(readFileSync(new URL("../web/data/hours.json", import.meta.url), "utf8"));
@@ -15,8 +16,8 @@ test("Places status utility follows the selected time and summarizes building ho
   const closed = selectedBuildingStatus(marciano, date, 9 * 60 + 30);
   const open = selectedBuildingStatus(marciano, date, 12 * 60);
 
-  assert.equal(selectedStatusLabel(closed), "Closed now");
-  assert.equal(selectedStatusLabel(open), "Open now");
+  assert.equal(selectedStatusLabel(closed), "Closed");
+  assert.equal(selectedStatusLabel(open), "Open");
   assert.equal(buildingHoursSummary(marciano, date), "10:00 AM–9:00 PM");
 });
 
@@ -26,8 +27,9 @@ test("Places status reflects the selected playback time", () => {
   const closed = selectedBuildingStatus(marciano, date, 9 * 60 + 30);
   const open = selectedBuildingStatus(marciano, date, 12 * 60);
 
-  assert.equal(selectedStatusLabel(closed), "Closed now");
-  assert.equal(selectedStatusLabel(open), "Open now");
+  // A chosen time is never described as "now".
+  assert.equal(selectedStatusLabel(closed), "Closed");
+  assert.equal(selectedStatusLabel(open), "Open");
 });
 
 test("Places reports unpublished dates without claiming an open or closed status", () => {
@@ -102,9 +104,9 @@ test("dining service is determined by selected date and slider time", () => {
   const marciano = hours.locations["marciano-dining-synthetic"];
   const date = "2026-10-24";
   for (const [minute, expected] of [
-    [10 * 60, "Serving Breakfast"],
-    [12 * 60, "Serving Lunch"],
-    [18 * 60, "Serving Dinner"],
+    [10 * 60, "Serving breakfast"],
+    [12 * 60, "Serving lunch"],
+    [18 * 60, "Serving dinner"],
   ]) {
     const service = serviceAtTime(marciano, date, minute);
     const building = selectedBuildingStatus(marciano, date, minute);
@@ -113,7 +115,7 @@ test("dining service is determined by selected date and slider time", () => {
 
   const sunday = "2026-10-25";
   const brunch = serviceAtTime(marciano, sunday, 11 * 60);
-  assert.equal(serviceStatusLabel(brunch, selectedBuildingStatus(marciano, sunday, 11 * 60)), "Serving Brunch");
+  assert.equal(serviceStatusLabel(brunch, selectedBuildingStatus(marciano, sunday, 11 * 60)), "Serving brunch");
 
   const closed = selectedBuildingStatus(marciano, sunday, 21 * 60 + 30);
   assert.equal(serviceStatusLabel(serviceAtTime(marciano, sunday, 21 * 60 + 30), closed), "No meal service — building closed");
@@ -131,3 +133,45 @@ test("dining weekly display uses named service periods while non-dining keeps bu
   assert.deepEqual(building.periods.map(({ label }) => label), ["Building hours"]);
   assert.equal(displaySchedule(hours.locations["fenway-dining-synthetic"], "2026-11-01", "dining").status, "unpublished");
 });
+
+// ---------- the real current time (Open now, "Now" on Places, "Right now" on place pages) ----------
+const at = (iso) => new Date(iso);   // instants in Boston time (EDT is UTC−4 in October 2026)
+
+test("now status: open, closed until later, closed for the rest of the day", () => {
+  const marciano = hours.locations["marciano-dining-synthetic"];         // Sun Oct 25: 10:00 AM–9:00 PM
+  assert.equal(nowText(nowStatus(marciano, at("2026-10-25T09:30:00-04:00"))), "Closed now · opens at 10:00 AM");
+  assert.equal(nowText(nowStatus(marciano, at("2026-10-25T12:00:00-04:00"))), "Open now · until 9:00 PM");
+  assert.equal(nowText(nowStatus(marciano, at("2026-10-25T21:30:00-04:00"))), "Closed now · closed for the rest of the day");
+});
+
+test("now status: special closed days, unverified and assumed hours are never \"Open now\"", () => {
+  const fitrec = hours.locations["fitrec-synthetic"];
+  assert.equal(nowStatus(fitrec, at("2026-11-26T12:00:00-05:00")).label, "Closed today", "Thanksgiving special hours");
+  const mugar = hours.locations["mugar-synthetic"];
+  assert.equal(nowStatus(mugar, at("2026-10-25T12:00:00-04:00")).label, "Hours unverified");
+  const marciano = hours.locations["marciano-dining-synthetic"];
+  const assumed = nowStatus(marciano, at("2026-11-08T12:00:00-05:00"));  // past the published week
+  assert.deepEqual([assumed.status, assumed.label], ["unverified", "Hours unverified"]);
+  assert.equal(nowServiceLabel(marciano, at("2026-11-08T12:00:00-05:00")), "Meal hours unverified");
+});
+
+test("dining: building status and meal service are separate; between meals the hall stays open", () => {
+  const verified = (weekly) => ({ status: "verified", effectiveFrom: "2026-10-19", effectiveThrough: "2026-10-31", weeklyHours: weekly });
+  const day = (periods) => Object.fromEntries(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].map((d) => [d, periods]));
+  const hall = {
+    buildingHours: verified(day([{ label: "Building hours", start: "08:00", end: "20:00" }])),
+    serviceHours: verified(day([{ label: "Lunch", start: "11:00", end: "14:00" }, { label: "Dinner", start: "17:00", end: "20:00" }])),
+  };
+  const between = at("2026-10-27T15:00:00-04:00");
+  assert.equal(nowStatus(hall, between).label, "Open now");
+  assert.equal(nowServiceLabel(hall, between), "No meal service currently scheduled");
+  assert.equal(nowServiceLabel(hall, at("2026-10-27T12:00:00-04:00")), "Serving lunch");
+  assert.equal(nowServiceLabel(hall, at("2026-10-27T21:00:00-04:00")), "No meal service — building closed");
+  // Open now (Places filter) agrees with the status every screen shows.
+  assert.equal(placeAvailability(hall, "dining", "open_now", { now: between.getTime() }).result, "match");
+  assert.equal(placeAvailability(hall, "dining", "open_now", { now: at("2026-10-27T21:00:00-04:00").getTime() }).result, "no");
+  const marciano = hours.locations["marciano-dining-synthetic"];
+  assert.equal(placeAvailability(marciano, "dining", "open_now", { now: at("2026-11-08T12:00:00-05:00").getTime() }).result, "unchecked",
+    "assumed hours are listed as unchecked, not open");
+});
+

@@ -1,4 +1,4 @@
-import { daySchedule, openStatus } from "./hours.js";
+import { daySchedule, nowStatus } from "./hours.js";
 
 const plusDays = (isoDate, amount) => {
   const day = new Date(`${isoDate}T12:00:00Z`);
@@ -179,9 +179,10 @@ const UNCHECKABLE = new Set(["unverified", "unpublished", "not_applicable", "inv
  */
 export function placeAvailability(location, category, mode, context) {
   if (mode === "open_now") {
-    const { status } = openStatus(location, context.now ? new Date(context.now) : new Date());
+    // The same real-time status every screen shows; unverified or assumed hours are never "open".
+    const { status } = nowStatus(location, context.now ? new Date(context.now) : new Date());
     if (status === "open") return { result: "match" };
-    return status === "opens" || status === "closed" ? { result: "no" } : { result: "unchecked" };
+    return status === "closed" || status === "closed_today" ? { result: "no" } : { result: "unchecked" };
   }
   const meal = mode === "free" ? null : mode;
   if (meal && category !== "dining") return { result: "no" };
