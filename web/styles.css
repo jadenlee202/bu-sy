@@ -569,39 +569,12 @@ main > .hint, main > .form, main > #events { max-width: 720px; }
   :is(.pick, .preset-row, .segmented) input:checked + span { outline: 3px solid Highlight; }
 }
 
-/* ---------- campus imagery ---------- */
-/* A photo or, when none is available, a built-in illustration. Fixed ratio so
-   layout never shifts while a lazy image loads, and nothing ever shows broken. */
-.campus-photo {
-  margin: 0; position: relative; overflow: hidden; border-radius: var(--radius-sm);
-  background: var(--subtle); aspect-ratio: var(--ratio, 16 / 9);
-}
-.campus-photo img, .campus-photo .campus-fallback {
-  display: block; width: 100%; height: 100%; object-fit: cover;
-}
-.campus-fallback { background: var(--subtle); }
-.campus-credit {
-  position: absolute; left: 0; right: 0; bottom: 0; margin: 0;
-  padding: 4px 10px; font-size: 11px; line-height: 1.3; color: #fff;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.55));
-  text-align: right;
-}
-
 /* ---------- homepage hero ---------- */
 .hero-banner {
   position: relative; overflow: hidden; border-radius: var(--radius);
   min-height: 260px; display: flex; align-items: flex-end;
   background: var(--hero); color: var(--hero-text); isolation: isolate;
 }
-.hero-banner .campus-photo {
-  position: absolute; inset: 0; border-radius: 0; aspect-ratio: auto;
-}
-/* Legibility overlay so headline text stays readable over any photo. */
-.hero-banner .campus-photo::after {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(90deg, rgba(10, 10, 10, 0.82), rgba(10, 10, 10, 0.5) 55%, rgba(10, 10, 10, 0.25));
-}
-.hero-banner .campus-credit { z-index: 2; }
 
 /* Hand-drawn Boston skyline backdrop (no photo). */
 .hero-bg { position: absolute; inset: 0; z-index: 0; }
@@ -649,11 +622,6 @@ main > .hint, main > .form, main > #events { max-width: 720px; }
 @container (min-width: 40rem) { .home-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .loc-card { display: flex; flex-direction: column; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; text-decoration: none; color: inherit; }
 .loc-card:hover { border-color: var(--line-strong); }
-.loc-card .campus-photo { border-radius: 0; }
 .loc-card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
 .loc-card-name { font-weight: 650; }
 .loc-card-sub { font-size: 13px; color: var(--muted); }
-
-/* Place-detail building photo (real BU places only; references never get one). */
-.place-photo { margin: 4px 0 0; }
-.place-photo .campus-photo { border-radius: var(--radius); }
