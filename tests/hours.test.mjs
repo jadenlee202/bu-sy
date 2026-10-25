@@ -205,7 +205,8 @@ test("now status: special closed days, unverified and assumed hours are never \"
   const fitrec = hours.locations["fitrec-synthetic"];
   assert.equal(nowStatus(fitrec, at("2026-11-26T12:00:00-05:00")).label, "Closed today", "Thanksgiving special hours");
   const mugar = hours.locations["mugar-synthetic"];
-  assert.equal(nowStatus(mugar, at("2026-10-25T12:00:00-04:00")).label, "Hours unverified");
+  // Mugar's General Hours are published for Oct 25-31 only (repeatsWeekly: false).
+  assert.equal(nowStatus(mugar, at("2026-11-02T12:00:00-05:00")).label, "Hours unverified");
   const marciano = hours.locations["marciano-dining-synthetic"];
   const assumed = nowStatus(marciano, at("2026-11-08T12:00:00-05:00"));  // past the published week
   assert.deepEqual([assumed.status, assumed.label], ["unverified", "Hours unverified"]);

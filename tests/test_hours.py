@@ -117,3 +117,25 @@ def test_dining_building_windows_match_first_and_last_service_periods():
 @pytest.mark.parametrize("invalid", ["24:00", "12:60", "noon", "7:00"])
 def test_time_format_rejects_invalid_values(invalid):
     assert TIME.fullmatch(invalid) is None
+
+
+def test_mugar_hours_match_facility_details_and_planner_metadata():
+    """All exported Mugar hours refer to the same published building schedule."""
+    mugar = read_json(HOURS_FILE)["locations"]["mugar-synthetic"]
+    facility = next(f for f in read_json(FACILITIES_FILE) if f["facility_id"] == "mugar-synthetic")
+    campus = read_json(ROOT / "web" / "data" / "campus.json")
+    place = next(p for p in campus["places"] if p["facility_id"] == "mugar-synthetic")
+    schedule = mugar["buildingHours"]
+    details = facility["verified_info"]
+    regular = next(h for h in details["hours"] if h["schedule_kind"] == "regular")
+    assert regular["applies_from"] == schedule["effectiveFrom"] == "2026-10-25"
+    assert regular["applies_to"] == schedule["effectiveThrough"] == "2026-10-31"
+    assert schedule["repeatsWeekly"] is False
+    for index, day in enumerate(("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")):
+        period, = schedule["weeklyHours"][day]
+        expected = f'{period["start"]}-{period["end"]}'
+        assert regular["weekly"][str(index)] == expected
+        assert facility["opening_hours"]["weekly"][str(index)] == expected
+    assert details["hours_source_url"] == place["metadata"]["currentHours"]["url"] == mugar["sourceUrl"]
+    assert details["hours_checked"] == mugar["lastVerified"] == "2026-10-25"
+    assert place["metadata"]["currentHours"]["effectiveThrough"] == "2026-10-31"

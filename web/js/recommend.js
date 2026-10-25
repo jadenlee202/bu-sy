@@ -42,7 +42,7 @@
 // are "unknown", never zero or quiet. Ranking uses the visit profile when it exists.
 
 import { fmtShort, fmtTime, latestAt, toHHMM, toMin } from "./clock.js";
-import { dateLabel, daySchedule, formatPeriod } from "./hours.js";
+import { addDays, dateLabel, daySchedule, formatPeriod } from "./hours.js";
 
 export const ALLOWANCES = {
   study: { preparation: 3, cleanup: 2 },
@@ -203,7 +203,15 @@ export function planningHours(place, req, hours) {
     const eat = req.activity === "eat";
     const building = daySchedule(loc, date, "building");
     const service = eat ? daySchedule(loc, date, "service") : { status: "not_applicable" };
-    const buildingSegs = building.status === "scheduled" ? periodSegs(building.periods) : [];
+    // Carry verified overnight building hours into the next day's plan. An explicit
+    // special schedule controls the whole date, just as it does in openStatus().
+    const previousBuilding = daySchedule(loc, addDays(date, -1), "building");
+    const carry = !building.special && isDecided(previousBuilding)
+      ? previousBuilding.periods.filter((p) => toMin(p.end) <= toMin(p.start) && toMin(p.end) > 0)
+        .map((p) => ({ ...p, start: "00:00" }))
+      : [];
+    const buildingPeriods = [...carry, ...building.periods];
+    const buildingSegs = building.status === "scheduled" ? periodSegs(buildingPeriods) : [];
     if (eat && isDecided(service)) {
       let segs = service.status === "scheduled" ? periodSegs(service.periods) : [];
       if (isDecided(building)) segs = intersectSegs(segs, buildingSegs);
@@ -211,7 +219,7 @@ export function planningHours(place, req, hours) {
     }
     if (isDecided(building)) {
       return {
-        basis: "verified", kind: "building", date, segs: buildingSegs, periods: building.periods, note: building.note ?? null,
+        basis: "verified", kind: "building", date, segs: buildingSegs, periods: buildingPeriods, note: building.note ?? null,
         serviceNote: eat && service.status !== "not_applicable" ? "Meal-service hours aren't verified for this date" : null,
       };
     }

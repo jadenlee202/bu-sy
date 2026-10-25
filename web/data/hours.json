@@ -213,12 +213,22 @@
     },
     "mugar-synthetic": {
       "sourceUrl": "https://www.bu.edu/library/visit-study/hours/?week=2026-10-25",
-      "sourceLabel": "BU Libraries hours",
-      "lastVerified": "2026-10-24",
+      "sourceLabel": "BU Libraries — Mugar Library General Hours",
+      "lastVerified": "2026-10-25",
       "buildingHours": {
-        "status": "unverified",
-        "unverifiedReason": "The official page lists multiple Mugar service rows without service names, so the building's visitor hours cannot be identified safely.",
-        "weeklyHours": null,
+        "status": "verified",
+        "effectiveFrom": "2026-10-25",
+        "effectiveThrough": "2026-10-31",
+        "repeatsWeekly": false,
+        "weeklyHours": {
+          "sunday": [{ "label": "General Hours", "start": "10:00", "end": "02:00" }],
+          "monday": [{ "label": "General Hours", "start": "07:00", "end": "02:00" }],
+          "tuesday": [{ "label": "General Hours", "start": "07:00", "end": "02:00" }],
+          "wednesday": [{ "label": "General Hours", "start": "07:00", "end": "02:00" }],
+          "thursday": [{ "label": "General Hours", "start": "07:00", "end": "02:00" }],
+          "friday": [{ "label": "General Hours", "start": "07:00", "end": "23:00" }],
+          "saturday": [{ "label": "General Hours", "start": "10:00", "end": "23:00" }]
+        },
         "specialHours": []
       },
       "serviceHours": {
