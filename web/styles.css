@@ -660,8 +660,12 @@ th { color: var(--muted); font-weight: 600; }
 .month-card, #month { display: flex; flex-direction: column; gap: 10px; }
 .month-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .month-head h2 { margin: 0; font-size: 18px; }
-.month-nav { display: flex; align-items: center; gap: 4px; }
+.month-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.month-week-start { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.month-week-start select { min-height: 36px; padding: 4px 30px 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background-position: right 8px center; background-size: 16px; font-size: 13px; font-weight: 600; color: var(--text); }
+.month-week-start select:hover { border-color: var(--line-strong); }
 .month-nav .icon-btn { font-size: 22px; line-height: 1; }
+.month-step { display: inline-flex; align-items: center; gap: 4px; }   /* ‹ Today › never split across lines */
 .month-weekdays, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .month-weekdays span { padding-bottom: 2px; font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; }
 .day-cell {

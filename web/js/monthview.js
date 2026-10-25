@@ -2,7 +2,11 @@
 // occurrences from the imported schedule (schedule.js eventsOf) and never store or change them.
 import { DEFAULT_TZ } from "./schedule.js";
 
-export const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** First day of the calendar week: 0 = Sunday (the default), 1 = Monday. */
+export const WEEK_STARTS = [[0, "Sunday"], [1, "Monday"]];
+/** Column headings for a week starting on `weekStart`. */
+export const weekdayNames = (weekStart = 0) => [...DAY_NAMES.slice(weekStart), ...DAY_NAMES.slice(0, weekStart)];
 const DAY_MS = 86_400_000;
 
 /** The calendar date ("YYYY-MM-DD") of an instant in a timezone. */
@@ -26,10 +30,10 @@ export function shiftMonth(month, amount) {
 export const monthTitle = (month) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", year: "numeric" })
   .format(new Date(`${month}-01T12:00:00Z`));
 
-/** Every date shown for a month: whole Monday–Sunday weeks covering it (5 or 6 rows). */
-export function monthCells(month) {
+/** Every date shown for a month: whole weeks starting on `weekStart` (0 Sunday, 1 Monday), 4–6 rows. */
+export function monthCells(month, weekStart = 0) {
   const first = `${month}-01`;
-  const offset = (new Date(`${first}T12:00:00Z`).getUTCDay() + 6) % 7;     // Monday = 0
+  const offset = (new Date(`${first}T12:00:00Z`).getUTCDay() - weekStart + 7) % 7;   // days shown before the 1st
   const start = addDays(first, -offset);
   const last = addDays(`${shiftMonth(month, 1)}-01`, -1);
   const cells = [];

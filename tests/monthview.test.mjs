@@ -3,24 +3,38 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { parseIcs } from "../web/js/ics.js";
-import { eventsByDay, monthCells, monthTitle, rangeText, shiftMonth, timeOnDay } from "../web/js/monthview.js";
+import { eventsByDay, monthCells, monthTitle, rangeText, shiftMonth, timeOnDay, weekdayNames } from "../web/js/monthview.js";
 
 const TZ = "America/New_York";
 const parse = (name) => parseIcs(readFileSync(new URL(`./fixtures/ics/${name}`, import.meta.url), "utf8"),
   { from: Date.parse("2026-09-01T00:00:00Z"), until: Date.parse("2027-06-01T00:00:00Z") }).items;
 const titlesOn = (byDay, date) => (byDay.get(date) ?? []).map(({ event }) => event.title);
 
-test("month grid is whole Monday–Sunday weeks, marking adjacent-month days", () => {
+test("month grid is whole Sunday–Saturday weeks by default, marking adjacent-month days", () => {
   const cells = monthCells("2026-10");                       // Oct 1, 2026 is a Thursday
+  assert.deepEqual(weekdayNames(), ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
   assert.equal(cells.length % 7, 0);
-  assert.equal(cells[0].date, "2026-09-28");
-  assert.equal(cells.at(-1).date, "2026-11-01");
+  assert.equal(cells[0].date, "2026-09-27");                 // a Sunday
+  assert.equal(cells.at(-1).date, "2026-10-31");             // a Saturday: no November days needed
   assert.deepEqual(cells.filter((c) => c.inMonth).map((c) => c.date).slice(0, 2), ["2026-10-01", "2026-10-02"]);
   assert.equal(cells.filter((c) => c.inMonth).length, 31);
-  assert.equal(monthCells("2027-02").length, 28, "Feb 2027 starts on a Monday and fills exactly 4 weeks");
+  assert.equal(monthCells("2026-11").length, 35, "Nov 2026 starts on a Sunday");
+  assert.equal(monthCells("2026-11")[0].date, "2026-11-01");
   assert.equal(shiftMonth("2026-12", 1), "2027-01");
   assert.equal(shiftMonth("2026-01", -1), "2025-12");
   assert.equal(monthTitle("2026-10"), "October 2026");
+});
+
+test("a Monday week start shifts the grid and the headings", () => {
+  const cells = monthCells("2026-10", 1);
+  assert.deepEqual(weekdayNames(1), ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+  assert.equal(cells[0].date, "2026-09-28");                 // a Monday
+  assert.equal(cells.at(-1).date, "2026-11-01");             // a Sunday
+  assert.equal(monthCells("2027-02", 1).length, 28, "Feb 2027 starts on a Monday and fills exactly 4 weeks");
+  for (const weekStart of [0, 1]) {
+    const days = monthCells("2026-10", weekStart).map((c) => new Date(`${c.date}T12:00:00Z`).getUTCDay());
+    assert.ok(days.every((day, i) => day === (weekStart + i) % 7), `columns line up for weekStart ${weekStart}`);
+  }
 });
 
 test("recurring classes land on their dates and times, honouring exceptions", () => {
