@@ -176,12 +176,12 @@ async function placesView() {
     const row = (f) => {
       const h = histories[f.facility_id];
       const { o } = observationAt(h, state.minute);
-      const closed = !o && closedAt(openingHours(campus, f.facility_id), state.minute);
       const locationHours = isHistorical(f) ? null : hours.locations[f.facility_id];
       const summary = isHistorical(f)
         ? null
         : locationHours ? buildingHoursSummary(locationHours, currentDate) : "Hours unverified";
       const selectedStatus = locationHours ? selectedBuildingStatus(locationHours, currentDate, state.minute) : null;
+      const closed = !o && selectedStatus?.status === "closed";
       const hoursSummary = summary
         ? `<span class="row-hours">${summary === "Hours unverified" || summary === "Today's hours not published" || summary === "Closed today"
           ? esc(summary) : `Today: ${esc(summary)}`}</span>`
