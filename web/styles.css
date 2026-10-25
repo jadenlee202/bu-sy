@@ -611,16 +611,21 @@ main > .hint, main > .form, main > #events { max-width: 720px; }
   content: ""; position: absolute; inset: 0; z-index: 1;
   background: linear-gradient(90deg, rgba(8, 10, 16, 0.85), rgba(8, 10, 16, 0.45) 58%, rgba(8, 10, 16, 0.12));
 }
-/* Skyline palette — dusk tones with BU-red accents; tuned per theme. */
+/* Skyline palette — bright daytime blue; buildings read as cool silhouettes. */
 .hero-skyline {
-  --sky-top: #3a1418; --sky-bottom: #7a1d1d; --sun: #ffd9b0;
-  --city-far: #5a1e24; --city-near: #2a0e12; --city-glass: #ffffff;
-  --window: #ffd27a; --sail: #f3ede6;
-  --river-top: #3a1418; --river-bottom: #1d0a0c; --river-line: #8a3a3a;
+  --sky-top: #2f7fd6; --sky-bottom: #bfe0f5; --sun: #fff4cf;
+  --city-far: #7fa8cf; --city-near: #335a86; --city-glass: #eaf4ff;
+  --window: #fff0b8; --sail: #ffffff;
+  --river-top: #9fd0ee; --river-bottom: #4f93c7; --river-line: #d4ecfa;
 }
-:root[data-theme="dark"] .hero-skyline,
-.hero-skyline {
-  --sky-top: #2a0d10; --sky-bottom: #5e1618;
+/* Daytime sky stays bright in dark mode too; the text overlay keeps contrast. */
+:root[data-theme="dark"] .hero-skyline {
+  --sky-top: #1f5e9e; --sky-bottom: #2f7fb0;
+  --city-far: #6b94bd; --city-near: #284867; --river-bottom: #3c7aa8;
+}
+/* Legibility overlay in a cool blue so dark text stays readable on bright sky. */
+.hero-skyline.hero-skyline::after {
+  background: linear-gradient(90deg, rgba(12, 34, 58, 0.78), rgba(12, 34, 58, 0.4) 58%, rgba(12, 34, 58, 0.1));
 }
 .hero-body { position: relative; z-index: 2; padding: 28px 24px; max-width: 640px; display: flex; flex-direction: column; gap: 10px; }
 .hero-eyebrow { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; background: var(--red); padding: 4px 11px; border-radius: 999px; }
