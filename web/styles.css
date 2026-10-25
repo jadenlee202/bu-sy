@@ -355,6 +355,16 @@ label.check { display: flex; flex-direction: row; align-items: center; gap: 12px
 .stat-unit { font-size: 14px; font-weight: 500; color: var(--muted); }
 .stat-cap { font-size: 13px; color: var(--muted); }
 .rec-busy .level { width: auto; font-size: 14px; }
+.window-mode { margin-bottom: 10px; }
+.rec-visit { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.visit-label { font-weight: 600; }
+.visit-span { font-size: 12px; color: var(--muted); }
+.rec-hero .visit-span { color: var(--hero-muted); }
+.visit-bar { display: flex; gap: 2px; height: 8px; }
+.vseg { min-width: 3px; border-radius: 4px; background: var(--bar); }
+.vseg[data-level="moderate"] { background: color-mix(in srgb, var(--red) 55%, var(--bar)); }
+.vseg[data-level="busy"] { background: var(--red); }
+.vseg[data-level="unknown"] { background: repeating-linear-gradient(135deg, var(--bar) 0 3px, transparent 3px 6px); }
 .rec-reason { margin: 0; padding-left: 10px; border-left: 3px solid var(--red); font-size: 14px; }
 .why { margin: 2px -18px 0; padding: 0 18px; border-top: 1px solid var(--line); }
 .why summary { display: flex; align-items: center; gap: 6px; min-height: 46px; cursor: pointer; list-style: none; font-size: 14px; font-weight: 600; }

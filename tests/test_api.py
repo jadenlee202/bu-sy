@@ -383,6 +383,16 @@ def test_static_export_matches_the_api():
         assert static(f"history/{facility_id}.json") == client.get(f"/api/facilities/{facility_id}/history").json()
 
 
+def test_planner_hours_are_the_same_file_in_both_modes():
+    """The planner reads verified hours from data/hours.json in static and API mode alike
+    (web/js/source.js getHours); the API server serves that same file, unchanged."""
+    r = client.get("/data/hours.json")
+    assert r.status_code == 200
+    assert r.json() == static("hours.json")
+    # Every planner place has an hours entry, keyed the way the engine looks it up.
+    assert {p["facility_id"] for p in static("campus.json")["places"]} <= set(static("hours.json")["locations"])
+
+
 def test_api_allows_cross_origin_reads():
     """A site on another origin can use ?api=… (no credentials involved)."""
     r = client.get("/api/campus", headers={"Origin": "https://example.github.io"})
