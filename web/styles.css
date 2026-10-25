@@ -837,3 +837,10 @@ main > .hint, main > .form, main > #events { max-width: 720px; }
 .rec > .btn { margin-block: .75rem; }
 .seg-preparation, .seg-cleanup { background: var(--muted); }
 .is-stale [data-choose] { pointer-events: none; opacity: .5; }
+
+
+/* ---------- verified facility info ---------- */
+.about table { width: auto; margin: 2px 0 0; }
+.about table td { padding: 3px 12px 3px 0; border: 0; font-size: 13px; }
+.about a { color: var(--red); }
+.about ul { font-size: 14px; }

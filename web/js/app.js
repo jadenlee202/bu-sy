@@ -41,6 +41,7 @@ const tag = (f) => (isHistorical(f)
   : `<span class="tag tag-sim" title="${esc(f.simulation?.label ?? "Simulated")}. Not a BU measurement.">Simulated</span>`);
 const backToPlaces = `<a class="back" href="#/places">${icon("back", 16)} All places</a>`;
 const offsetText = (o) => (obsOffset(o) ? `UTC${obsOffset(o).replace("-", "−")}` : "timezone unverified");
+const isStudyEligible = (f) => f.verified_info?.study_friendly === true;
 
 /**
  * Quietest later hour. With a typical profile it's a historical pattern; without one
@@ -102,6 +103,91 @@ function observationAt(hist, minute) {
   if (!hist.observations.length || sec < clockSec(hist.observations[0].observed_at.slice(11, 19))) return { why: "before" };
   if (sec > clockSec(hist.coverage_end)) return { why: "ended" };
   return { why: "gap" };
+}
+
+// ---------- verified facility info (hand-researched, own provenance) ----------
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** Formats a verified "HH:MM-HH:MM" range to a readable string, or a word. */
+function fmtRange(range) {
+  if (range == null) return "Not verified";
+  if (range === "closed") return "Closed";
+  const [a, b] = range.split("-");
+  return `${fmtHHMM(a + ":00")} – ${fmtHHMM(b + ":00")}`;
+}
+
+/**
+ * Renders the verified hours / access / amenities / walking block.
+ * Occupancy provenance is deliberately NOT touched here — this is a separate,
+ * clearly-labeled section so verified hours never imply the counts are real.
+ * Returns "" when nothing was verified (unknown stays unknown).
+ */
+function verifiedInfoSection(f) {
+  const info = f.verified_info;
+  if (!info) {
+    return `<details class="about">
+      <summary>Facility info</summary>
+      <p class="muted" style="font-size:14px;margin:6px 0 0">No official facility details were verified for this place. Hours, access and amenities are unknown here.</p>
+    </details>`;
+  }
+
+  const oh = f.opening_hours;
+  const regularRows = oh
+    ? WEEKDAYS.map((d, i) => `<tr><td>${d}</td><td>${esc(fmtRange(oh.weekly[String(i)]))}</td></tr>`).join("")
+    : "";
+
+  // Non-regular schedules (holiday / break / special event) kept separate.
+  const special = info.hours.filter((h) => h.schedule_kind !== "regular");
+  const specialRows = special.map((h) => `<li><strong>${esc(h.label)}</strong>${h.note ? ` — ${esc(h.note)}` : ""} <span class="pill" style="font-size:11px">${esc(h.schedule_kind.replace("_", " "))}</span></li>`).join("");
+
+  const walk = info.walking;
+  const amenityList = info.amenities_verified.length
+    ? `<ul style="margin:4px 0 0;padding-left:18px">${info.amenities_verified.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>`
+    : `<span class="muted">Specific amenities not individually verified.</span>`;
+
+  const studyLine = info.study_friendly == null
+    ? "Not assessed."
+    : info.study_friendly
+      ? `Yes — ${esc(info.study_note || "study suitability confirmed.")}`
+      : `No — ${esc(info.study_note || "not a study space.")}`;
+
+  const questions = info.open_questions.length
+    ? `<dt>Unresolved</dt><dd><ul style="margin:0;padding-left:18px">${info.open_questions.map((q) => `<li>${esc(q)}</li>`).join("")}</ul></dd>`
+    : "";
+
+  return `<details class="about">
+    <summary>Facility info (verified hours &amp; access)</summary>
+    <p class="muted" style="font-size:13px;margin:6px 0">These details were read by hand from official BU pages on the dates shown. They describe published schedules, not live status, and do <strong>not</strong> make the occupancy counts above real.</p>
+    <dl>
+      ${oh ? `<dt>Regular hours</dt><dd>
+        <div class="muted" style="font-size:13px;margin-bottom:4px">${esc(oh.label)}</div>
+        <table style="width:auto"><tbody>${regularRows}</tbody></table>
+      </dd>` : `<dt>Regular hours</dt><dd class="muted">Not verified — hours unknown for this place.</dd>`}
+
+      ${specialRows ? `<dt>Holiday / break / special</dt><dd><ul style="margin:0;padding-left:18px">${specialRows}</ul></dd>` : ""}
+
+      <dt>Access</dt>
+      <dd>${esc(info.access_summary || "Not verified.")}</dd>
+
+      <dt>Study space?</dt>
+      <dd>${studyLine}</dd>
+
+      <dt>Amenities</dt>
+      <dd>${amenityList}</dd>
+
+      ${walk ? `<dt>Walking time</dt><dd>~${walk.minutes_approx} min from ${esc(walk.from_label)}.
+        <span class="muted" style="display:block;font-size:12px">Hand estimate — not exact and not verified routing. ${esc(walk.basis)}</span></dd>` : ""}
+
+      ${questions}
+
+      <dt>Sources</dt>
+      <dd style="font-size:13px">
+        ${info.hours_source_url ? `Hours: <a href="${esc(info.hours_source_url)}" target="_blank" rel="noopener">bu.edu</a> (checked ${esc(info.hours_checked)})<br>` : ""}
+        ${info.access_source_url ? `Access: <a href="${esc(info.access_source_url)}" target="_blank" rel="noopener">bu.edu</a> (checked ${esc(info.access_checked)})<br>` : ""}
+        ${info.amenities_source_url ? `Amenities: <a href="${esc(info.amenities_source_url)}" target="_blank" rel="noopener">bu.edu</a> (checked ${esc(info.amenities_checked)})` : ""}
+      </dd>
+    </dl>
+  </details>`;
 }
 
 // ---------- playback (one clock shared by every screen) ----------
@@ -308,16 +394,17 @@ async function placesView() {
       const summary = isHistorical(f)
         ? null
         : locationHours ? buildingHoursSummary(locationHours, currentDate) : "Hours unverified";
-      const selectedStatus = locationHours ? selectedBuildingStatus(locationHours, h.day, state.minute) : null;
+      const replaySchedule = locationHours ? daySchedule(locationHours, h.day) : null;
+      const selectedStatus = locationHours && !replaySchedule.assumed ? selectedBuildingStatus(locationHours, h.day, state.minute) : null;
       const closed = !o && selectedStatus?.status === "closed";
       const facts = [
-        fact("Category", `${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}`),
+        fact("Category", `${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isStudyEligible(f) ? ` <span class="tag">Study space</span>` : ""}`),
         isHistorical(f) ? fact("Recorded day", esc(h.day_label)) : "",
         summary ? fact("Today", esc(TODAY_TEXT[summary] ?? summary), ' class="num"') : "",
         selectedStatus && ["open", "closed"].includes(selectedStatus.status)
           ? fact("Replay status", selectedStatusLabel(selectedStatus), ` class="place-status" data-status="${selectedStatus.status}"`) : "",
         f.category === "dining" && locationHours
-          ? fact("Meal service", esc(serviceStatusLabel(serviceAtTime(locationHours, currentDate, state.minute), selectedStatus))) : "",
+          ? fact("Meal service", esc(serviceStatusLabel(serviceAtTime(locationHours, currentDate, state.minute), selectedBuildingStatus(locationHours, currentDate, state.minute)))) : "",
         windows[f.facility_id]
           ? fact("Fits your free time", `${formatInstant(windows[f.facility_id].start, zone)}–${formatInstant(windows[f.facility_id].end, zone)}`, ' class="num"') : "",
       ].join("");
@@ -328,6 +415,7 @@ async function placesView() {
         <span class="place-busy">
           <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
           ${level(o?.busyness ?? (closed ? "closed" : "unknown"))}
+          ${h.simulation ? `<span class="help">${esc(periodAt(h.simulation, state.minute)?.label ?? "Simulated")}</span>` : ""}
           ${icon("chevron", 16)}
         </span>
       </a></li>`;
@@ -413,6 +501,7 @@ async function placeView(id) {
       ${playbackBar()}
     </div>
     ${metadataHTML(campus.places.find(p => p.facility_id === id) ?? {})}
+    ${verifiedInfoSection(f)}
     <section class="card schedule-card" id="location-hours" aria-label="Weekly operating hours">
       <div class="card-head">
         <h2>Weekly operating hours</h2>

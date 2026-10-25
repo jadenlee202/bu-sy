@@ -1,6 +1,12 @@
 # BU-sy demo runbook
 
-Current implementation checks (October 25, 2026): 115 Python tests and 66 JavaScript tests pass.
+Integration checks (October 25, 2026): all fetched feature branches are combined locally.
+198 Python tests and 104 JavaScript tests pass. Calendar requires the declared cryptography
+dependency and optional OAuth configuration described in README; no Google account was connected.
+The local integration includes actionable plans, calendar/availability, the Places list,
+the club directory and separately sourced facility metadata.
+
+Earlier actionable-plan checks: 115 Python tests and 66 JavaScript tests passed.
 The static exporter was run locally. Browser inspection was attempted but the computer-use tool
 stopped because it could not reliably determine Edge's current URL. The 390/768/1280 px,
 both-theme, keyboard, overflow and external-link browser checks remain **not executed** for this change.

@@ -58,9 +58,9 @@ import clubs
 import community_events as ce
 from campus import Campus, load_campus
 from analytics import THRESHOLD_NOTE, latest_at
-from schedule_data import CLUB_SPORTS, INTRAMURALS, SCHEDULE
 from sources import Facility, load_all, load_provenance
 from google_calendar import router as calendar_router
+from facility_info import get_info
 
 
 class CalendarCallbackLogFilter(logging.Filter):
@@ -152,6 +152,10 @@ class FacilitySummary(BaseModel):
     playback_at: Optional[datetime]
     opening_hours: Optional[dict]
     amenities: list[str]
+    # Manually researched hours/access/amenities/walking time with their OWN
+    # provenance (see facility_info.py). None when nothing was verified. This is
+    # kept separate from occupancy: verified hours never make occupancy real.
+    verified_info: Optional[dict] = None
 
 
 class Observation(BaseModel):
@@ -265,11 +269,31 @@ def basis_text(f: Facility, count: Optional[int], tod: time) -> str:
     return f"{count:,} people ({pct:.0%} of typical high); {f.reference_note}; {THRESHOLD_NOTE}"
 
 
+def opening_hours_summary(info) -> Optional[dict]:
+    """A compact regular-hours view derived from verified metadata.
+
+    Returns None when no regular schedule was verified, so unknown stays unknown.
+    """
+    if info is None:
+        return None
+    regular = next((h for h in info.hours if h.schedule_kind == "regular"), None)
+    if regular is None or not any(regular.weekly.values()):
+        return None
+    return {
+        "label": regular.label,
+        "weekly": {str(k): v for k, v in regular.weekly.items()},
+        "source_url": info.hours_source_url,
+        "checked": info.hours_checked,
+        "note": "Published regular hours; verified by hand, subject to change.",
+    }
+
+
 def facility_fields(f: Facility, tod: time) -> dict:
     day = f.default_day
     playback_at = f.at(day, tod)
     obs = latest_at(f.days[day], playback_at, f.coverage_end(day), f.max_hold)
     count = obs[1] if obs else None
+    info = get_info(f.facility_id)
     return dict(
         facility_id=f.facility_id,
         facility_name=f.facility_name,
@@ -288,8 +312,9 @@ def facility_fields(f: Facility, tod: time) -> dict:
         timezone=f.timezone,
         time_note=f.time_note,
         playback_at=playback_at,
-        opening_hours=None,
+        opening_hours=opening_hours_summary(info),
         amenities=f.amenities,
+        verified_info=info.as_dict() if info else None,
     )
 
 
