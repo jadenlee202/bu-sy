@@ -1,0 +1,29 @@
+{
+  "name": "BU-sy — plan your free time",
+  "short_name": "BU-sy",
+  "description": "Find a campus spot that fits your free time between classes. Independent student prototype; busyness is simulated, not affiliated with Boston University.",
+  "id": "/",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f6f8",
+  "theme_color": "#cc0000",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["education", "utilities", "lifestyle"],
+  "icons": [
+    {
+      "src": "assets/terrier.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
