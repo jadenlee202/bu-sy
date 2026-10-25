@@ -602,6 +602,26 @@ main > .hint, main > .form, main > #events { max-width: 720px; }
   background: linear-gradient(90deg, rgba(10, 10, 10, 0.82), rgba(10, 10, 10, 0.5) 55%, rgba(10, 10, 10, 0.25));
 }
 .hero-banner .campus-credit { z-index: 2; }
+
+/* Hand-drawn Boston skyline backdrop (no photo). */
+.hero-bg { position: absolute; inset: 0; z-index: 0; }
+.hero-bg .skyline { width: 100%; height: 100%; display: block; }
+/* Legibility: fade the left side where the text sits. */
+.hero-skyline::after {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(90deg, rgba(8, 10, 16, 0.85), rgba(8, 10, 16, 0.45) 58%, rgba(8, 10, 16, 0.12));
+}
+/* Skyline palette — dusk tones with BU-red accents; tuned per theme. */
+.hero-skyline {
+  --sky-top: #3a1418; --sky-bottom: #7a1d1d; --sun: #ffd9b0;
+  --city-far: #5a1e24; --city-near: #2a0e12; --city-glass: #ffffff;
+  --window: #ffd27a; --sail: #f3ede6;
+  --river-top: #3a1418; --river-bottom: #1d0a0c; --river-line: #8a3a3a;
+}
+:root[data-theme="dark"] .hero-skyline,
+.hero-skyline {
+  --sky-top: #2a0d10; --sky-bottom: #5e1618;
+}
 .hero-body { position: relative; z-index: 2; padding: 28px 24px; max-width: 640px; display: flex; flex-direction: column; gap: 10px; }
 .hero-eyebrow { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; background: var(--red); padding: 4px 11px; border-radius: 999px; }
 .hero-title { margin: 0; font-size: clamp(28px, 4vw + 10px, 46px); line-height: 1.08; font-weight: 800; letter-spacing: -0.035em; color: #fff; }

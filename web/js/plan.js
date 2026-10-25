@@ -4,9 +4,9 @@
 // (recommend.js) and renders the engine's result.
 import { fmtHHMM, fmtShort, fmtTime, toHHMM, toMin } from "./clock.js";
 import { icon, terrier } from "./icons.js";
-import { campusImage, getImages } from "./image.js";
 import * as prefs from "./prefs.js";
 import * as engine from "./recommend.js";
+import { bostonSkyline } from "./skyline.js";
 import * as src from "./source.js";
 import { esc, failure, level, loading } from "./ui.js";
 
@@ -18,12 +18,10 @@ const TYPED = new Set(["custom", "start", "minActivity", "buffer"]);
 // Kept for the session, so going to a place and back keeps the inputs.
 const draft = { req: null, startEdited: false, lastSelected: false };
 
-// A welcoming campus hero over the planner. `images` is the campus-image
-// manifest (or null before it loads); the photo falls back to an illustration.
-const hero = (images) => {
-  const featured = images?.images?.fitrec ?? null;
-  return `<section class="hero-banner">
-    ${campusImage(featured, "Boston University campus")}
+// A welcoming hero over the planner, with an original hand-drawn Boston
+// skyline (SVG, no photograph, no copyrighted asset) as the backdrop.
+const hero = () => `<section class="hero-banner hero-skyline">
+    <div class="hero-bg" aria-hidden="true">${bostonSkyline()}</div>
     <div class="hero-body">
       <span class="hero-eyebrow">${icon("clock", 13)} Campus time, well spent</span>
       <h1 class="hero-title">Find a spot for your free time</h1>
@@ -35,24 +33,23 @@ const hero = (images) => {
       <p class="hero-note">Student prototype · busyness is simulated, not live BU data · not affiliated with Boston University</p>
     </div>
   </section>`;
-};
 
-const header = (images) => `
-  ${hero(images)}
+const header = () => `
+  ${hero()}
   <div class="page-head">
     <h1 class="title">What fits now?</h1>
     <p class="tagline">Find a spot for your free time.</p>
   </div>`;
 
 export async function planView($view, clock) {
-  $view.innerHTML = header(null) + loading("Loading campus data…");
-  let campus, histories, images;
+  $view.innerHTML = header() + loading("Loading campus data…");
+  let campus, histories;
   try {
-    [campus, images] = await Promise.all([src.getCampus(), getImages()]);
+    campus = await src.getCampus();
     const ids = [...new Set(campus.places.map((p) => p.facility_id))];
     histories = Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await src.getHistory(id)])));
   } catch (err) {
-    $view.innerHTML = header(null) + failure(err);
+    $view.innerHTML = header() + failure(err);
     return {};
   }
 
@@ -63,7 +60,7 @@ export async function planView($view, clock) {
   }
   if (!draft.startEdited) draft.req.start = toHHMM(clock.minute);
 
-  $view.innerHTML = `${header(images)}
+  $view.innerHTML = `${header()}
     <div class="plan-layout">
       ${formHTML(campus)}
       <section id="results" class="results" tabindex="-1" aria-label="Options"></section>
