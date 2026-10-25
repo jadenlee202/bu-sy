@@ -492,7 +492,9 @@ export async function calendarView($view) {
       $file.click();
     } else if (action === "remove") {
       if (!confirm(`Clear your imported calendar? Its events and busy times will be deleted from this browser.${clubEvents.length
-        ? ` The ${clubEvents.length} club event${clubEvents.length === 1 ? "" : "s"} you added stay; remove ${clubEvents.length === 1 ? "it" : "them"} one by one in the calendar.` : ""}`)) return;
+        ? (clubEvents.length === 1
+          ? " The club event you added stays; remove it in the calendar."
+          : ` The ${clubEvents.length} club events you added stay; remove them one by one in the calendar.`) : ""}`)) return;
       clearSchedule();
       schedule = null;
       renderCard();
