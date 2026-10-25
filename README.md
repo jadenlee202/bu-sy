@@ -17,8 +17,9 @@ Independent student project, **not affiliated with Boston University**.
 > diners with an assumed 30-minute meal, while breakfast and dinner stay modeled. All of it is rescaled to
 > illustrative sizes. Capacities, amenities and walking times are illustrative. Places cards and place
 > pages show date-bounded building and meal-service hours from official BU pages where available
-> (`web/data/hours.json`); unavailable or unpublished hours are called out explicitly, and planner fit
-> calculations still use the illustrative schedules in the demo campus data. The
+> (`web/data/hours.json`); unavailable or unpublished hours are called out explicitly. The planner uses
+> those verified hours for the demo day when they cover it, and otherwise the illustrative schedules in the
+> demo campus data, and says which one decided each fit. The
 > **Sources & Simulation** page (`#/sources`) maps every place to its source. Two real datasets appear as **historical
 > references** under Places: the *Clemente Room*, an office conference room from the public COD dataset, and
 > the *Campus Gym — Historical Reference*, 2015–2017 head counts from a non-BU university gym (Kaggle, ODbL).
@@ -39,7 +40,7 @@ python -m http.server 8000 -d web       # macOS/Linux: python3
 It reads the pre-built JSON in `web/data/`; meetups are saved in your browser.
 
 **Operating hours.** Location identity and categories come from `web/data/facilities.json`;
-`web/data/campus.json` contains illustrative planner hours, not the displayed verified schedules.
+`web/data/campus.json` contains illustrative planner hours, used only as a fallback when no verified schedule covers the planning date.
 The detail page uses date-scoped building and meal-service schedules from `web/data/hours.json`,
 keyed by facility ID. It displays a Monday–Sunday week, lets users select dates and navigate weeks,
 and displays named meal-service periods for dining locations while retaining building hours for
@@ -159,8 +160,13 @@ CI runs both (`.github/workflows/tests.yml`).
 The rules live in one file, [`web/js/recommend.js`](web/js/recommend.js). They are deterministic, with no ML,
 no randomness and no clock reads, and the same code runs in the browser and in the Node tests.
 
-**The window.** It starts at the selected time (the demo clock by default) and ends at your next commitment,
-`start + free minutes`. The buffer is kept free just before that boundary.
+**The window.** It starts at the selected time (the demo clock by default) and ends at your next commitment.
+Enter it either as **How long** (free minutes, `start + free minutes`) or **Until next class** (the time
+your next class or commitment starts; free minutes = that time − start). Both feed the same engine
+(`normalizeRequest` in `recommend.js`). The next-class time must be later the same day: a time at or before
+the start is rejected, never wrapped to tomorrow, because the demo models one day. Switching modes carries a
+valid window across (45 min from 5:30 PM ⇄ until 6:15 PM) and otherwise keeps what each mode had; samples
+switch back to **How long**. The buffer is kept free just before the boundary, once.
 
 **Fit rule.** A place fits only if
 `free minutes ≥ walk there + preparation + activity time + cleanup + walk onward + buffer`
@@ -173,11 +179,26 @@ isn't counted, and the app says so.
 - it lacks a study need you required (an amenity that isn't listed is treated as unknown, not as present);
 - the sample walking time is missing (unknown, never zero; the same location is zero);
 - there isn't enough time;
-- it is closed during any part of the visit (illustrative hours). If a place opens a little later, the
-  visit waits for opening; if it closes early, the unused minutes are shown. Preparation and cleanup
-  must both occur inside the visit's opening interval.
+- it is closed during any part of the visit. If a place opens a little later, the visit waits for
+  opening; if it closes early, the unused minutes are shown. Preparation and cleanup must both occur
+  inside the visit's opening interval.
 - the student says they do not meet the listed access requirements. Unknown eligibility appears under
   **Check access**, with no choose action until the student confirms it for this session.
+
+**Which hours decide "open".** The planner plans for the **demo day**, the date the simulated occupancy
+replays (Mon, Oct 19, 2026, read from the histories), and looks hours up for that same date
+(`planningHours` in `recommend.js`, using `daySchedule` from `web/js/hours.js`):
+- **Verified** when `hours.json` has `status: "verified"` and the date is inside `effectiveFrom`–
+  `effectiveThrough`, or is a listed special date (special closures and adjusted hours win). Weekly hours
+  alone never count as verified. Eating at a dining hall uses the **meal-service** periods (kept inside
+  verified building hours); studying or working out uses **building** hours.
+- Otherwise the **illustrative** demo hours from the campus data, labelled as not official, with the reason
+  (for example *BU hours not published for Monday, Oct 19*).
+- With neither, hours are **unknown** and the place goes to *Hours unknown*, never a confirmed fit.
+
+Which verified hours cover the demo day depends on the date ranges in `web/data/hours.json`; each card and
+each *closed* reason names the hours that decided it. Overnight periods are cut at midnight, since the
+planner models one day.
 
 **Unknown hours.** A place that fits on time but has no hours is never shown as confirmed. It appears under
 **Hours unknown**.
@@ -212,29 +233,40 @@ The starting point in BU-sy is manually chosen; the mapping service can use a di
 It does not validate the app's sample walking allowances. No automatic location permission is requested.
 
 **Ranking.** Comparisons are lexicographic and documented in the code:
-1. Your preference: busyness level if you chose *quieter*; total sample walking if you chose *shorter walks*;
+1. Your preference: busyness if you chose *quieter*; total sample walking if you chose *shorter walks*;
    if neither, more activity time.
-2. Then, in order: busyness level, walking, activity time, and study amenities listed.
+2. Then, in order: busyness, walking, activity time, and study amenities listed.
 3. Then name and id, so results are reproducible.
 
 Busyness is compared by **level** (quiet < moderate < *unavailable* < busy), not by exact percentage,
 because capacities are illustrative. A place with no count is never treated as quiet.
 
+**Busyness during the visit.** With a starting point, the engine knows the estimated visit (arrive → leave by,
+from the sample walk and the hours) and reads the simulated history minute by minute across it, with the same
+rule as the snapshot (latest value, coverage end, maximum hold). The profile (`visitProfile`) keeps minutes
+per level and every change in order, so *"Quiet, then busy during your visit"* isn't flattened to one word.
+Minutes the history doesn't cover are *no simulated data*: never zero, never quiet. Ranking then uses the
+profile's time-weighted level (unavailable still ranks between moderate and busy) instead of the departure
+snapshot, and the reasons say *"during the planned visit (simulated)"*. Without a starting point or route, no
+visit is estimated and nothing is claimed about it; ranking falls back to the departure-time level.
+
 **Best match.** This label appears only when something other than the alphabetical tie-break separates
 #1 from #2, and never when #1's busyness is unavailable. Otherwise the app says the options are equal.
 
-**Busyness wording.** Labels are tied to the count's time: *"Quiet at 3:00 PM"* (next to a *Demo* data
-chip) or *"No busyness data"*. There's no forecasting for your arrival time, and campus places have no
-multi-day history that could support "historically quieter".
+**Busyness wording.** Cards keep three things apart: the departure-time count (*"Quiet at 3:00 PM (when you
+leave)"*), the estimated visit interval, and the simulated profile over it. It's simulated BU-named data,
+not live occupancy and not a forecast, and campus places have no multi-day history that could support
+"historically quieter".
 
 **Nothing fits.** The app says why (grouped reasons, plus a per-place list) and offers changes such as a
 longer window, a shorter minimum, another activity or dropping a requirement. It suggests a change only
 after re-running the engine to confirm it would really fit. The form keeps your inputs.
 
 ### Inputs designed for later
-A request is `{activity, start, minutes, source, from, to, minActivity, buffer, preparation, cleanup,
-access, preferQuiet, preferShortTravel, needs}`. Missing allowances receive activity defaults;
-`access` records session-only self-confirmation for library, fitness and dining requirements.
+A request is `{activity, start, minutes, mode, until, date, source, from, to, minActivity, buffer,
+preparation, cleanup, access, preferQuiet, preferShortTravel, needs}`. Missing allowances receive activity
+defaults; `access` records session-only self-confirmation for library, fitness and dining requirements;
+`mode`, `until` and `date` are optional (see the top of `recommend.js`).
 - **`source`** is `"manual"` today. A future calendar integration would set `source: "calendar"` and fill
   `start`/`minutes` from the gap before the next event, and `to` from that event's location.
 - **`from`** is always chosen by the student. A calendar event is never taken as proof of where someone is,
@@ -363,7 +395,7 @@ web/       the site: index.html, styles.css, js/
              app.js        router, Places, playback, meetups, About
              source.js     data adapter (API or static)   clock.js / ui.js / icons.js  helpers
            data/ (generated)
-tests/     test_api.py, test_campus_gym.py (pytest); recommend / plan_prefs / clock / meetups_static .test.mjs (node --test)
+tests/     test_api.py, test_campus_gym.py (pytest); recommend / planner_features / plan_prefs / clock / hours / meetups_static .test.mjs (node --test)
 DEMO.md    demo runbook: startup, demo sequence, checks, recovery
 ```
 

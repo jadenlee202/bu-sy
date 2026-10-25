@@ -194,6 +194,6 @@ The only console error in static mode is an expected 404: the app checking wheth
 - `--host 0.0.0.0` and the API's open CORS (`*`, no credentials) suit a demo network. Restrict CORS with
   `BUSY_CORS_ORIGINS` for anything public.
 - pytest prints a Starlette deprecation warning about `httpx` in the test client. It's harmless today.
-- Data: one sample Monday; walking times, hours, amenities and capacities are illustrative. FitRec is one
-  building-level count (no courts, pools, rooms or reservations). Busyness is read at the selected time,
+- Data: one sample Monday; walking times, amenities and capacities are illustrative, and so are hours except the verified BU hours in `web/data/hours.json`. FitRec is one
+  building-level count (no courts, pools, rooms or reservations). Busyness is read at the selected time (and, with a starting point, profiled over the estimated visit),
   not forecast.

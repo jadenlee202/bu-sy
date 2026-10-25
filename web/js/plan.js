@@ -3,6 +3,7 @@
 // No logic here decides what fits: it reads the form, runs the shared engine
 // (recommend.js) and renders the engine's result.
 import { fmtHHMM, fmtShort, fmtTime, toHHMM, toMin } from "./clock.js";
+import { dateLabel } from "./hours.js";
 import { icon, terrier } from "./icons.js";
 import { createPlanSession } from "./plan-session.js";
 import * as prefs from "./prefs.js";
@@ -13,7 +14,7 @@ import { esc, failure, level, loading } from "./ui.js";
 const PRESETS = [30, 45, 60, 90];
 const PLAYBACK = [0, 24 * 60 - 1];  // range the demo clock can show (12 AM-11:59 PM)
 const TYPING_MS = 600;              // wait this long after typing before updating
-const TYPED = new Set(["custom", "start", "minActivity", "buffer", "preparation", "cleanup"]);
+const TYPED = new Set(["custom", "start", "minActivity", "buffer", "preparation", "cleanup", "until"]);
 
 // Kept for the session, so going to a place and back keeps the inputs.
 const draft = { req: null, startEdited: false, lastSelected: false };
@@ -23,19 +24,21 @@ const header = () => `<div class="page-head"><h1 class="title">What fits now?</h
 
 export async function planView($view, clock) {
   $view.innerHTML = header() + loading("Loading campus data…");
-  let campus, histories;
+  let campus, histories, hours;
   try {
-    campus = await src.getCampus();
+    // Verified hours are optional: if hours.json can't load, the engine uses the demo hours.
+    [campus, hours] = await Promise.all([src.getCampus(), src.getHours().catch(() => null)]);
     const ids = [...new Set(campus.places.map((p) => p.facility_id))];
     histories = Object.fromEntries(await Promise.all(ids.map(async (id) => [id, await src.getHistory(id)])));
   } catch (err) {
     $view.innerHTML = header() + failure(err);
     return {};
   }
+  const planDate = engine.demoDate(campus, histories);
 
   if (!draft.req) {
     const saved = prefs.loadPrefs(campus);
-    draft.req = { activity: "", minutes: NaN, start: "", source: "manual", ...prefs.defaults(campus, saved, "") };
+    draft.req = { activity: "", minutes: NaN, start: "", source: "manual", mode: "duration", until: "", ...prefs.defaults(campus, saved, "") };
     draft.lastSelected = Boolean(saved.from);
   }
   if (!draft.startEdited) draft.req.start = toHHMM(clock.minute);
@@ -52,7 +55,7 @@ export async function planView($view, clock) {
   const $status = $view.querySelector("#plan-status");
   const $err = $form.querySelector(".form-error");
   const $go = $form.querySelector('[type="submit"]');
-  const session = createPlanSession(campus, histories);
+  const session = createPlanSession(campus, histories, { hours });
   fill($form, draft.req, campus);
 
   /** showErrors: false while someone is still typing, so nothing flashes red mid-entry. */
@@ -64,11 +67,14 @@ export async function planView($view, clock) {
     $err.textContent = "";
     $results.classList.remove("is-stale");
 
-    const missing = [!req.activity && "activity", !$form.elements.preset.value && "minutes"].filter(Boolean);
+    const until = req.mode === "until";
+    const noWindow = until ? !req.until : !$form.elements.preset.value;
+    const missing = [!req.activity && "activity", noWindow && (until ? "until" : "minutes")].filter(Boolean);
     if (missing.length) {
       if (showErrors && focus) {
-        $err.textContent = missing.length === 2 ? "Choose an activity and how long you're free."
-          : missing[0] === "activity" ? "Choose an activity." : "Choose how long you're free.";
+        const window = until ? "when your next class starts" : "how long you're free";
+        $err.textContent = missing.length === 2 ? `Choose an activity and ${window}.`
+          : missing[0] === "activity" ? "Choose an activity." : `Choose ${window}.`;
         fieldFor($form, missing[0])?.focus();
       }
       $results.innerHTML = startState(missing);
@@ -77,7 +83,9 @@ export async function planView($view, clock) {
       return;
     }
 
-    const result = session.update(req);
+    // The plan is for the simulated demo day: the same date the occupancy replays, and the
+    // date verified hours are looked up for. The engine is the same in static and API mode.
+    const result = session.update({ ...req, date: planDate });
     if (!result.ok) {
       if (!showErrors) {                       // mid-entry: keep the last results, marked out of date
         if ($results.querySelector(".recs, .empty")) $results.classList.add("is-stale");
@@ -135,10 +143,15 @@ export async function planView($view, clock) {
       $form.elements.minActivity.value = remembered ?? engine.activityInfo(campus, e.target.value).default_min;
     }
     if (name === "preset" && e.target.value === "custom") $form.elements.custom.focus();
+    if (name === "mode") {
+      // Carry a valid window across (60 min from 3 PM <-> until 4 PM); keep the other field otherwise.
+      const both = { ...readForm($form), minutes: durationMinutes($form), until: $form.elements.until.value };
+      fillWindow($form, engine.switchWindowMode(both, e.target.value));
+    }
     remember($form, name, campus);
     syncForm($form, campus);
     if (name === "preset" && e.target.value === "custom" && !$form.elements.custom.value) return; // wait for a number
-    run();
+    run({ showErrors: name !== "mode" });
   });
 
   const apply = (req) => {
@@ -226,13 +239,24 @@ function formHTML(campus) {
       ${campus.activities.map((a) => `<label><input type="radio" name="activity" value="${esc(a.id)}"><span>${icon(a.id, 20)}${esc(a.label)}</span></label>`).join("")}
     </fieldset>
 
-    <fieldset class="presets"><legend>Free for <span class="until num" id="until"></span></legend>
-      <div class="preset-row">
-        ${PRESETS.map((m) => `<label><input type="radio" name="preset" value="${m}"><span class="num">${m} min</span></label>`).join("")}
-        <label><input type="radio" name="preset" value="custom"><span>Other</span></label>
+    <fieldset class="presets"><legend>Free time <span class="until num" id="until"></span></legend>
+      <div class="segmented window-mode" role="radiogroup" aria-label="How to enter your free time">
+        <label><input type="radio" name="mode" value="duration"><span>How long</span></label>
+        <label><input type="radio" name="mode" value="until"><span>Until next class</span></label>
       </div>
-      <label class="field custom" hidden><span class="field-label">Minutes free</span>
-        <input name="custom" type="number" min="5" max="720" inputmode="numeric" enterkeyhint="done"></label>
+      <div class="duration-block">
+        <div class="preset-row">
+          ${PRESETS.map((m) => `<label><input type="radio" name="preset" value="${m}"><span class="num">${m} min</span></label>`).join("")}
+          <label><input type="radio" name="preset" value="custom"><span>Other</span></label>
+        </div>
+        <label class="field custom" hidden><span class="field-label">Minutes free</span>
+          <input name="custom" type="number" min="5" max="720" inputmode="numeric" enterkeyhint="done"></label>
+      </div>
+      <div class="until-block" hidden>
+        <label class="field"><span class="field-label">Next class or commitment starts</span>
+          <input name="until" type="time" aria-describedby="until-help"></label>
+        <p class="help" id="until-help"></p>
+      </div>
     </fieldset>
 
     <label class="field"><span class="field-label">Starting point <span class="tag-soft" id="last-selected" hidden>Last selected</span></span>
@@ -287,9 +311,14 @@ function readForm(f) {
   const num = (k) => (String(d.get(k) ?? "").trim() === "" ? NaN : Number(d.get(k)));
   const preset = d.get("preset");
   const activity = d.get("activity") || "";
+  const mode = d.get("mode") === "until" ? "until" : "duration";
+  const start = d.get("start") || "";
+  const until = d.get("until") || "";
   return {
-    activity, start: d.get("start") || "",
-    minutes: preset === "custom" ? num("custom") : preset ? Number(preset) : NaN,
+    activity, start, mode, until,
+    // "until": minutes come from the two times (the engine re-derives and validates them).
+    minutes: mode === "until" ? engine.minutesUntil(start, until) ?? NaN
+      : preset === "custom" ? num("custom") : preset ? Number(preset) : NaN,
     source: "manual", from: d.get("from") || "", to: d.get("to") || null,
     preparation: num("preparation"), cleanup: num("cleanup"),
     access: Object.fromEntries(["library", "fitness", "dining"].map(k => [k, d.get(`access-${k}`)])),
@@ -299,14 +328,32 @@ function readForm(f) {
   };
 }
 
-function fill(f, req, campus) {
+/** The duration-mode minutes as the preset/custom fields hold them (NaN when unset). */
+function durationMinutes(f) {
   const el = f.elements;
-  for (const r of el.activity) r.checked = r.value === req.activity;
-  el.start.value = req.start;
+  if (el.preset.value === "custom") return el.custom.value.trim() === "" ? NaN : Number(el.custom.value);
+  return el.preset.value ? Number(el.preset.value) : NaN;
+}
+
+/** Window fields only: mode, duration presets, next-commitment time. */
+function fillWindow(f, req) {
+  const el = f.elements;
+  const mode = req.mode === "until" ? "until" : "duration";
+  for (const r of el.mode) r.checked = r.value === mode;
+  if (req.until != null) el.until.value = req.until;
+  if (mode === "until") return; // the duration fields keep what they had, for switching back
   const preset = !Number.isFinite(req.minutes) ? (el.preset.value === "custom" ? "custom" : "")
     : PRESETS.includes(req.minutes) ? String(req.minutes) : "custom";
   for (const r of el.preset) r.checked = r.value === preset;
   el.custom.value = preset === "custom" && Number.isFinite(req.minutes) ? req.minutes : "";
+}
+
+function fill(f, req, campus) {
+  const el = f.elements;
+  for (const r of el.activity) r.checked = r.value === req.activity;
+  el.start.value = req.start;
+  // Samples and fixes carry no mode: they are durations, so the form switches back to "How long".
+  fillWindow(f, req.mode === "until" ? req : { ...req, mode: "duration" });
   el.from.value = req.from ?? "";
   el.to.value = req.to ?? "";
   const allowance = engine.allowances(req);
@@ -324,10 +371,22 @@ function fill(f, req, campus) {
 /** Derived bits: custom field, study needs, end time, help lines, the Preferences summary. */
 function syncForm(f, campus) {
   const req = readForm(f);
+  const untilMode = req.mode === "until";
+  f.querySelector(".duration-block").hidden = untilMode;
+  f.querySelector(".until-block").hidden = !untilMode;
   f.querySelector(".custom").hidden = f.elements.preset.value !== "custom";
   f.querySelector(".study-needs").hidden = req.activity !== "study";
-  const end = /^\d\d:\d\d$/.test(req.start) && Number.isFinite(req.minutes) ? toMin(req.start) + req.minutes : null;
-  f.querySelector("#until").textContent = end == null ? "" : end > engine.DAY_END ? "· past midnight" : `· until ${fmtTime(end % (24 * 60))}`;
+  const startOk = /^\d\d:\d\d$/.test(req.start);
+  if (untilMode) {
+    const m = engine.minutesUntil(req.start, req.until);
+    f.querySelector("#until").textContent = m == null ? "" : m > 0 ? `· ${m} min free` : "";
+    f.querySelector("#until-help").textContent = startOk
+      ? `From ${fmtTime(toMin(req.start))} on the demo clock (change Start under Preferences). Same day only.`
+      : "Set a start time under Preferences.";
+  } else {
+    const end = startOk && Number.isFinite(req.minutes) ? toMin(req.start) + req.minutes : null;
+    f.querySelector("#until").textContent = end == null ? "" : end > engine.DAY_END ? "· past midnight" : `· until ${fmtTime(end % (24 * 60))}`;
+  }
   f.querySelector("#last-selected").hidden = !(draft.lastSelected && req.from);
   f.querySelector("#from-help").textContent = req.from ? "" : "Set it to check walking time. BU-sy never detects your location.";
   f.querySelector("#to-help").textContent = req.to ? "" : "No next stop: the walk after isn't counted.";
@@ -344,14 +403,15 @@ function fieldFor(f, field) {
   const el = f.elements;
   return {
     preparation: el.preparation, cleanup: el.cleanup, activity: el.activity[0], start: el.start, from: el.from, to: el.to, buffer: el.buffer, minActivity: el.minActivity,
-    minutes: el.preset.value === "custom" ? el.custom : el.preset[0],
+    minutes: el.preset.value === "custom" ? el.custom : el.preset[0], until: el.until,
   }[field];
 }
 
 // ---------- results ----------
 function startState(missing) {
-  const text = missing.length === 2 ? "Choose an activity and how long you're free."
-    : missing[0] === "activity" ? "Now choose an activity." : "Now choose how long you're free.";
+  const window = missing.includes("until") ? "when your next class starts" : "how long you're free";
+  const text = missing.length === 2 ? `Choose an activity and ${window}.`
+    : missing[0] === "activity" ? "Now choose an activity." : `Now choose ${window}.`;
   return `<div class="start-state">${terrier({ size: 44 })}<p class="start-title">${text}</p>
     <p>Options appear here. Everything else has a default under Preferences.</p></div>`;
 }
@@ -388,7 +448,8 @@ function resultsHTML(r, campus) {
   const from = req.from ? engine.locationName(campus, req.from) : null;
   const meta = [
     `${icon(act.id, 14)} ${esc(act.label)}`,
-    `<span class="num">${fmtTime(r.window.start)}–${fmtTime(r.window.end)}</span>`,
+    `<span class="num">${fmtTime(r.window.start)}–${fmtTime(r.window.end)}</span>${req.mode === "until" ? " (until next class)" : ""}`,
+    ...(req.date ? [`<span title="The simulated occupancy replays this day; hours are checked for the same date">Demo day ${esc(dateLabel(req.date))}</span>`] : []),
     from ? `${esc(from)}${req.to ? ` → ${esc(engine.locationName(campus, req.to))}` : ""}` : "No starting point",
     ...(from && !req.to ? [`<span title="Only the walk there is counted">No next stop · walk after not counted</span>`] : []),
   ].map((x) => `<span>${x}</span>`).join("");
@@ -452,7 +513,8 @@ const stat = (value, unit, caption) => `<div class="stat"><span class="stat-valu
 function card(o, { req, campus, hero = false, featured = null, reason = null }) {
   const act = engine.activityInfo(campus, req.activity);
   const busy = engine.busynessText(o, req);
-  const hours = engine.hoursStatus(o.place);
+  const visit = engine.visitText(o);
+  const hours = o.hours ? { text: engine.hoursBasisText(o.hours) } : engine.hoursStatus(o.place);
   const checked = o.there != null;
   const badge = featured ? `<span class="badge">${featured.kind === "best" ? "Best match" : "Only fit"}</span>` : "";
   const walk = !checked ? stat("—", "", "walk not checked")
@@ -475,7 +537,10 @@ function card(o, { req, campus, hero = false, featured = null, reason = null }) 
       <a class="rec-link" href="#/place/${encodeURIComponent(o.place.facility_id)}">View place ${icon("chevron", 14)}</a></div>
     <h3 class="rec-name">${esc(o.place.name)}</h3>
     <div class="stats">${time}${walk}</div>
-    <div class="rec-busy">${level(o.busy.level, busy.label)}</div>
+    <div class="rec-busy">${level(o.busy.level, `${busy.label}${o.busy.level === "unknown" ? "" : " (when you leave)"}`)}</div>
+    ${visit ? `<div class="rec-visit"><span class="visit-label">${esc(visit.label)}</span>
+      <span class="visit-bar" aria-hidden="true">${o.visit.segments.map((s) => `<span class="vseg" data-level="${s.level}" style="flex-grow:${s.end - s.start}"></span>`).join("")}</span>
+      <span class="visit-span num">${fmtTime(o.visit.start)}–${fmtTime(o.visit.end)} estimated visit</span></div>` : ""}
     ${why ? `<p class="rec-reason">${esc(why)}</p>` : ""}
     ${o.status === "fit" ? `<button type="button" class="btn btn-primary" data-choose="${esc(o.place.place_id)}">Choose this plan</button>` : o.status === "unchecked" ? `<button type="button" class="btn" data-focus-from>Complete travel details</button>` : `<button type="button" class="btn" data-check-access="${esc(o.place.metadata?.access?.group)}">Check access</button>`}
     ${metadataHTML(o.place)}
@@ -487,7 +552,8 @@ function card(o, { req, campus, hero = false, featured = null, reason = null }) 
         ${steps.length ? `<ol class="timeline">${steps.map(([k, v]) => `<li><span>${esc(k)}</span><strong class="num">${v}</strong></li>`).join("")}</ol>` : ""}
         ${checked ? `<ul class="why-list">${engine.whyItFits(o, req, campus, featured).map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
         <dl class="facts">
-          <dt>Busyness</dt><dd>${esc(busy.basis)}${o.busy.observedAt ? ` Last count ${fmtHHMM(o.busy.observedAt)}.` : ""}</dd>
+          <dt>When you leave</dt><dd>${esc(busy.basis)}${o.busy.observedAt ? ` Last count ${fmtHHMM(o.busy.observedAt)}.` : ""}</dd>
+          <dt>During visit</dt><dd>${visit ? esc(visit.basis) : "Not estimated: choose a starting point so the arrival time can be worked out."}</dd>
           <dt>Source</dt><dd>${esc(MODE[o.place.data_mode]?.[1] ?? o.place.data_mode)}.</dd>
           <dt>Walk</dt><dd>${esc(campus.travel_note)}</dd>
           <dt>Hours</dt><dd>${esc(hours.text)}</dd>
@@ -529,7 +595,10 @@ export function selectedPlanHTML(o, req, campus) {
   const official = o.place.metadata?.identity?.url;
   return `<article class="panel selected-plan" aria-label="Chosen plan">
     <p class="help">Chosen plan · historical demo Monday, October 19, 2026</p>
-    <p class="help">Time fit uses illustrative demo hours and sample walks; access is self-confirmed. Verify current hours before a real visit.</p>
+    <p class="help">Time fit uses ${o.hours?.basis === "verified"
+      ? `verified BU ${o.hours.kind === "service" ? "meal-service" : "building"} hours for ${esc(dateLabel(o.hours.date))}`
+      : "illustrative demo hours"} and sample walks; access is self-confirmed. Verify current hours before a real visit.</p>
+    ${o.visit ? `<p class="help">${esc(engine.visitText(o).label)}: ${esc(engine.visitText(o).basis)}</p>` : ""}
     <h2>${esc(o.place.name)}</h2><p class="title">${o.activity} minutes to ${esc(act.verb)}</p>
     <ol class="timeline">${steps.map(([label,time]) => `<li><span>${esc(label)}</span><strong>${esc(time)}</strong></li>`).join("")}</ol>
     ${o.free ? `<p class="help">${o.free} minutes free before departure while waiting for opening.</p>` : ""}

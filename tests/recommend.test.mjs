@@ -278,7 +278,8 @@ test("rankReason names the first factor that puts an option below the top one", 
   const [top, tie, busy] = r.options;
   assert.equal(rankReason(top, top), null);
   assert.equal(rankReason(tie, top), "Tied with the top option; listed by name");
-  assert.equal(rankReason(busy, top), "Busier in the simulation at the selected time than the top option");
+  // A known start means the comparison is over the planned visit, and the reason says so.
+  assert.equal(rankReason(busy, top), "Busier than the top option during the planned visit (simulated)");
 });
 
 // ---------- the real exported sample data (what static mode serves) ----------

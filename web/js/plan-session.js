@@ -2,7 +2,8 @@
 // Both the options and chosen timeline retain the exact shared-engine objects.
 import { recommend } from "./recommend.js";
 
-export function createPlanSession(campus, histories) {
+// `hours` (web/data/hours.json) is passed to the engine unchanged; null keeps the demo hours.
+export function createPlanSession(campus, histories, { hours = null } = {}) {
   let result = null;
   let selected = null;
   return {
@@ -11,7 +12,7 @@ export function createPlanSession(campus, histories) {
     invalidate() { result = null; selected = null; },
     update(request) {
       selected = null;
-      result = recommend(request, campus, histories);
+      result = recommend(request, campus, histories, { hours });
       return result;
     },
     choose(id) {
