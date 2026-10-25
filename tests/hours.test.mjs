@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
-  buildingHoursSummary, campusDateTime, daySchedule, selectedBuildingStatus, selectedStatusLabel,
+  buildingHoursSummary, campusDateTime, daySchedule, displaySchedule, selectedBuildingStatus, selectedStatusLabel,
   serviceAtTime, serviceStatusLabel, weekStart,
 } from "../web/js/hours.js";
 
 const hours = JSON.parse(readFileSync(new URL("../web/data/hours.json", import.meta.url), "utf8"));
 
-test("Places status follows the selected slider time, not the current time", () => {
+test("Places status utility follows the selected time and summarizes building hours", () => {
   const marciano = hours.locations["marciano-dining-synthetic"];
   const date = "2026-10-25";
   const closed = selectedBuildingStatus(marciano, date, 9 * 60 + 30);
@@ -18,6 +18,16 @@ test("Places status follows the selected slider time, not the current time", () 
   assert.equal(selectedStatusLabel(closed), "Closed now");
   assert.equal(selectedStatusLabel(open), "Open now");
   assert.equal(buildingHoursSummary(marciano, date), "10:00 AM–9:00 PM");
+});
+
+test("Places status reflects the selected playback time", () => {
+  const marciano = hours.locations["marciano-dining-synthetic"];
+  const date = "2026-10-25";
+  const closed = selectedBuildingStatus(marciano, date, 9 * 60 + 30);
+  const open = selectedBuildingStatus(marciano, date, 12 * 60);
+
+  assert.equal(selectedStatusLabel(closed), "Closed now");
+  assert.equal(selectedStatusLabel(open), "Open now");
 });
 
 test("Places reports unpublished dates without claiming an open or closed status", () => {
@@ -67,4 +77,17 @@ test("dining service is determined by selected date and slider time", () => {
 
   const closed = selectedBuildingStatus(marciano, sunday, 21 * 60 + 30);
   assert.equal(serviceStatusLabel(serviceAtTime(marciano, sunday, 21 * 60 + 30), closed), "No meal service — building closed");
+});
+
+test("dining weekly display uses named service periods while non-dining keeps building hours", () => {
+  const marciano = hours.locations["marciano-dining-synthetic"];
+  const fitrec = hours.locations["fitrec-synthetic"];
+  const saturdayMeals = displaySchedule(marciano, "2026-10-24", "dining");
+  const sundayMeals = displaySchedule(marciano, "2026-10-25", "dining");
+  const building = displaySchedule(fitrec, "2026-10-24", "fitness");
+
+  assert.deepEqual(saturdayMeals.periods.map(({ label }) => label), ["Breakfast", "Lunch", "Dinner"]);
+  assert.deepEqual(sundayMeals.periods.map(({ label }) => label), ["Brunch", "Dinner"]);
+  assert.deepEqual(building.periods.map(({ label }) => label), ["Building hours"]);
+  assert.equal(displaySchedule(marciano, "2026-10-31", "dining").status, "unpublished");
 });

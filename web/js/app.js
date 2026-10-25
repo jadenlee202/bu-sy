@@ -3,7 +3,7 @@ import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
 import { hoursText, openSegments } from "./recommend.js";
 import {
-  addDays, buildingHoursSummary, campusDateTime, dateLabel, daySchedule, formatPeriod,
+  addDays, buildingHoursSummary, campusDateTime, dateLabel, daySchedule, displaySchedule, formatPeriod,
   selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekRangeLabel, weekStart,
 } from "./hours.js";
 import * as src from "./source.js";
@@ -288,7 +288,7 @@ async function placeView(id) {
     $view.querySelector("#schedule-week").textContent = weekRangeLabel(start);
     $scheduleDays.innerHTML = Array.from({ length: 7 }, (_, index) => {
       const date = addDays(start, index);
-      const schedule = daySchedule(scheduleLocation, date);
+      const schedule = displaySchedule(scheduleLocation, date, f.category);
       let details;
       if (schedule.status === "closed") {
         details = `<span class="hours-closed">Closed${schedule.note ? ` · ${esc(schedule.note)}` : ""}</span>`;
@@ -300,13 +300,13 @@ async function placeView(id) {
         details = `<span class="hours-unknown">Hours unavailable in the provided schedule data.</span>`;
       } else {
         details = schedule.periods.map((period) =>
-          `<span class="hours-period"><strong>Building hours:</strong> ${esc(formatPeriod(period))}</span>`,
+          `<span class="hours-period"><strong>${esc(f.category === "dining" ? period.label : "Building hours")}:</strong> ${esc(formatPeriod(period))}</span>`,
         ).join("");
         if (schedule.note) details += `<span class="hours-note">${esc(schedule.note)}</span>`;
       }
       return `<li><button type="button" class="schedule-day${date === today ? " is-today" : ""}${date === selectedScheduleDate ? " is-selected" : ""}" data-schedule-date="${date}"${date === today ? ' aria-current="date"' : ""} aria-pressed="${date === selectedScheduleDate}">
         <span class="schedule-day-name">${esc(dateLabel(date))}${date === today ? " · Today" : ""}</span>
-        <span class="schedule-periods">${details}</span>
+        <span class="schedule-periods${f.category === "dining" ? " schedule-meals" : ""}">${details}</span>
       </button></li>`;
     }).join("");
 

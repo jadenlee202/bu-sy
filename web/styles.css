@@ -396,6 +396,7 @@ label.check { display: flex; flex-direction: row; align-items: center; gap: 12px
 .schedule-day.is-selected { background: var(--subtle); }
 .schedule-day-name { font-weight: 650; }
 .schedule-periods { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 13px; }
+.schedule-meals { flex-direction: column; align-items: flex-start; gap: 4px; }
 .hours-period strong { color: var(--text); }
 .hours-closed { color: var(--muted); font-weight: 600; }
 .hours-unknown, .hours-note { color: var(--muted); }

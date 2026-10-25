@@ -76,6 +76,10 @@ export function daySchedule(location, isoDate, kind = "building") {
     : { status: "unverified", periods: [] };
 }
 
+export function displaySchedule(location, isoDate, category) {
+  return daySchedule(location, isoDate, category === "dining" ? "service" : "building");
+}
+
 function timeValue(hhmm) {
   const [hour, minute] = hhmm.split(":").map(Number);
   return hour * 60 + minute;

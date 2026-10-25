@@ -36,9 +36,11 @@ It reads the pre-built JSON in `web/data/`; meetups are saved in your browser.
 `web/data/campus.json` contains illustrative planner hours, not the displayed verified schedules.
 The detail page uses date-scoped building and meal-service schedules from `web/data/hours.json`,
 keyed by facility ID. It displays a Monday–Sunday week, lets users select dates and navigate weeks,
-and updates building and meal-service status with the slider. Dates outside a published schedule
-are marked unavailable; unverified locations remain explicit. Source and verification metadata
-remain in the hours data file and are not linked in the UI.
+and displays named meal-service periods for dining locations while retaining building hours for
+other locations. The detail-page building and meal-service status updates with the selected slider
+time; Places cards show open/closed status based on the selected slider time. Dates outside a published
+schedule are marked unavailable; unverified locations remain explicit. Source and verification
+metadata remain in the hours data file and are not linked in the UI.
 
 **With the API** (meetups shared between everyone using the server):
 ```bash
