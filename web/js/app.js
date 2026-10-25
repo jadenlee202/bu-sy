@@ -2,10 +2,13 @@ import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obs
 import { icon, paw, terrier } from "./icons.js";
 import { campusImage, getImages } from "./image.js";
 import { planView, metadataHTML } from "./plan.js";
+import { placeAvailability } from "./availability.js";
+import { calendarView, formatInstant, loadCalendarPrefs, MIN_OPTIONS, TZ } from "./calendar.js";
+import { findTimeCard } from "./findtime.js";
 import { hoursText, openSegments, periodAt } from "./recommend.js";
 import {
-  addDays, campusDateTime, dateLabel, daySchedule, displaySchedule, formatPeriod,
-  selectedBuildingStatus, serviceAtTime, serviceStatusLabel, weekRangeLabel, weekStart,
+  addDays, buildingHoursSummary, campusDateTime, dateLabel, daySchedule, displaySchedule, formatPeriod,
+  selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekRangeLabel, weekStart,
 } from "./hours.js";
 import * as src from "./source.js";
 import { LEVEL, esc, failure, fmtCount, level, loading } from "./ui.js";
@@ -21,8 +24,12 @@ const TICK_MS = 300;
 
 const CATEGORY = { fitness: "Fitness", dining: "Dining", library: "Library", office: "Office" };
 const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], ["library", "Library"], ["historical", "Historical"]];
+// Availability filters combine with the category chips. Only "open_now" works without Google Calendar.
+const AVAIL_FILTERS = [["any", "Any time"], ["open_now", "Open now"], ["free", "Open during my free time"],
+  ["lunch", "Serving lunch during my free time"], ["dinner", "Serving dinner during my free time"]];
+const CALENDAR_FILTERS = new Set(["free", "lunch", "dinner"]);
 
-const state = { minute: FIRST_VIEW, playing: false, timer: null, filter: "all", query: "" };
+const state = { minute: FIRST_VIEW, playing: false, timer: null, filter: "all", query: "", avail: "any" };
 const $view = document.getElementById("view");
 let view = null; // the mounted screen: { update?(), resize?() }
 
@@ -73,7 +80,7 @@ function replayHours(location, date, minute) {
   const text = s.status === "scheduled" ? `${day}: ${s.periods.map(formatPeriod).join(" · ")}`
     : s.status === "closed" ? `Closed ${day}`
     : s.status === "unpublished" ? `${day} hours not published` : "Hours unverified";
-  return { text, status: selectedBuildingStatus(location, date, minute).status };
+  return { text, status: s.assumed ? "unpublished" : selectedBuildingStatus(location, date, minute).status };
 }
 
 /** Closed at `minute` by those hours: { opens } (null = not again today); null when open or unknown. */
@@ -154,12 +161,14 @@ document.addEventListener("input", (e) => {
 async function placesView() {
   $view.innerHTML = `
     <div class="page-head"><h1 class="title">How busy is it?</h1>
-      <p class="tagline">Campus places on a simulated demo Monday, plus recorded references. <a href="#/sources">Sources &amp; Simulation</a></p></div>
+      <p class="tagline">Replays of recorded days. Tags show where each place's data comes from.</p></div>
     ${playbackBar()}
     <label class="search">${icon("search")}<input type="search" placeholder="Search places" aria-label="Search places" value="${esc(state.query)}"></label>
     <div class="chips" role="group" aria-label="Filter places">
       ${FILTERS.map(([id, label]) => `<button class="chip" data-filter="${id}" aria-pressed="${state.filter === id}">${label}</button>`).join("")}
     </div>
+    <div class="chips" id="avail-chips" role="group" aria-label="Filter by availability"></div>
+    <div class="avail-panel" id="avail-panel" aria-live="polite"></div>
     <div id="places" class="places" aria-live="polite">${loading()}</div>`;
   syncPlayback();
 
@@ -175,6 +184,67 @@ async function placesView() {
     return {};
   }
 
+  // Free-time filters: busy times stay in this screen's memory only and are refetched on each visit.
+  const prefs = loadCalendarPrefs();
+  const zone = prefs.timezone ?? TZ;
+  const todayLocal = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const freeFilter = { date: todayLocal, minimum: prefs.minimum ?? 30, from: prefs.from ?? "08:00", until: prefs.until ?? "22:00" };
+  let calendar = null;      // calendar status, or null when there's no calendar API
+  let calendarKnown = false;
+  let busy = null;          // { key, busy } for the selected date, or { key, error }
+  let busyRequest = 0;
+  const $availChips = $view.querySelector("#avail-chips");
+  const $availPanel = $view.querySelector("#avail-panel");
+
+  const renderAvailControls = () => {
+    if (calendarKnown && CALENDAR_FILTERS.has(state.avail) && !calendar?.connected) state.avail = "any";
+    const offered = AVAIL_FILTERS.filter(([id]) => !CALENDAR_FILTERS.has(id) || calendar?.connected);
+    $availChips.innerHTML = offered.map(([id, label]) =>
+      `<button class="chip" data-avail="${id}" aria-pressed="${state.avail === id}">${label}</button>`).join("");
+    if (CALENDAR_FILTERS.has(state.avail)) {
+      $availPanel.innerHTML = `<div class="calendar-controls calendar-controls-grid">
+          <label>Date<input type="date" data-free="date" value="${freeFilter.date}"></label>
+          <label>Free for at least<select data-free="minimum">${MIN_OPTIONS.map((minutes) =>
+            `<option value="${minutes}"${minutes === freeFilter.minimum ? " selected" : ""}>${minutes} minutes</option>`).join("")}</select></label>
+        </div>
+        <p class="help">Using your Google Calendar free/busy times within ${esc(freeFilter.from)}–${esc(freeFilter.until)} (${esc(zone)}). <a href="#/calendar">Change on the Calendar page</a>. Travel time isn't included.</p>`;
+    } else if (state.avail === "open_now") {
+      $availPanel.innerHTML = `<p class="help">Open right now by each place's published hours (campus time), not the replay slider.</p>`;
+    } else {
+      $availPanel.innerHTML = calendar?.connected ? ""
+        : calendar?.configured ? `<p class="help"><a href="#/calendar">Connect Google Calendar</a> to filter places by your free time.</p>` : "";
+    }
+  };
+
+  const loadBusy = async () => {
+    const key = `${freeFilter.date}|${zone}`;
+    if (!CALENDAR_FILTERS.has(state.avail) || busy?.key === key) return;
+    const id = ++busyRequest;
+    busy = { key, loading: true };
+    update();
+    try {
+      const result = await src.calendarFreeBusy(freeFilter.date, zone);
+      if (id === busyRequest) busy = { key, busy: result.busy };
+    } catch (error) {
+      if (id !== busyRequest) return;
+      busy = { key, error };
+      if (error.status === 401) {
+        calendar = { ...calendar, connected: false };
+        renderAvailControls();
+      }
+    }
+    if (id === busyRequest) update();
+  };
+
+  src.calendarStatus().then((status) => { calendar = status; }).catch(() => { calendar = null; })
+    .finally(() => {
+      calendarKnown = true;
+      renderAvailControls();
+      update();
+      void loadBusy();
+    });
+  renderAvailControls();
+
   const visible = () => {
     const q = state.query.trim().toLowerCase();
     return facilities.filter((f) =>
@@ -182,122 +252,124 @@ async function placesView() {
       (!q || `${f.facility_name} ${CATEGORY[f.category] ?? ""}`.toLowerCase().includes(q)));
   };
 
-  // Dashboard: dining halls on the left and middle, FitRec top right, Mugar bottom right,
-  // historical references below. Same numbers as before (count + level at the replay
-  // time); each card adds the day's hourly averages as a line, with a marker at the
-  // replay time. build() runs when the search or filter changes; update() on every tick.
-  const zoneOf = (f) => (isHistorical(f) ? "refs" : f.category === "dining" ? "dining"
-    : f.category === "fitness" ? "fitness" : f.category === "library" ? "library" : "other");
-  const ZONES = [["dining", "Dining halls"], ["fitness", "Fitness"], ["library", "Library"], ["other", "Other places"]];
-
-  const build = () => {
-    const rows = visible();
-    if (!rows.length) {
-      $list.innerHTML = `<div class="state">${terrier({ size: 44, sleepy: true })}<p>No places match.</p></div>`;
-      return;
+  // Applies the availability filter. Returns the kept places with their first matching window,
+  // the places whose hours can't be checked, and a notice when the calendar couldn't be read.
+  const applyAvailability = (rows) => {
+    if (state.avail === "any") return { rows, windows: {}, unchecked: [], notice: "" };
+    const calendarMode = CALENDAR_FILTERS.has(state.avail);
+    if (calendarMode && (!busy || busy.loading)) return { rows: [], windows: {}, unchecked: [], notice: loading("Checking your free time…") };
+    if (calendarMode && busy.error) {
+      return {
+        rows, windows: {}, unchecked: [],
+        notice: `<p class="calendar-error">${esc(busy.error.message || "Your calendar couldn't be read.")} Showing all places.</p>
+          <button class="btn" type="button" data-free-retry>Retry</button>`,
+      };
     }
-    const by = (z) => rows.filter((f) => zoneOf(f) === z);
-    const zones = ZONES.filter(([z]) => by(z).length);
-    const full = ["dining", "fitness", "library"].every((z) => zones.some(([id]) => id === z));
-    const refs = by("refs");
-    const card = (f) => dashCard(f, histories[f.facility_id]);
-    $list.innerHTML = `${zones.length ? `<div class="dash${full ? " dash-full" : ""}">
-        ${zones.map(([z, title]) => `<section class="dash-zone dash-${z}" aria-label="${title}">
-          <h2 class="dash-title">${title}</h2><div class="dash-cards">${by(z).map(card).join("")}</div></section>`).join("")}
-      </div>` : ""}
-      ${refs.length ? `<section class="refs"><h2 class="section-title">Historical references</h2>
-        <p class="help">Real recordings from outside BU, replayed for comparison. Never suggested as places to go.</p>
-        <div class="dash-cards dash-refs">${refs.map(card).join("")}</div></section>` : ""}`;
-    update();
+    const context = calendarMode
+      ? { busy: busy.busy, date: freeFilter.date, timezone: zone, from: freeFilter.from, until: freeFilter.until, minimum: freeFilter.minimum, now: Date.now() }
+      : { now: Date.now() };
+    const kept = [];
+    const windows = {};
+    const unchecked = [];
+    for (const f of rows) {
+      if (isHistorical(f)) continue; // never suggested
+      const location = hours.locations[f.facility_id];
+      const outcome = location ? placeAvailability(location, f.category, state.avail, context) : { result: "unchecked" };
+      if (outcome.result === "match") {
+        kept.push(f);
+        if (outcome.match) windows[f.facility_id] = outcome.match;
+      } else if (outcome.result === "unchecked") unchecked.push(f);
+    }
+    return { rows: kept, windows, unchecked, notice: "" };
   };
 
   const update = () => {
-    for (const el of $list.querySelectorAll(".dash-card")) {
-      const id = el.dataset.id;
-      const h = histories[id];
-      const { o } = observationAt(h, state.minute);
-      const f = facilities.find((x) => x.facility_id === id);
-      const vh = isHistorical(f) ? null : replayHours(hours.locations[id], h.day, state.minute);
-      // Verified hours for the replayed day win over a simulated count; without them, sample hours
-      // may still say closed when there is no count. Historical references are never called closed.
-      const closed = vh?.status === "closed"
-        || (!o && !["open", "closed"].includes(vh?.status) && !!closedAt(openingHours(campus, id), state.minute));
-      el.querySelector(".dash-hours").innerHTML = vh ? `<span class="row-hours">${esc(vh.text)}</span>${
-        ["open", "closed"].includes(vh.status)
-          ? ` <span class="row-hours-status" data-status="${vh.status}">${vh.status === "open" ? "Open" : "Closed"} at ${esc(fmtTime(state.minute))}</span>` : ""}` : "";
-      el.querySelector(".dash-count").textContent = closed ? "Closed" : fmtCount(o?.occupancy_count);
-      el.querySelector(".dash-count").classList.toggle("is-closed", !!closed);
-      el.querySelector(".dash-unit").textContent = o && !closed ? "people" : "";
-      el.querySelector(".dash-level").innerHTML = closed ? "" : level(o?.busyness ?? "unknown");
-      el.querySelector(".dash-marker").style.left = `${(state.minute / (24 * 60)) * 100}%`;
+    const filtered = applyAvailability(visible());
+    const { rows, windows, unchecked } = filtered;
+    const uncheckedNote = unchecked.length
+      ? `<p class="help">Not shown because their hours aren't verified or published for this date: ${unchecked.map((f) => esc(f.facility_name)).join(", ")}.</p>`
+      : "";
+    if (!rows.length) {
+      $list.innerHTML = filtered.notice || `<div class="state">${terrier({ size: 44, sleepy: true })}<p>${state.avail === "any" ? "No places match."
+        : CALENDAR_FILTERS.has(state.avail) ? `No places match your free time on this date. Try a shorter minimum or another date.` : "No places are open right now."}</p></div>${uncheckedNote}`;
+      return;
     }
+    const currentDate = campusDateTime().date;
+    // The summary's own phrases already say "today", so the "Today:" label shortens them.
+    const TODAY_TEXT = { "Closed today": "Closed", "Today's hours not published": "Hours not published" };
+    const fact = (label, value, attrs = "") => `<div class="place-fact"><dt>${label}</dt><dd${attrs}>${value}</dd></div>`;
+    // One list item per place: labelled facts on the left, the replay count and level on the right.
+    // The whole item links to the place page, as before.
+    const row = (f) => {
+      const h = histories[f.facility_id];
+      const { o } = observationAt(h, state.minute);
+      const locationHours = isHistorical(f) ? null : hours.locations[f.facility_id];
+      const summary = isHistorical(f)
+        ? null
+        : locationHours ? buildingHoursSummary(locationHours, currentDate) : "Hours unverified";
+      const selectedStatus = locationHours ? selectedBuildingStatus(locationHours, h.day, state.minute) : null;
+      const closed = !o && selectedStatus?.status === "closed";
+      const facts = [
+        fact("Category", `${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}`),
+        isHistorical(f) ? fact("Recorded day", esc(h.day_label)) : "",
+        summary ? fact("Today", esc(TODAY_TEXT[summary] ?? summary), ' class="num"') : "",
+        selectedStatus && ["open", "closed"].includes(selectedStatus.status)
+          ? fact("Replay status", selectedStatusLabel(selectedStatus), ` class="place-status" data-status="${selectedStatus.status}"`) : "",
+        f.category === "dining" && locationHours
+          ? fact("Meal service", esc(serviceStatusLabel(serviceAtTime(locationHours, currentDate, state.minute), selectedStatus))) : "",
+        windows[f.facility_id]
+          ? fact("Fits your free time", `${formatInstant(windows[f.facility_id].start, zone)}–${formatInstant(windows[f.facility_id].end, zone)}`, ' class="num"') : "",
+      ].join("");
+      return `<li><a class="place-item" href="#/place/${encodeURIComponent(f.facility_id)}">
+        <span class="place-main"><span class="row-name">${esc(f.facility_name)}</span>
+          <dl class="place-facts">${facts}</dl>
+          <span class="place-more" aria-hidden="true">View details →</span></span>
+        <span class="place-busy">
+          <span class="row-count num">${closed ? "" : fmtCount(o?.occupancy_count)}</span>
+          ${level(o?.busyness ?? (closed ? "closed" : "unknown"))}
+          ${icon("chevron", 16)}
+        </span>
+      </a></li>`;
+    };
+    const places = rows.filter((f) => !isHistorical(f));
+    const refs = rows.filter(isHistorical);
+    $list.innerHTML = `${filtered.notice}${places.length ? `<ul class="list place-list" aria-label="Places">${places.map(row).join("")}</ul>` : ""}${uncheckedNote}
+      ${refs.length ? `<section class="refs"><h2 class="section-title">Historical references</h2>
+        <p class="help">Real recordings from outside BU, replayed for comparison. Never suggested as places to go.</p>
+        <ul class="list place-list" aria-label="Historical references">${refs.map(row).join("")}</ul></section>` : ""}`;
   };
 
-  $view.querySelector(".search input").addEventListener("input", (e) => { state.query = e.target.value; build(); });
+  $view.querySelector(".search input").addEventListener("input", (e) => { state.query = e.target.value; update(); });
   $view.querySelector(".chips").addEventListener("click", (e) => {
     const chip = e.target.closest("[data-filter]");
     if (!chip) return;
     state.filter = chip.dataset.filter;
-    for (const c of $view.querySelectorAll(".chip")) c.setAttribute("aria-pressed", c === chip);
-    build();
+    for (const c of chip.parentElement.querySelectorAll(".chip")) c.setAttribute("aria-pressed", c === chip);
+    update();
   });
-  build();
+  $availChips.addEventListener("click", (e) => {
+    const chip = e.target.closest("[data-avail]");
+    if (!chip) return;
+    state.avail = chip.dataset.avail;
+    renderAvailControls();
+    update();
+    void loadBusy();
+  });
+  $availPanel.addEventListener("change", (e) => {
+    const field = e.target.dataset.free;
+    if (field === "date" && e.target.value) freeFilter.date = e.target.value;
+    else if (field === "minimum") freeFilter.minimum = Number(e.target.value);
+    else return;
+    update();
+    void loadBusy();
+  });
+  $list.addEventListener("click", (e) => {
+    if (!e.target.closest("[data-free-retry]")) return;
+    busy = null;
+    void loadBusy();
+  });
+  update();
   return { update };
-}
-
-/**
- * One dashboard card: name, count and level (filled in by update()), and a line of the
- * day's hourly averages over the full 24 hours, so every card shares one time axis.
- * Hours without data break the line rather than drawing it at zero.
- */
-function dashCard(f, hist) {
-  const W = 240, H = 100, PAD = 6;
-  const pts = hist.hourly.map((b) => ({ x: ((b.hour + 0.5) / 24) * W, v: b.occupancy }));
-  const peakV = Math.max(1, ...hist.hourly.map((b) => b.occupancy ?? 0),
-    ...hist.observations.map((o) => o.occupancy_count ?? 0));
-  const mag = 10 ** Math.floor(Math.log10(peakV));
-  const yMax = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].map((k) => k * mag).find((s) => s >= peakV);
-  const y = (v) => H - PAD - (v / yMax) * (H - 2 * PAD);
-
-  // Split into runs of known values; draw each run as a smooth curve that never overshoots.
-  const runs = [];
-  for (const p of pts) {
-    if (p.v == null) { runs.push([]); continue; }
-    if (!runs.length) runs.push([]);
-    runs[runs.length - 1].push({ x: p.x, y: y(p.v) });
-  }
-  const curve = (r) => r.map((p, i) => (i === 0 ? `M${p.x},${p.y}`
-    : `C${(r[i - 1].x + p.x) / 2},${r[i - 1].y} ${(r[i - 1].x + p.x) / 2},${p.y} ${p.x},${p.y}`)).join("");
-  const live = runs.filter((r) => r.length);
-  const lines = live.map((r) => `<path class="dash-line" d="${curve(r)}" vector-effect="non-scaling-stroke"/>`).join("");
-  const areas = live.map((r) => `<path class="dash-area" d="${curve(r)}L${r[r.length - 1].x},${H}L${r[0].x},${H}Z" fill="url(#g-${esc(f.facility_id)})"/>`).join("");
-  const grid = [0.5, 1].map((k) => `<line class="dash-grid" x1="0" x2="${W}" y1="${y(yMax * k)}" y2="${y(yMax * k)}" vector-effect="non-scaling-stroke"/>`).join("");
-
-  const known = hist.hourly.filter((b) => b.occupancy != null);
-  const peak = known.length ? known.reduce((a, b) => (b.occupancy > a.occupancy ? b : a)) : null;
-  const label = peak
-    ? `Average people per hour on ${hist.day_label}. Busiest around ${fmtHour(peak.hour)} with about ${fmtCount(peak.occupancy)}.`
-    : `No hourly data for ${hist.day_label}.`;
-
-  return `<a class="dash-card" href="#/place/${encodeURIComponent(f.facility_id)}" data-id="${esc(f.facility_id)}">
-    <div class="dash-head">
-      <span class="dash-name">${esc(f.facility_name)}</span>
-      <span class="dash-sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)}${isHistorical(f) ? ` <span>${esc(hist.day_label)}</span>` : ""}</span>
-    </div>
-    <div class="dash-hours"></div>
-    <div class="dash-now"><span class="dash-count num"></span><span class="dash-unit"></span><span class="dash-level"></span></div>
-    <div class="dash-chart">
-      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">
-        <defs><linearGradient id="g-${esc(f.facility_id)}" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" class="dash-stop-top"/><stop offset="1" class="dash-stop-bottom"/></linearGradient></defs>
-        ${grid}${areas}${lines}
-      </svg>
-      <span class="dash-ymax num" style="top:${(y(yMax) / H) * 100}%">${fmtCount(yMax)}</span>
-      <span class="dash-marker" aria-hidden="true"></span>
-    </div>
-    <div class="dash-ticks num" aria-hidden="true"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div>
-    ${peak ? `<p class="dash-peak">Busiest around ${fmtHour(peak.hour)} · ~${fmtCount(peak.occupancy)} people</p>` : ""}
-  </a>`;
 }
 
 // ---------- screen: one place ----------
@@ -353,6 +425,7 @@ async function placeView(id) {
       <ul class="schedule-days" id="schedule-days"></ul>
       <div class="selected-hours" id="selected-hours" aria-live="polite"></div>
     </section>
+    ${historical ? "" : `<section class="card find-time" id="find-time" aria-live="polite"></section>`}
     <div class="place-grid">
       <div class="place-now">
         <section class="hero" id="hero" aria-live="polite"></section>
@@ -363,6 +436,7 @@ async function placeView(id) {
     </div>
     <details class="about" id="how"></details>`;
   syncPlayback();
+  if (!historical) void findTimeCard($view.querySelector("#find-time"), f, scheduleLocation);
 
   const $hero = $view.querySelector("#hero");
   const $suggest = $view.querySelector("#suggest");
@@ -378,8 +452,9 @@ async function placeView(id) {
       const date = addDays(start, index);
       const schedule = displaySchedule(scheduleLocation, date, f.category);
       let details;
+      const assumedNote = schedule.assumed ? `<span class="hours-note">Assumed: repeats the published weekly hours</span>` : "";
       if (schedule.status === "closed") {
-        details = `<span class="hours-closed">Closed${schedule.note ? ` · ${esc(schedule.note)}` : ""}</span>`;
+        details = `<span class="hours-closed">Closed${schedule.note ? ` · ${esc(schedule.note)}` : ""}</span>${assumedNote}`;
       } else if (schedule.status === "unverified") {
         details = `<span class="hours-unknown">Hours unverified${schedule.reason ? ` · ${esc(schedule.reason)}` : ""}</span>`;
       } else if (schedule.status === "unpublished") {
@@ -391,6 +466,7 @@ async function placeView(id) {
           `<span class="hours-period"><strong>${esc(f.category === "dining" ? period.label : "Building hours")}:</strong> ${esc(formatPeriod(period))}</span>`,
         ).join("");
         if (schedule.note) details += `<span class="hours-note">${esc(schedule.note)}</span>`;
+        details += assumedNote;
       }
       return `<li><button type="button" class="schedule-day${date === today ? " is-today" : ""}${date === selectedScheduleDate ? " is-selected" : ""}" data-schedule-date="${date}"${date === today ? ' aria-current="date"' : ""} aria-pressed="${date === selectedScheduleDate}">
         <span class="schedule-day-name">${esc(dateLabel(date))}${date === today ? " · Today" : ""}</span>
@@ -410,8 +486,10 @@ async function placeView(id) {
     }
     $view.querySelector("#selected-hours").innerHTML = `<p><strong>${esc(dateLabel(selectedScheduleDate))} · ${esc(fmtTime(state.minute))}</strong></p>
       <p>Building status: <strong>${esc(statusText)}</strong></p>${mealStatus}`;
-    $view.querySelector("#schedule-note").textContent =
-      "Schedules are date-specific; dates without a published schedule are shown as unavailable.";
+    const shownSchedule = f.category === "dining" ? scheduleLocation?.serviceHours : scheduleLocation?.buildingHours;
+    $view.querySelector("#schedule-note").textContent = shownSchedule?.repeatsWeekly === false
+      ? "This schedule applies only to its published dates; other dates are shown as unavailable."
+      : "Dates outside the published week repeat its weekly hours and are marked “Assumed” until new hours are published. Special dates always override.";
   };
 
   $view.querySelector(".schedule-nav").addEventListener("click", (e) => {
@@ -918,6 +996,7 @@ async function route() {
     section === "place" && id ? placeView(decodeURIComponent(id))
     : section === "events" && id === "new" ? newEventView()
     : section === "events" ? eventsView()
+    : section === "calendar" ? calendarView($view)
     : section === "about" ? aboutView()
     : section === "sources" ? sourcesView(id ? decodeURIComponent(id) : null)
     : section === "plan" || section === "" ? planView($view, clock)

@@ -189,6 +189,7 @@
         "specialHours": [],
         "effectiveFrom": "2026-10-19",
         "effectiveThrough": "2026-10-25",
+        "repeatsWeekly": false,
         "scheduleNote": "Building hours follow the published first-to-last dining service periods, per user confirmation. Meal periods are shown separately."
       },
       "serviceHours": {
@@ -196,6 +197,7 @@
         "unverifiedReason": null,
         "effectiveFrom": "2026-10-19",
         "effectiveThrough": "2026-10-25",
+        "repeatsWeekly": false,
         "scheduleNote": "Fenway Dining Hall regular hours published for the week of October 19–25, 2026. Do not apply this schedule beyond that week.",
         "weeklyHours": {
           "monday": [ {"label": "Breakfast", "start": "07:00", "end": "10:00"}, {"label": "Continental breakfast", "start": "10:00", "end": "11:30"}, {"label": "Lunch", "start": "11:30", "end": "14:00"}, {"label": "Light lunch", "start": "14:00", "end": "16:30"}, {"label": "Dinner", "start": "16:30", "end": "20:00"}, {"label": "Light dinner", "start": "20:00", "end": "22:00"} ],

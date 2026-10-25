@@ -387,3 +387,26 @@ def test_api_allows_cross_origin_reads():
     """A site on another origin can use ?api=… (no credentials involved)."""
     r = client.get("/api/campus", headers={"Origin": "https://example.github.io"})
     assert r.headers["access-control-allow-origin"] == "*"
+    assert "access-control-allow-credentials" not in r.headers
+
+
+def test_cors_credentials_only_for_listed_origins():
+    """The calendar cookie may cross origins only to sites named in BUSY_CORS_ORIGINS."""
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.testclient import TestClient
+
+    assert main.cors_options(None)["allow_credentials"] is False
+    assert main.cors_options("*")["allow_credentials"] is False
+    options = main.cors_options("https://site.test, https://other.test")
+    assert options["allow_origins"] == ["https://site.test", "https://other.test"]
+    assert options["allow_credentials"] is True
+
+    app = FastAPI()
+    app.add_middleware(CORSMiddleware, **options)
+    app.get("/ping")(lambda: {"ok": True})
+    listed = TestClient(app).get("/ping", headers={"Origin": "https://site.test"})
+    assert listed.headers["access-control-allow-origin"] == "https://site.test"
+    assert listed.headers["access-control-allow-credentials"] == "true"
+    stranger = TestClient(app).get("/ping", headers={"Origin": "https://evil.test"})
+    assert "access-control-allow-origin" not in stranger.headers

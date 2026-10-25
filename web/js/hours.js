@@ -65,15 +65,17 @@ export function daySchedule(location, isoDate, kind = "building") {
       special: true,
     };
   }
-  if (isoDate < schedule.effectiveFrom || isoDate > schedule.effectiveThrough) {
+  // Outside the published dates the weekly pattern is assumed to repeat, unless the schedule
+  // says it doesn't (repeatsWeekly: false). Special hours above still override any date.
+  const assumed = isoDate < schedule.effectiveFrom || isoDate > schedule.effectiveThrough;
+  if (assumed && schedule.repeatsWeekly === false) {
     return { status: "unpublished", periods: [] };
   }
 
   const weekday = DAYS[new Date(`${isoDate}T12:00:00Z`).getUTCDay()];
   const periods = schedule.weeklyHours[weekday];
-  return periods
-    ? { status: periods.length ? "scheduled" : "closed", periods }
-    : { status: "unverified", periods: [] };
+  if (!periods) return { status: "unverified", periods: [] };
+  return { status: periods.length ? "scheduled" : "closed", periods, ...(assumed ? { assumed: true } : {}) };
 }
 
 export function displaySchedule(location, isoDate, category) {
@@ -156,7 +158,8 @@ export function buildingHoursSummary(location, date) {
   if (schedule.status === "unpublished") return "Today's hours not published";
   if (schedule.status === "closed") return "Closed today";
   if (schedule.status !== "scheduled") return "Hours unverified";
-  return schedule.periods.map((period) => formatPeriod(period)).join(" · ");
+  const summary = schedule.periods.map((period) => formatPeriod(period)).join(" · ");
+  return schedule.assumed ? `${summary} (assumed)` : summary;
 }
 
 export function todayBuildingHoursSummary(location, now = new Date()) {

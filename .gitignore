@@ -10,6 +10,9 @@ __pycache__/
 
 # Runtime state for community events (recreated with examples on startup)
 server/community_events.json
+server/calendar_sessions.sqlite3
+server/calendar_sessions.sqlite3-shm
+server/calendar_sessions.sqlite3-wal
 
 # Version note, written by server/write_version.py at deploy time
 web/version.json
