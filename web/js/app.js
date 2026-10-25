@@ -3,6 +3,7 @@ import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
 import { hoursText, openSegments } from "./recommend.js";
 import { calendarView } from "./calendar.js";
+import { findTimeCard } from "./findtime.js";
 import {
   addDays, buildingHoursSummary, campusDateTime, dateLabel, daySchedule, displaySchedule, formatPeriod,
   selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekRangeLabel, weekStart,
@@ -264,6 +265,7 @@ async function placeView(id) {
       <ul class="schedule-days" id="schedule-days"></ul>
       <div class="selected-hours" id="selected-hours" aria-live="polite"></div>
     </section>
+    ${historical ? "" : `<section class="card find-time" id="find-time" aria-live="polite"></section>`}
     <div class="place-grid">
       <div class="place-now">
         <section class="hero" id="hero" aria-live="polite"></section>
@@ -275,6 +277,7 @@ async function placeView(id) {
     </div>
     <details class="about" id="how"></details>`;
   syncPlayback();
+  if (!historical) void findTimeCard($view.querySelector("#find-time"), f, scheduleLocation);
 
   const $hero = $view.querySelector("#hero");
   const $suggest = $view.querySelector("#suggest");

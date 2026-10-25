@@ -154,6 +154,33 @@ def test_freebusy_requests_primary_calendar_and_dst_aware_day(calendar_client, m
     assert calls[0][1]["timeMax"] == "2026-03-09T00:00:00-04:00"
 
 
+def test_freebusy_range_spans_up_to_seven_local_days(calendar_client, monkeypatch):
+    authorize(calendar_client, monkeypatch)
+    calls = []
+
+    async def busy_response(access_token, body):
+        calls.append(body)
+        return 200, {"calendars": {"primary": {"busy": []}}}
+
+    monkeypatch.setattr(gc, "_calendar_post", busy_response)
+    response = calendar_client.post(
+        "/api/calendar/freebusy",
+        json={"date": "2026-10-28", "timezone": "America/New_York", "days": 7},
+        headers={"Origin": ORIGIN},
+    )
+    assert response.status_code == 200
+    assert response.json()["days"] == 7
+    assert calls[0]["timeMin"] == "2026-10-28T00:00:00-04:00"
+    assert calls[0]["timeMax"] == "2026-11-04T00:00:00-05:00"
+    too_long = calendar_client.post(
+        "/api/calendar/freebusy",
+        json={"date": "2026-10-28", "timezone": "America/New_York", "days": 8},
+        headers={"Origin": ORIGIN},
+    )
+    assert too_long.status_code == 422
+    assert len(calls) == 1
+
+
 def test_empty_calendar_returns_an_empty_busy_list(calendar_client, monkeypatch):
     authorize(calendar_client, monkeypatch)
 

@@ -113,12 +113,12 @@ export async function calendarConnect() {
   });
 }
 
-export async function calendarFreeBusy(date, timezone) {
+export async function calendarFreeBusy(date, timezone, days = 1) {
   return getJSON(`${CALENDAR_API}/freebusy`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ date, timezone }),
+    body: JSON.stringify({ date, timezone, days }),
   });
 }
 

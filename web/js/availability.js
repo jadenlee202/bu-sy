@@ -71,28 +71,96 @@ function periodInstants(isoDate, period, timezone) {
   return end > start ? { start, end } : null;
 }
 
+/** Free windows a student can still use: not already past and at least `minimum` minutes long. */
+export function usableWindows(free, minimum, notBefore = -Infinity) {
+  return free
+    .map(({ start, end }) => ({ start: Math.max(start, notBefore), end }))
+    .filter(({ start, end }) => end - start >= minimum * 60_000);
+}
+
+/**
+ * The day's timeline: merged busy blocks plus each gap labelled "available" (usable),
+ * "short" (under the minimum) or "past" (already over), in start order.
+ */
+export function daySegments(busy, start, end, minimum, now = -Infinity) {
+  const free = freeWindows(busy, start, end).flatMap(({ start: from, end: to }) => {
+    if (to <= now) return [{ start: from, end: to, kind: "past" }];
+    const past = from < now ? [{ start: from, end: now, kind: "past" }] : [];
+    const rest = { start: Math.max(from, now), end: to };
+    return [...past, { ...rest, kind: rest.end - rest.start >= minimum * 60_000 ? "available" : "short" }];
+  });
+  return [...normalizeBusy(busy, start, end).map((range) => ({ ...range, kind: "busy" })), ...free]
+    .sort((a, b) => a.start - b.start);
+}
+
+// The selected day plus its neighbours: a period that runs past midnight, or a free window
+// in a timezone ahead of or behind campus, can fall on an adjacent campus date.
+function scheduledRanges(location, isoDate, kind, campusTimezone) {
+  return [-1, 0, 1].flatMap((offset) => {
+    const date = plusDays(isoDate, offset);
+    const schedule = daySchedule(location, date, kind);
+    if (schedule.status !== "scheduled") return [];
+    return schedule.periods.map((period) => {
+      const range = periodInstants(date, period, campusTimezone);
+      return range && { ...range, label: period.label };
+    }).filter(Boolean);
+  });
+}
+
 export function matchFreeWindows(free, location, isoDate, minimum, campusTimezone = "America/New_York") {
   const building = daySchedule(location, isoDate, "building");
   if (building.status !== "scheduled") return { status: building.status, matches: [] };
-  const buildingRanges = building.periods.map((period) => periodInstants(isoDate, period, campusTimezone)).filter(Boolean);
+  const buildingRanges = scheduledRanges(location, isoDate, "building", campusTimezone);
   if (location.category === "dining") {
     const service = daySchedule(location, isoDate, "service");
     if (service.status !== "scheduled") return { status: service.status, matches: [] };
-    const services = service.periods.flatMap((period) => {
-      const range = periodInstants(isoDate, period, campusTimezone);
-      if (!range) return [];
-      return buildingRanges.map((open) => ({
+    const services = scheduledRanges(location, isoDate, "service", campusTimezone).flatMap((range) =>
+      buildingRanges.map((open) => ({
         start: Math.max(range.start, open.start),
         end: Math.min(range.end, open.end),
-        label: period.label,
-      })).filter(({ start, end }) => start < end);
-    });
+        label: range.label,
+      })).filter(({ start, end }) => start < end));
     return { status: "scheduled", matches: intersect(free, services, minimum) };
   }
   return {
     status: "scheduled",
     matches: intersect(free, buildingRanges.map((range) => ({ ...range, label: "Open" })), minimum),
   };
+}
+
+/**
+ * Search `days` local dates from `startDate` for times the student is free and the location is
+ * open (and, for dining, serving `meal` when given). Returns every match in order plus each
+ * day's outcome, so a caller can explain why nothing was found.
+ */
+export function findOpportunities(busy, location, startDate, days, options) {
+  const { timezone, from, until, minimum, now = -Infinity, meal = null } = options;
+  const outcomes = [];
+  const matches = [];
+  for (let offset = 0; offset < days; offset += 1) {
+    const date = plusDays(startDate, offset);
+    let start;
+    let end;
+    try {
+      start = zonedInstant(date, from, timezone);
+      end = zonedInstant(date, until, timezone);
+    } catch {
+      outcomes.push({ date, reason: "invalid_window" });
+      continue;
+    }
+    const usable = end > start ? usableWindows(freeWindows(busy, start, end), minimum, now) : [];
+    if (!usable.length) {
+      outcomes.push({ date, reason: end <= now ? "past" : "no_free_time" });
+      continue;
+    }
+    const result = matchFreeWindows(usable, location, date, minimum);
+    const found = result.matches.filter(({ label }) => !meal || label.toLowerCase().includes(meal));
+    if (result.status !== "scheduled") outcomes.push({ date, reason: result.status });
+    else if (!found.length) outcomes.push({ date, reason: meal ? "meal_not_served" : "closed_when_free" });
+    else outcomes.push({ date, reason: "match" });
+    matches.push(...found.map((match) => ({ ...match, date })));
+  }
+  return { matches, outcomes };
 }
 
 function intersect(free, service, minimum) {

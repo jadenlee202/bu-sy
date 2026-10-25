@@ -27,6 +27,7 @@ SESSION_TTL = 30 * 24 * 60 * 60
 class FreeBusyRequest(BaseModel):
     date: date
     timezone: str = Field(min_length=1, max_length=100)
+    days: int = Field(default=1, ge=1, le=7)
 
 
 class CalendarConnectRequest(BaseModel):
@@ -422,7 +423,7 @@ async def calendar_freebusy(
     session = _load_session(config, busy_calendar_session)
     access_token = await _valid_access_token(config, session)
     day_start = datetime.combine(body.date, day_time.min, tzinfo=timezone)
-    day_end = datetime.combine(body.date + timedelta(days=1), day_time.min, tzinfo=timezone)
+    day_end = datetime.combine(body.date + timedelta(days=body.days), day_time.min, tzinfo=timezone)
     payload = {
         "timeMin": day_start.isoformat(),
         "timeMax": day_end.isoformat(),
@@ -459,6 +460,7 @@ async def calendar_freebusy(
         raise HTTPException(status_code=502, detail="Google Calendar could not read the primary calendar.")
     return {
         "date": body.date.isoformat(),
+        "days": body.days,
         "timezone": body.timezone,
         "busy": [
             {"start": interval["start"], "end": interval["end"]}

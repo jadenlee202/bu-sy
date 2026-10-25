@@ -64,6 +64,12 @@ the browser. Disconnect removes the local session and asks Google to revoke its 
 Daily free-time windows are calculated in the timezone entered on the Calendar page (defaulting
 to the browser timezone), then intersected with the date-scoped building and meal-service data in
 `web/data/hours.json`. No travel time is estimated.
+Each place's detail page has a *Find a time to eat* (dining) or *Find free time here* card that
+searches the next 7 days in one FreeBusy request and lists windows where you're free, the
+building is open and, for dining, the chosen meal is being served. Without a connection the
+Calendar page shows an empty day with no events (it never assumes you're free) alongside the
+selected location's published hours. Calendar settings (window, minimum, timezone, location) are
+saved in the browser; busy times never are.
 
 This feature is **not active on GitHub Pages alone**. To enable it, deploy the FastAPI app over
 HTTPS and configure Google Cloud:

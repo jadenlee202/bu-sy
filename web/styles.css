@@ -500,8 +500,8 @@ th { color: var(--muted); font-weight: 600; }
   .replay-row { flex-direction: row; align-items: flex-end; }
 }
 .place-week { grid-column: 1 / -1; }
-.calendar-connect, .calendar-results { display: flex; flex-direction: column; gap: 10px; }
-.calendar-connect h2, .calendar-results h2, .calendar-results h3 { margin: 0; }
+.calendar-connect, .calendar-results, .find-time { display: flex; flex-direction: column; gap: 10px; }
+.calendar-connect h2, .calendar-results h2, .calendar-results h3, .find-time :is(h2, h3) { margin: 0; }
 .calendar-controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
 .calendar-controls label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; }
 .calendar-date-controls { display: flex; align-items: center; gap: 4px; }
@@ -515,6 +515,8 @@ th { color: var(--muted); font-weight: 600; }
 .calendar-interval, .calendar-matches li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); }
 .calendar-interval[data-kind="busy"] { background: var(--subtle); }
 .calendar-interval[data-kind="available"], .calendar-matches li { background: color-mix(in srgb, var(--red) 8%, var(--surface)); }
+.calendar-interval:is([data-kind="short"], [data-kind="past"]) { color: var(--muted); }
+.calendar-interval[data-kind="unknown"] { border-style: dashed; color: var(--muted); }
 .calendar-matches li { flex-direction: column; gap: 2px; }
 .calendar-matches li span { color: var(--muted); font-size: 13px; }
 .calendar-interval strong { min-width: 82px; }
