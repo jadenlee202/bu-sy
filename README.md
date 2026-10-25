@@ -11,8 +11,10 @@ unofficial student meetups are still there as secondary screens.
 Independent student project, **not affiliated with Boston University**.
 
 > **Data honesty:** busyness at BU-named places is **simulated** (labelled *Simulated*): FitRec follows one
-> recorded day at a real campus gym elsewhere, rescaled; dining halls and Mugar follow documented models
-> because no usable dataset was found. Capacities, hours, amenities and walking times are illustrative. The
+> recorded day at a real campus gym elsewhere; Mugar follows people counts in one small library room in
+> Singapore (ROBOD); dining halls follow canteen purchases in Switzerland at lunch (NOVANIMAL), turned into
+> diners with an assumed 30-minute meal, while breakfast and dinner stay modeled. All of it is rescaled to
+> illustrative sizes. Capacities, hours, amenities and walking times are illustrative. The
 > **Sources & Simulation** page (`#/sources`) maps every place to its source. Two real datasets appear as **historical
 > references** under Places: the *Clemente Room*, an office conference room from the public COD dataset, and
 > the *Campus Gym — Historical Reference*, 2015–2017 head counts from a non-BU university gym (Kaggle, ODbL).
@@ -129,12 +131,14 @@ preferShortTravel, needs}`.
 
 | File | What | Real? |
 |---|---|---|
-| `data/campus_simulation_occupancy.csv` | one demo Monday every 15 min: FitRec as one building (from the campus gym), 4 dining halls and Mugar (modeled); made by `data/generate_campus_simulation.py` | **simulated** |
+| `data/campus_simulation_occupancy.csv` | one demo Monday every 15 min: FitRec as one building (campus gym), Mugar (ROBOD library room), 4 dining halls (NOVANIMAL at lunch, modeled otherwise); made by `data/generate_campus_simulation.py` | **simulated** |
 | `data/simulation_provenance.json` | dataset-to-place mapping, steps, parameters, limits (also `/api/sources`) | — |
 | `data/campus_sample.json` | which place supports which activity, its location, illustrative hours and amenities, demo scenarios | **illustrative** |
 | `data/sample_travel_times.csv` | sample walking minutes between 6 demo locations (West↔Fenway intentionally missing) | **illustrative** |
 | `data/clean_cod_occupancy.csv` | COD Clemente Room, cleaned by `data/clean_cod.py` | real office data, not BU |
 | `data/clean_campus_gym_occupancy.csv` | a non-BU campus gym, imported by `data/import_campus_gym.py` (optional) | real gym data, not BU |
+| `data/clean_robod_library_occupancy.csv` | ROBOD Room 5 people counts (NUS library space), imported by `data/import_robod.py` | real room data, not BU |
+| `data/clean_novanimal_transactions.csv` | NOVANIMAL purchases per canteen per 15 min (ZHAW), imported by `data/import_novanimal.py` | real sales data (purchases, not people), not BU |
 
 `server/campus.py` validates the planner data at startup:
 - every place must point to an existing campus-eligible (**synthetic**) facility, once, so COD and the
@@ -270,6 +274,14 @@ does **not** protect:
   Contains information from that database, available under the
   [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/) (contents: DbCL 1.0). The files
   BU-sy derives from it are shared under the same license.
+- Tekler, Ono, Peng, Zhang, Lasternas & Chong, *ROBOD, Room-level Occupancy and Building Operation Dataset*,
+  figshare 2022, [doi:10.6084/m9.figshare.19234530](https://doi.org/10.6084/m9.figshare.19234530),
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Room 5 counts drive the simulated Mugar values
+  (averaged and rescaled: see the Sources page).
+- Egeler, *NOVANIMAL aggregated menu sales* (supplementary material to Egeler & Baur 2020, NOVANIMAL Working
+  Paper No. 5, ZHAW), Zenodo, [doi:10.5281/zenodo.3890931](https://doi.org/10.5281/zenodo.3890931),
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Purchase times drive the simulated dining-hall lunch
+  values (grouped into purchases, turned into diners with an assumed meal length and rescaled).
 - Simulation models, illustrative capacities and planner samples made by the team.
   Details: [`data/README.md`](data/README.md#simulated-campus-places) and the app's Sources & Simulation page.
 - Interface font: Plus Jakarta Sans (Tokotype), bundled in `web/assets/fonts/` under the SIL Open Font

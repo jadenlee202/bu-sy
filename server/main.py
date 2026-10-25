@@ -11,8 +11,9 @@ Endpoint shapes follow the shared brief:
 
 How it works
     1. sources.py loads data/campus_simulation_occupancy.csv (SIMULATED: one demo
-       Monday every 15 min; FitRec as one building driven by a real non-BU campus gym, dining
-       + Mugar modeled; provenance in data/simulation_provenance.json) and
+       Monday every 15 min; FitRec as one building driven by a real non-BU campus gym,
+       Mugar by a library room in ROBOD, dining by NOVANIMAL canteen sales at lunch with
+       other hours modeled; provenance in data/simulation_provenance.json) and
        data/clean_cod_occupancy.csv (REAL office events from COD) and, when
        imported, data/clean_campus_gym_occupancy.csv (REAL counts from a non-BU
        campus gym, about every 10 minutes). Historical references are never
@@ -78,10 +79,18 @@ class Busyness(str, Enum):
     unknown = "unknown"
 
 
+class SimulationPeriod(BaseModel):
+    start: str                               # HH:MM on the demo clock, [start, end)
+    end: str
+    basis: Literal["reference_dataset", "modeled", "unavailable"]
+    label: str
+
+
 class SimulationRef(BaseModel):
     id: str                                  # entry in /api/sources
-    basis: Literal["reference_dataset", "modeled"]
+    basis: Literal["reference_dataset", "mixed", "modeled"]   # mixed: a dataset drives some periods, a model the rest
     label: str
+    periods: list[SimulationPeriod]          # every slot of the day belongs to exactly one
 
 
 class FacilitySummary(BaseModel):
@@ -187,9 +196,14 @@ def day_label(f: Facility, day: date) -> str:
     return f"{day:%a, %b} {day.day}, {day.year}"
 
 
-def basis_text(f: Facility, count: Optional[int]) -> str:
+def basis_text(f: Facility, count: Optional[int], tod: time) -> str:
     if count is None:
         if f.simulation:
+            hhmm = f"{tod:%H:%M}"
+            gap = next((p for p in f.simulation["periods"]
+                        if p["basis"] == "unavailable" and p["start"] <= hhmm < p["end"]), None)
+            if gap:
+                return f"No simulated value for this time. {gap['label']}"
             start, end = f.window
             return f"No simulated value for this time (simulated {start}:00-{end}:00 only)"
         if f.max_hold:
@@ -198,6 +212,12 @@ def basis_text(f: Facility, count: Optional[int]) -> str:
         start, end = f.window
         return f"No data for this time (recorded {start}:00-{end}:00 only)"
     pct = f.ratio(count)
+    if f.simulation:   # which part of the simulation this value comes from (dataset-derived or modeled)
+        hhmm = f"{tod:%H:%M}"
+        period = next((p for p in f.simulation["periods"] if p["start"] <= hhmm < p["end"]), None)
+        if period:
+            return (f"{period['label']}: {count:,} of illustrative capacity {f.capacity:,} ({pct:.0%}); "
+                    f"{f.reference_note}; {THRESHOLD_NOTE}")
     if not f.show_percent:
         return f"{count:,} people; {f.reference_note}; {THRESHOLD_NOTE}"
     if f.capacity:
@@ -219,7 +239,7 @@ def facility_fields(f: Facility, tod: time) -> dict:
         capacity=f.capacity,
         capacity_is_illustrative=f.capacity is not None,
         busyness=f.level(count),
-        busyness_basis=basis_text(f, count),
+        busyness_basis=basis_text(f, count, tod),
         measurement_method=f.measurement_method,
         data_mode=f.data_mode,
         campus_eligible=f.campus_eligible,

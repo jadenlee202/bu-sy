@@ -1,0 +1,5 @@
+# Publishers' original files are kept exactly as downloaded (their checksums are recorded in
+# data/raw/*/SOURCE.json), so Git must never convert their line endings.
+data/raw/*/*.csv -text
+data/raw/*/*.pdf binary
+data/raw/robod/publisher_README.md -text

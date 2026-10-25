@@ -3,9 +3,10 @@
 Replace this module (keep the Facility shape) to plug in a real campus feed.
 
     campus_simulation_occupancy.csv     SIMULATED campus places on one demo Monday,
-                                        every 15 min: FitRec as one building (driven
-                                        by a real non-BU campus gym), dining + Mugar
-                                        (modeled), made by data/generate_campus_simulation.py;
+                                        every 15 min: FitRec as one building (a non-BU
+                                        campus gym), Mugar (a library room in ROBOD),
+                                        dining (NOVANIMAL canteen sales at lunch, other
+                                        hours modeled), made by data/generate_campus_simulation.py;
                                         simulation_provenance.json says how
     clean_cod_occupancy.csv             REAL office occupancy events (COD),
                                         made by data/clean_cod.py
@@ -80,7 +81,7 @@ class Facility:
     notice: Optional[str] = None
     measurement_note: str = ""
     busyness_label: Optional[str] = None   # short line shown under the busyness word
-    simulation: Optional[dict] = None      # {id, basis, label} for simulated campus places
+    simulation: Optional[dict] = None      # {id, basis, label, periods} for simulated campus places
 
     @property
     def campus_eligible(self) -> bool:
@@ -147,15 +148,21 @@ def _simulation_for(provenance: dict, facility_id: str) -> dict:
 def _simulated_facility(facility_id, name, category, provenance, capacity=None, **extra) -> Facility:
     found = _simulation_for(provenance, facility_id)
     sim, dataset = found["sim"], found["dataset"]
-    source = (f"Simulated from {dataset['title']} ({dataset['creators']}, {dataset['license']}): "
-              f"{dataset['original_location']}. Not a BU measurement" if dataset
-              else "Modeled profile (no dataset). Not a BU measurement")
+    if not dataset:
+        source = "Modeled profile (no dataset). Not a BU measurement"
+    else:
+        cite = f"{dataset['title']} ({dataset['creators']}, {dataset['license']}): {dataset['original_location']}"
+        lead = "Lunch simulated from" if sim["basis"] == "mixed" else "Simulated from"
+        rest = "; other hours modeled" if sim["basis"] == "mixed" else ""
+        source = f"{lead} {cite}{rest}. Not a BU measurement"
     return Facility(
         facility_id=facility_id, facility_name=name, category=category,
         data_mode="synthetic", measurement_method="synthetic", source=source,
         timezone="America/New_York", time_note=SIMULATED_TIME_NOTE, window=tuple(sim["window"]),
         capacity=capacity, max_hold=timedelta(minutes=provenance["grid_minutes"]),
-        simulation={"id": sim["id"], "basis": sim["basis"], "label": sim["label"]}, **extra,
+        simulation={"id": sim["id"], "basis": sim["basis"], "label": sim["label"],
+                    "periods": [{k: p[k] for k in ("start", "end", "basis", "label")} for p in sim["periods"]]},
+        **extra,
     )
 
 
