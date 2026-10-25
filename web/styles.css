@@ -1511,8 +1511,12 @@ a.row.is-featured:is(:hover, :focus-visible) { border-color: var(--red); }
   --glass-edge: rgba(255, 255, 255, 0.1);
 }
 
-/* Turn the chrome into a glass host: content sits above, glass layers behind. */
-.tabbar, .side { position: relative; isolation: isolate; }
+/* Turn the chrome into a glass host: content sits above, glass layers behind.
+   The tab bar stays position: fixed (set earlier) so it's pinned on screen the
+   whole time; fixed already forms a positioning context for the glass layers,
+   so only isolation is added here. The top bar gets relative positioning. */
+.tabbar { isolation: isolate; }
+.side { position: relative; isolation: isolate; }
 
 /* The refractive glass surface. */
 .tabbar::before, .side::before {
