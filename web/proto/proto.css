@@ -125,6 +125,16 @@ button.row { width: calc(100% + 16px); border: none; background: none; text-alig
 .lvl[data-level="quiet"] { color: var(--free); }
 .lvl[data-level="moderate"] { color: #8A4B00; }
 .lvl[data-level="busy"] { color: var(--accent); }
+/* busyness icon: three ascending bars; the word beside it always says the level */
+.busy { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.row .busy { margin-left: auto; font-size: 13px; }
+.busy-icon { width: 19px; height: 12px; flex: none; stroke: none; fill: none; overflow: visible; }
+.busy-icon rect { fill: var(--line); transform-box: fill-box; transform-origin: 50% 100%; animation: bar-grow 420ms var(--ease) calc(120ms + var(--i) * 70ms) both; }
+.busy-icon[data-level="quiet"] rect.on { fill: var(--free); }
+.busy-icon[data-level="moderate"] rect.on { fill: #8A4B00; }
+.busy-icon[data-level="busy"] rect.on { fill: var(--accent); }
+.lvl[data-level="closed"], .lvl[data-level="unknown"] { color: var(--muted); font-weight: 500; }
+@keyframes bar-grow { from { transform: scaleY(0.15); } to { transform: none; } }
 .steps { list-style: none; margin: 0; padding: 0; }
 .steps li { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .steps li:last-child { border-bottom: none; }

@@ -405,8 +405,14 @@ const SCREENS = {
     const placeRows = () => places.map((p) => {
       const loc = data.hours?.locations?.[p.facility_id];
       const s = loc ? nowStatus(loc) : { status: "unverified", label: "Hours unverified" };
+      // Busyness now, from the place's simulated history (the same series the planner ranks on).
+      // A closed or unverified building gets no crowd level: empty bars, never a guess. Only verified hours say "closed".
+      const level = s.status === "open" ? engine.busynessAt(p, data.histories, campusDateTime().minute).level
+        : s.status === "closed" || s.status === "closed_today" ? "closed" : "unknown";
+      const word = level === "unknown" ? "no data" : level;
       return `<li data-name="${esc(p.name.toLowerCase())}"><a class="row" href="index.html#/place/${encodeURIComponent(p.facility_id)}">
-        <span class="main"><span class="title">${esc(p.name)}</span><span class="sub ${s.status === "open" ? "open" : ""}">${esc(nowText(s))}</span></span>${icon.go}</a></li>`;
+        <span class="main"><span class="title">${esc(p.name)}</span><span class="sub ${s.status === "open" ? "open" : ""}">${esc(nowText(s))}</span></span>
+        <span class="busy">${L.busyIcon(level, `${word}${level === "closed" ? "" : ", simulated"}`)}<span class="lvl" data-level="${level}">${esc(word)}</span></span>${icon.go}</a></li>`;
     }).join("");
     const clubRows = async () => {
       try {
@@ -456,7 +462,7 @@ function renderAnswer(o, result, count, back) {
   $view.innerHTML = `${back}<section class="answer stagger">
       <div><span class="fine" style="font-size:14px;font-weight:600">${sentence.chosen && o !== result.options[0] ? "Your pick" : "Go to"}</span>
         <h1 class="place">${esc(o.place.name)}</h1></div>
-      <p class="what"><b>${o.activity} min</b> to ${esc(act.verb)} · <span class="lvl" data-level="${busy.level}">${esc(busy.text)}</span></p>
+      <p class="what"><b>${o.activity} min</b> to ${esc(act.verb)} · <span class="busy">${L.busyIcon(busy.peak, busy.text)}<span class="lvl" data-level="${busy.peak}">${esc(busy.text)}</span></span></p>
       ${bar(o)}
       <ol class="steps">${steps.map(([t, text]) => `<li><time>${fmtTime(t)}</time><span>${text}</span></li>`).join("")}</ol>
       <div class="spacer"></div>
@@ -478,7 +484,7 @@ function optionCard(o, first) {
   const busy = L.visitWords(o);
   const req = engine.normalizeRequest(request());
   return `<article class="opt-card${first ? " best" : ""}">
-    <div class="top"><h2>${esc(o.place.name)}</h2><span class="lvl" data-level="${busy.level}" style="font-size:13px">${esc(busy.text)}</span></div>
+    <div class="top"><h2>${esc(o.place.name)}</h2><span class="busy" style="font-size:13px">${L.busyIcon(busy.peak, busy.text)}<span class="lvl" data-level="${busy.peak}">${esc(busy.text)}</span></span></div>
     ${bar(o)}
     <div class="facts"><span>Leave<b>${o.there ? fmtTime(o.depart) : "Here"}</b></span><span>${esc(actInfo(req.activity).label)}<b>${o.activity} min</b></span>
       <span>${req.to ? `At ${esc(locName(req.to))}` : "Free until"}<b>${fmtTime(req.to ? o.arriveNext : o.windowEnd)}</b></span></div>

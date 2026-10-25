@@ -39,6 +39,8 @@ test("one sentence plans the gap with the shared engine", async ({ page }) => {
 
   await page.getByRole("link", { name: "Find a spot" }).click();
   await expect(page.locator(".place")).toHaveText("Marciano Commons");
+  await expect(page.locator(".what .busy-icon")).toHaveAttribute("data-level", "quiet");
+  await expect(page.locator(".what .busy-icon rect.on")).toHaveCount(1);
   await expect(page.locator(".steps")).toContainText("3:08 PM");
   await expect(page.locator(".steps")).toContainText("there by 3:50 PM");
 
@@ -87,6 +89,13 @@ test("explore shows live status and filters places and clubs", async ({ page }) 
   await page.locator('.tabs a[data-tab="explore"]').click();
   await expect(page.locator("#results")).toContainText("Mugar Library");
   await expect(page.locator("#results li", { hasText: "FitRec" })).toContainText("Open now · until 11:00 PM");
+  // every open place shows a busyness meter with its word; unverified hours show empty bars and "no data", not "closed"
+  const fitrec = page.locator("#results li", { hasText: "FitRec" }).locator(".busy-icon");
+  await expect(fitrec).toHaveAttribute("aria-label", /Busyness: (quiet|moderate|busy|no data), simulated/);
+  const fenway = page.locator("#results li", { hasText: "Fenway Dining" });
+  await expect(fenway.locator(".busy-icon")).toHaveAttribute("data-level", "unknown");
+  await expect(fenway.locator(".busy-icon rect.on")).toHaveCount(0);
+  await expect(fenway.locator(".busy")).toHaveText("no data");
   await page.getByRole("tab", { name: "Clubs" }).click();
   await page.getByLabel("Search places and clubs").fill("run");
   await expect(page.locator("#results li:not([hidden])")).toHaveCount(1);
