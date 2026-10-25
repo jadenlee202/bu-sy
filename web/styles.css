@@ -771,39 +771,37 @@ main > .hint, main > .form, main > #events { max-width: 720px; }
   :is(.pick, .preset-row, .segmented) input:checked + span { outline: 3px solid Highlight; }
 }
 
-/* ---------- campus imagery ---------- */
-/* A photo or, when none is available, a built-in illustration. Fixed ratio so
-   layout never shifts while a lazy image loads, and nothing ever shows broken. */
-.campus-photo {
-  margin: 0; position: relative; overflow: hidden; border-radius: var(--radius-sm);
-  background: var(--subtle); aspect-ratio: var(--ratio, 16 / 9);
-}
-.campus-photo img, .campus-photo .campus-fallback {
-  display: block; width: 100%; height: 100%; object-fit: cover;
-}
-.campus-fallback { background: var(--subtle); }
-.campus-credit {
-  position: absolute; left: 0; right: 0; bottom: 0; margin: 0;
-  padding: 4px 10px; font-size: 11px; line-height: 1.3; color: #fff;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.55));
-  text-align: right;
-}
-
 /* ---------- homepage hero ---------- */
 .hero-banner {
   position: relative; overflow: hidden; border-radius: var(--radius);
   min-height: 260px; display: flex; align-items: flex-end;
   background: var(--hero); color: var(--hero-text); isolation: isolate;
 }
-.hero-banner .campus-photo {
-  position: absolute; inset: 0; border-radius: 0; aspect-ratio: auto;
+
+/* Hand-drawn Boston skyline backdrop (no photo). */
+.hero-bg { position: absolute; inset: 0; z-index: 0; }
+.hero-bg .skyline { width: 100%; height: 100%; display: block; }
+/* Legibility: fade the left side where the text sits. */
+.hero-skyline::after {
+  content: ""; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(90deg, rgba(8, 10, 16, 0.85), rgba(8, 10, 16, 0.45) 58%, rgba(8, 10, 16, 0.12));
 }
-/* Legibility overlay so headline text stays readable over any photo. */
-.hero-banner .campus-photo::after {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(90deg, rgba(10, 10, 10, 0.82), rgba(10, 10, 10, 0.5) 55%, rgba(10, 10, 10, 0.25));
+/* Skyline palette — bright daytime blue; buildings read as cool silhouettes. */
+.hero-skyline {
+  --sky-top: #2f7fd6; --sky-bottom: #bfe0f5; --sun: #fff4cf;
+  --city-far: #7fa8cf; --city-near: #335a86; --city-glass: #eaf4ff;
+  --window: #fff0b8; --sail: #ffffff;
+  --river-top: #9fd0ee; --river-bottom: #4f93c7; --river-line: #d4ecfa;
 }
-.hero-banner .campus-credit { z-index: 2; }
+/* Daytime sky stays bright in dark mode too; the text overlay keeps contrast. */
+:root[data-theme="dark"] .hero-skyline {
+  --sky-top: #1f5e9e; --sky-bottom: #2f7fb0;
+  --city-far: #6b94bd; --city-near: #284867; --river-bottom: #3c7aa8;
+}
+/* Legibility overlay in a cool blue so dark text stays readable on bright sky. */
+.hero-skyline.hero-skyline::after {
+  background: linear-gradient(90deg, rgba(12, 34, 58, 0.78), rgba(12, 34, 58, 0.4) 58%, rgba(12, 34, 58, 0.1));
+}
 .hero-body { position: relative; z-index: 2; padding: 28px 24px; max-width: 640px; display: flex; flex-direction: column; gap: 10px; }
 .hero-eyebrow { display: inline-flex; align-items: center; gap: 7px; align-self: flex-start; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; background: var(--red); padding: 4px 11px; border-radius: 999px; }
 .hero-title { margin: 0; font-size: clamp(28px, 4vw + 10px, 46px); line-height: 1.08; font-weight: 800; letter-spacing: -0.035em; color: #fff; }
@@ -829,14 +827,10 @@ main > .hint, main > .form, main > #events { max-width: 720px; }
 @container (min-width: 40rem) { .home-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .loc-card { display: flex; flex-direction: column; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; text-decoration: none; color: inherit; }
 .loc-card:hover { border-color: var(--line-strong); }
-.loc-card .campus-photo { border-radius: 0; }
 .loc-card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
 .loc-card-name { font-weight: 650; }
 .loc-card-sub { font-size: 13px; color: var(--muted); }
 
-/* Place-detail building photo (real BU places only; references never get one). */
-.place-photo { margin: 4px 0 0; }
-.place-photo .campus-photo { border-radius: var(--radius); }
 /* Selected plan uses existing typography, theme tokens and brand red. */
 .selected-plan { padding: 1.25rem; min-width: 0; }
 .selected-plan .timeline { margin-block: 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; }
@@ -865,3 +859,8 @@ main > .hint, main > .form, main > #events { max-width: 720px; }
 .sample-day li span { color: var(--muted); }
 @media (max-width: 1050px) { .sample-week { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 500px) { .sample-week { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Keep the merged skyline compact so the planner stays near the top. */
+.planner-skyline { min-height: 0; }
+.planner-skyline .hero-body { padding: 16px 20px; gap: 4px; }
+.planner-skyline .title, .planner-skyline .tagline, .planner-skyline a { color: var(--on-red); }

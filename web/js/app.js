@@ -1,7 +1,6 @@
 import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obsOffset } from "./clock.js";
 import { clubFormView, clubView, clubsView, joinView, manageView, myClubsView } from "./clubs.js";
 import { icon, paw, terrier } from "./icons.js";
-import { campusImage, getImages } from "./image.js";
 import { planView, metadataHTML } from "./plan.js";
 import { placeAvailability } from "./availability.js";
 import { calendarView, formatInstant, loadCalendarPrefs, MIN_OPTIONS, TZ } from "./calendar.js";
@@ -464,10 +463,10 @@ async function placesView() {
 // ---------- screen: one place ----------
 async function placeView(id) {
   $view.innerHTML = `${backToPlaces}${loading()}`;
-  let f, hist, hours, campus, images, scheduleLocation;
+  let f, hist, hours, campus, scheduleLocation;
   try {
     let facilities, allHours;
-    [facilities, campus, allHours, images] = await Promise.all([src.listFacilities(), src.getCampus(), src.getHours(), getImages()]);
+    [facilities, campus, allHours] = await Promise.all([src.listFacilities(), src.getCampus(), src.getHours()]);
     hours = openingHours(campus, id);
     scheduleLocation = allHours.locations[id] ?? null;
     f = facilities.find((x) => x.facility_id === id);
@@ -478,11 +477,6 @@ async function placeView(id) {
     return {};
   }
   const historical = isHistorical(f);
-  // A campus photo for real BU places only. Historical references are NOT BU,
-  // so they never get a BU building photo. Keyed by the place's location_id.
-  const locId = campus.places.find((p) => p.facility_id === id)?.location_id;
-  const photo = !historical && locId ? (images?.images?.[locId] ?? null) : null;
-  const showPhoto = !historical && locId;
   const office = f.category === "office";
   const days = hist.playback_days ?? [];
   let selectedScheduleDate = campusDateTime().date;
@@ -490,7 +484,6 @@ async function placeView(id) {
 
   $view.innerHTML = `
     ${backToPlaces}
-    ${showPhoto ? `<div class="place-photo">${campusImage(photo, f.facility_name, "21 / 9")}</div>` : ""}
     <div class="page-head"><h1 class="title">${esc(f.facility_name)}</h1>
       <p class="sub">${CATEGORY[f.category] ?? esc(f.category)} ${tag(f)} ${historical ? `<span class="muted">${office ? "Office room, not BU" : "Not BU"} · never suggested</span>`
         : f.simulation ? `<span class="muted">${esc(f.simulation.label)}</span> <a class="sub-link" href="#/sources/${encodeURIComponent(f.simulation.id)}">How it's simulated</a>` : ""}</p></div>
