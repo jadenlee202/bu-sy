@@ -678,10 +678,10 @@ th { color: var(--muted); font-weight: 600; }
 .day-cell.is-outside { background: transparent; border-style: dashed; }
 .day-cell.is-outside .day-num, .day-cell.is-outside .day-events { opacity: 0.55; }
 .day-cell[aria-pressed="true"] { border-color: var(--selected); box-shadow: inset 0 0 0 1px var(--selected); }
-.day-num { align-self: flex-start; min-width: 26px; height: 24px; padding: 0 6px; display: grid; place-items: center; border-radius: 999px; font-size: 13px; font-weight: 650; }
+.day-num { align-self: flex-start; min-width: 26px; height: 24px; padding: 0 6px; display: grid; place-items: center; border-radius: var(--radius-xs); font-size: 13px; font-weight: 650; }
 .day-cell.is-today .day-num { background: var(--red); color: var(--on-red); }
 .day-events { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.day-event { display: block; padding: 2px 6px; border-radius: 6px; font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: color-mix(in srgb, var(--red) 14%, var(--surface)); }
+.day-event { display: block; padding: 2px 6px; border-radius: var(--radius-xs); font-size: 12px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: color-mix(in srgb, var(--red) 14%, var(--surface)); }
 .day-event-time { color: var(--muted); }
 .day-event.is-allday { background: var(--red); color: var(--on-red); }
 .day-event.is-free { background: transparent; border: 1px dashed var(--line-strong); color: var(--muted); }
@@ -697,7 +697,7 @@ th { color: var(--muted); font-weight: 600; }
   .day-cell { min-height: 52px; padding: 4px; align-items: center; gap: 2px; }
   .day-num { align-self: center; }
   .day-events { display: none; }
-  .day-count { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; font-size: 11px; font-weight: 700; background: color-mix(in srgb, var(--red) 18%, var(--surface)); }
+  .day-count { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--radius-xs); font-size: 11px; font-weight: 700; background: color-mix(in srgb, var(--red) 18%, var(--surface)); }
 }
 .calendar-total { margin: 0; }
 .calendar-timeline, .calendar-matches { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -992,6 +992,7 @@ a.row:hover .row-side > .icon { transform: translateX(3px); }
 .src-item, .rec { transition: border-color var(--dur) var(--ease); }
 @media (hover: hover) { .src-item:hover, .rec:hover, .schedule-day:hover { border-color: var(--line-strong); } }
 #avail-chips:empty, .avail-panel:empty { display: none; }
+.pb-speed-btn, .day-cell { transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
 
 /* Disclosures: where supported, <details> content animates its height. */
 :root { interpolate-size: allow-keywords; }
@@ -1032,16 +1033,16 @@ details > summary { transition: color var(--dur-fast) var(--ease); }
   main.view-enter > :nth-child(n+6) { animation-delay: 340ms; }
 
   /* Lists, cards and day rows follow, one after another. */
-  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events) > * {
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > * {
     animation: rise-in 480ms var(--ease-out) both; animation-delay: calc(200ms + var(--n, 8) * 55ms);
   }
-  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events) > :nth-child(1) { --n: 0; }
-  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events) > :nth-child(2) { --n: 1; }
-  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events) > :nth-child(3) { --n: 2; }
-  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events) > :nth-child(4) { --n: 3; }
-  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events) > :nth-child(5) { --n: 4; }
-  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events) > :nth-child(6) { --n: 5; }
-  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events) > :nth-child(7) { --n: 6; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(1) { --n: 0; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(2) { --n: 1; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(3) { --n: 2; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(4) { --n: 3; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(5) { --n: 4; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(6) { --n: 5; }
+  main.view-enter :is(.list, .dash-cards, .src-section, .calendar-matches, .schedule-days, .events, .month-grid) > :nth-child(7) { --n: 6; }
 
   /* Numbers arrive by sliding up into place (always the real value), then meters fill bar by bar. */
   main.view-enter :is(.big, .row-count, .dash-count, .stat-num) { display: inline-block; animation: count-rise 620ms var(--ease-out) 260ms both; }
