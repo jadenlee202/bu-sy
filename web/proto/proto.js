@@ -3,8 +3,8 @@
 // the .ics import and free time (schedule.js, availability.js) and saved club meetings.
 import { daySegments, zonedInstant } from "../js/availability.js";
 import { fmtTime, toHHMM, toMin } from "../js/clock.js";
-import { clubBusy, clubEventItems, loadClubEvents } from "../js/clubevents.js";
-import { campusDateTime, nowStatus, nowText } from "../js/hours.js";
+import { addClubEvent, clubBusy, clubEventItems, clubMeetings, loadClubEvents, removeClubEvent } from "../js/clubevents.js";
+import { campusDateTime, nowServiceLabel, nowStatus, nowText, selectedBuildingStatus, todayBuildingHoursSummary } from "../js/hours.js";
 import { directionsURL } from "../js/plan.js";
 import * as prefs from "../js/prefs.js";
 import * as engine from "../js/recommend.js";
@@ -52,7 +52,45 @@ const icon = {
   clock: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>`,
   search: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>`,
   cal: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>`,
+  pin: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>`,
+  check: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`,
 };
+
+// ---------- places: status and busyness (simulated history, verified hours) ----------
+const statusOf = (p) => { const loc = data.hours?.locations?.[p.facility_id]; return loc ? nowStatus(loc) : { status: "unverified", label: "Hours unverified" }; };
+/**
+ * Busyness now, from the place's simulated history (the same series the planner ranks on). A closed or
+ * unverified building gets no crowd level: an empty crowd, never a guess. Only verified hours say "closed".
+ */
+function busyNow(p, s = statusOf(p)) {
+  if (s.status !== "open") return { level: s.status === "closed" || s.status === "closed_today" ? "closed" : "unknown", pct: null };
+  const b = engine.busynessAt(p, data.histories, campusDateTime().minute);
+  return { ...b, pct: L.percentFull(b.count, b.capacity) };
+}
+/** Today's busyness hour by hour (5 AM to 11 PM), for hours the verified schedule says are open. */
+function hourly(p) {
+  const loc = data.hours?.locations?.[p.facility_id];
+  const { date } = campusDateTime();
+  return Array.from({ length: 19 }, (_, i) => {
+    const minute = (5 + i) * 60;
+    const open = Boolean(loc) && selectedBuildingStatus(loc, date, minute + 30).status === "open";
+    const b = open ? engine.busynessAt(p, data.histories, minute + 30) : { level: "closed", count: null, capacity: null };
+    return { minute, open, level: b.level, pct: L.percentFull(b.count, b.capacity) };
+  });
+}
+const hourLabel = (minute) => { const h = Math.floor(minute / 60) % 24; return `${h % 12 || 12}${h < 12 ? "a" : "p"}`; };
+
+// ---------- clubs ----------
+const APP_STATUS = { approved: "You're a member", pending: "Application pending", waitlisted: "On the waitlist", rejected: "Declined" };
+function clubWhen(c) {
+  if (!c.meeting_day && !c.meeting_start) return "Schedule TBD";
+  const day = c.meeting_day ? `${c.meeting_day}s` : "Day TBD";
+  return c.meeting_start ? `${day}, ${fmtTime(toMin(c.meeting_start))}–${fmtTime(toMin(c.meeting_end))}` : `${day}, time TBD`;
+}
+const clubWhere = (c) => [...new Set([c.location_name, c.location_text].filter(Boolean))].join(" · ") || "Location TBD";
+const clubSpots = (c) => (c.capacity == null ? "No member limit" : `${c.spots_left} of ${c.capacity} spots left`)
+  + (c.waitlist_count ? ` · ${c.waitlist_count} waiting` : "");
+const meetingDate = (iso) => new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 
 // ---------- today's schedule (shared with the main app's Calendar) ----------
 function today() {
@@ -88,10 +126,13 @@ function request() {
 }
 
 // ---------- router + transitions ----------
-const DEPTH = { welcome: 0, access: 1, plan: 2, answer: 3, options: 4 };
-const TABS = { plan: "plan", answer: "plan", options: "plan", schedule: "schedule", explore: "explore" };
+const DEPTH = { welcome: 0, access: 1, plan: 2, answer: 3, options: 4, place: 3, club: 3, join: 4 };
+const TABS = { plan: "plan", answer: "plan", options: "plan", schedule: "schedule", explore: "explore", place: "explore", club: "explore", join: "explore" };
 let current = null;
-const routeOf = () => (location.hash.replace(/^#\/?/, "").split("/")[0] || "plan");
+const hashParts = () => location.hash.replace(/^#\/?/, "").split("/").map((s) => decodeURIComponent(s));
+// #/club/<id>/join is its own screen; everything else is named by its first part.
+const routeOf = () => { const [first, , third] = hashParts(); return first === "club" && third === "join" ? "join" : first || "plan"; };
+const param = () => hashParts()[1] ?? "";
 
 // ---------- logo: the pin clock (where to go, and when) ----------
 const pinClock = ({ size = 24, label = "" } = {}) => `<svg class="pin-clock" width="${size}" height="${size}" viewBox="0 0 64 64" ${label ? `role="img" aria-label="${label}"` : `aria-hidden="true"`}>
@@ -163,6 +204,7 @@ async function route() {
     return;
   }
   const draw = () => {
+    $view.onclick = null;                                 // a screen's delegated handler leaves with it
     SCREENS[name]();
     document.body.classList.toggle("no-tabs", name === "welcome" || name === "access");
     for (const a of document.querySelectorAll(".tabs a")) a.toggleAttribute("aria-current", a.dataset.tab === TABS[name]);
@@ -403,22 +445,18 @@ const SCREENS = {
     const $list = $view.querySelector("#results");
     const $q = $view.querySelector("#q");
     const placeRows = () => places.map((p) => {
-      const loc = data.hours?.locations?.[p.facility_id];
-      const s = loc ? nowStatus(loc) : { status: "unverified", label: "Hours unverified" };
-      // Busyness now, from the place's simulated history (the same series the planner ranks on).
-      // A closed or unverified building gets no crowd level: empty bars, never a guess. Only verified hours say "closed".
-      const level = s.status === "open" ? engine.busynessAt(p, data.histories, campusDateTime().minute).level
-        : s.status === "closed" || s.status === "closed_today" ? "closed" : "unknown";
-      const word = level === "unknown" ? "no data" : level;
-      return `<li data-name="${esc(p.name.toLowerCase())}"><a class="row" href="index.html#/place/${encodeURIComponent(p.facility_id)}">
-        <span class="main"><span class="title">${esc(p.name)}</span><span class="sub ${s.status === "open" ? "open" : ""}">${esc(nowText(s))}</span></span>
-        <span class="busy">${L.busyIcon(level, `${word}${level === "closed" ? "" : ", simulated"}`)}<span class="lvl" data-level="${level}">${esc(word)}</span></span>${icon.go}</a></li>`;
+      const s = statusOf(p);
+      const now = busyNow(p, s);
+      return `<li data-name="${esc(p.name.toLowerCase())}"><a class="row" href="#/place/${encodeURIComponent(p.facility_id)}">
+        <span class="main"><span class="title">${esc(p.name)}</span><span class="sub ${s.status === "open" ? "open" : ""}">${esc(nowText(s))}</span>
+          ${L.busyBadge(now.level, { pct: now.pct, label: `${L.levelWord(now.level)}${now.level === "closed" ? "" : ", simulated"}` })}</span>${icon.go}</a></li>`;
     }).join("");
     const clubRows = async () => {
       try {
         const clubs = await src.clubs.list();
-        return clubs.map((c) => `<li data-name="${esc(c.name.toLowerCase())}"><a class="row" href="index.html#/club/${encodeURIComponent(c.id)}">
-          <span class="main"><span class="title">${esc(c.name)}</span><span class="sub">${c.meeting_day ? `${esc(c.meeting_day)}s${c.meeting_start ? `, ${fmtTime(toMin(c.meeting_start))}` : ""}` : "Schedule TBD"} · ${esc(c.status ?? "")}</span></span>${icon.go}</a></li>`).join("");
+        return clubs.map((c) => `<li data-name="${esc(c.name.toLowerCase())}"><a class="row" href="#/club/${encodeURIComponent(c.id)}">
+          <span class="main"><span class="title">${esc(c.name)}</span><span class="sub">${esc(clubWhen(c))} · ${esc(c.my_application ? APP_STATUS[c.my_application.status] : c.status ?? "")}</span>
+          ${c.busyness_hint ? L.busyBadge(c.busyness_hint.level, { text: `${L.levelWord(c.busyness_hint.level)} at meeting time`, label: `${L.levelWord(c.busyness_hint.level)} at meeting time, estimate` }) : ""}</span>${icon.go}</a></li>`).join("");
       } catch { return `<li class="empty">Couldn't load clubs.</li>`; }
     };
     const filter = () => {
@@ -439,6 +477,199 @@ const SCREENS = {
     $view.querySelector(".seg").addEventListener("click", (e) => { const b = e.target.closest("[data-tab-i]"); if (b) show(Number(b.dataset.tabI)); });
     $q.addEventListener("input", filter);
     show(ui.exploreTab);
+  },
+
+  place() {
+    const back = `<div class="head"><a class="back" href="#/explore">${icon.back}Explore</a></div>`;
+    const p = data.campus.places.find((x) => x.facility_id === param());
+    if (!p) {
+      $view.innerHTML = `${back}<section class="stack"><h1 class="page-title">Place not found</h1><a class="btn primary" href="#/explore">Back to Explore</a></section>`;
+      return;
+    }
+    ui.exploreTab = 0;
+    const loc = data.hours?.locations?.[p.facility_id];
+    const s = statusOf(p);
+    const now = busyNow(p, s);
+    const { minute } = campusDateTime();
+    const all = hourly(p);
+    const first = all.findIndex((x) => x.open), last = all.findLastIndex((x) => x.open);
+    const slots = first < 0 ? [] : all.slice(first, last + 1);   // the chart spans today's opening hours only
+    const best = L.quietestFrom(slots, minute);
+    const directions = directionsURL(p);
+    const meal = loc && p.activities?.includes("eat") ? nowServiceLabel(loc) : "";
+    const nowLine = now.count != null
+      ? `About ${now.count.toLocaleString("en-US")} people, against an illustrative capacity of ${now.capacity.toLocaleString("en-US")}.`
+      : now.level === "closed" ? "Closed right now, so there's no crowd to show."
+      : "Today's hours aren't verified, so BU-sy doesn't guess how busy it is.";
+    const chart = slots.length ? `<div class="day-chart" role="img" aria-label="Busyness today, simulated: ${esc(slots.map((x) =>
+        `${hourLabel(x.minute)} ${x.open ? L.levelWord(x.level) : "closed"}`).join(", "))}">
+        ${slots.map((x) => `<span class="col${Math.floor(minute / 60) * 60 === x.minute ? " now" : ""}" data-level="${x.open ? x.level : "closed"}" style="--h:${x.open && x.pct != null ? Math.max(8, x.pct) : 4}%">
+          <i></i><b>${(x.minute / 60) % 3 === 0 ? hourLabel(x.minute) : ""}</b></span>`).join("")}</div>
+        <ul class="legend"><li><i class="lv-quiet"></i>Quiet</li><li><i class="lv-moderate"></i>Moderate</li><li><i class="lv-busy"></i>Busy</li><li><i class="lv-now"></i>Now</li></ul>`
+      : `<p class="fine">No verified opening hours today, so there's no busyness to chart.</p>`;
+    const bestLine = best ? `<p class="quietest">${icon.clock}<span>${best.minute <= minute && minute < best.minute + 60 ? "Quietest from now: <b>right now</b>" : `Quietest later today: <b>around ${fmtTime(best.minute)}</b>`}</span>
+      ${L.busyBadge(best.level, { pct: best.pct, label: `${best.level} then, simulated` })}</p>` : "";
+
+    $view.innerHTML = `${back}<section class="stack stagger place-page">
+      <div><h1 class="page-title">${esc(p.name)}</h1><p class="status${s.status === "open" ? " open" : ""}">${esc(nowText(s))}</p></div>
+      <div class="card busy-now"><p class="label">How busy right now</p>
+        ${L.busyBadge(now.level, { pct: now.pct, size: "lg", label: `${L.levelWord(now.level)}${now.level === "closed" ? "" : ", simulated"}` })}
+        <p class="fine">${nowLine}</p></div>
+      <div><p class="label">Today</p>${chart}${bestLine}</div>
+      <ul class="list">
+        <li class="row static"><span class="main"><span class="sub">Hours today</span><span class="title">${esc(loc ? todayBuildingHoursSummary(loc) : "Hours unverified")}</span></span></li>
+        ${meal ? `<li class="row static"><span class="main"><span class="sub">Meal service</span><span class="title">${esc(meal)}</span></span></li>` : ""}
+      </ul>
+      <div class="btn-col">
+        ${directions ? `<a class="btn primary" href="${esc(directions)}" data-directions>Open directions</a>` : ""}
+        <a class="btn${directions ? "" : " primary"}" href="#/">Plan my free time</a>
+      </div>
+      <p class="fine">Busyness is simulated from a sample day of outside datasets, not live BU counts. Hours come from BU's published schedules.</p>
+    </section>`;
+    $view.querySelector("[data-directions]")?.addEventListener("click", (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+      e.preventDefault();
+      openDirections(e.currentTarget.href);
+    });
+  },
+
+  club() {
+    const id = param();
+    ui.exploreTab = 1;                                    // back to Explore lands on the Clubs list
+    const back = `<div class="head"><a class="back" href="#/explore">${icon.back}Clubs</a></div>`;
+    const stillHere = () => current === "club" && param() === id;
+    $view.innerHTML = `${back}<p class="fine" role="status">Loading club…</p>`;
+    let c = null, notice = "";
+    const meetings = () => {
+      const { regular, extra } = clubMeetings(c);
+      const saved = new Set(loadClubEvents().map((e) => e.id));
+      return `<div class="meetings" aria-live="polite"><p class="label">Next meetings</p>${notice}
+        <ul class="list">${regular.map((m) => `<li class="row static"><span class="main"><span class="title">${esc(meetingDate(m.date))}, ${fmtTime(toMin(m.start))}–${fmtTime(toMin(m.end))}</span>
+          <span class="sub">${esc(m.location || "Location TBD")}</span></span>
+          ${saved.has(m.id) ? `<button class="chip-btn added" type="button" data-cal-remove="${esc(m.id)}" aria-label="Remove the meeting on ${esc(meetingDate(m.date))} from your schedule">${icon.check}Added</button>`
+            : `<button class="chip-btn" type="button" data-cal-add="${esc(m.id)}" aria-label="Add the meeting on ${esc(meetingDate(m.date))} to your schedule">Add</button>`}</li>`).join("")
+          || `<li class="empty">No weekly meeting time listed yet.</li>`}
+          ${extra.map((m) => `<li class="row static"><span class="main"><span class="title">${esc(meetingDate(m.date))}${m.note ? ` · ${esc(m.note)}` : ""}</span><span class="sub">Extra meeting · time not listed</span></span></li>`).join("")}</ul>
+        <p class="fine">Added meetings show on your Schedule and count as busy when BU-sy looks for free time. Saved in this browser only.</p></div>`;
+    };
+    const joinBox = () => {
+      const a = c.my_application;
+      if (c.is_organizer) return `<p class="label">You run this club</p><p class="fine">${esc(clubSpots(c))}. Review applications and edit the club in the <a href="index.html#/club/${encodeURIComponent(c.id)}/manage">full app</a>.</p>`;
+      if (a) {
+        const next = { approved: "Come along to the next meeting.", pending: "An officer will review your application.", rejected: "The organizer declined this application.",
+          waitlisted: `You're #${a.position} in line. If a spot opens you move up automatically.` }[a.status];
+        return `<p class="label">Your status</p><p class="join-status" data-app="${esc(a.status)}">${esc(APP_STATUS[a.status])}</p><p class="fine">${esc(next)}</p>
+          ${a.status !== "rejected" ? `<button class="btn" type="button" data-withdraw>Withdraw</button>` : ""}`;
+      }
+      if (c.status === "Full") return `<p class="label">Full</p><p class="fine">${esc(clubSpots(c))}. Not taking waitlist sign-ups right now.</p>`;
+      return `<p class="label">${c.status === "Open" ? "Spots available" : "Full · waitlist open"}</p><p class="fine">${esc(clubSpots(c))}</p>
+        <a class="btn primary" href="#/club/${encodeURIComponent(c.id)}/join">${c.status === "Open" ? (c.requires_approval ? "Apply to join" : "Join") : "Join the waitlist"}</a>`;
+    };
+    const render = () => {
+      const h = c.busyness_hint;
+      const more = [["Activities", c.activities], ["Requirements", c.requirements], ["Joining", c.requires_approval ? "An officer approves each application" : "Open sign-up: you're in right away if there's a spot"],
+        ["Officers", c.officers?.map((o) => `${o.role}: ${o.name}`).join(", ")], ["Contact", c.contact]].filter(([, v]) => v);
+      $view.innerHTML = `${back}<section class="stack stagger club-page">
+        <div><p class="tags"><span class="tag" data-status="${esc(c.status.toLowerCase())}">${esc(c.status)}</span><span class="tag">${esc(c.category)}</span>${c.example ? `<span class="tag soft" title="Sample club for the demo, not a real BU organization">Sample</span>` : ""}</p>
+          <h1 class="page-title">${esc(c.name)}</h1><p class="lede">${esc(c.description)}</p></div>
+        <ul class="list">
+          <li class="row static">${icon.clock}<span class="main"><span class="title">${esc(clubWhen(c))}</span><span class="sub">When it meets</span></span></li>
+          <li class="row static">${icon.pin}<span class="main"><span class="title">${esc(clubWhere(c))}</span><span class="sub">Where</span></span></li>
+        </ul>
+        <div class="card"><p class="label">Busy at meeting time?</p>
+          ${h ? `${L.busyBadge(h.level, { pct: L.percentFull(h.estimate, h.capacity), size: "lg", label: `${L.levelWord(h.level)} at meeting time, estimate` })}<p class="fine">${esc(h.basis)}</p>`
+            : `<p class="fine">No estimate: ${c.location_id ? "no meeting time is set" : "this meeting place has no busyness data"}.</p>`}</div>
+        <div class="card join-card" aria-live="polite">${joinBox()}</div>
+        ${meetings()}
+        ${more.length ? `<details class="more-info"><summary>${icon.chev}More about this club</summary><dl>${more.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl></details>` : ""}
+      </section>`;
+    };
+    $view.onclick = async (e) => {
+      if (!c || current !== "club") return;
+      const add = e.target.closest("[data-cal-add]"), remove = e.target.closest("[data-cal-remove]");
+      if (add || remove) {
+        const m = clubMeetings(c).regular.find((x) => x.id === (add ?? remove).dataset[add ? "calAdd" : "calRemove"]);
+        try {
+          if (!m) throw new Error("That meeting is no longer on the club's schedule.");
+          if (add) addClubEvent(m); else removeClubEvent(m.id);
+          notice = `<p class="chip free" role="status">${add ? `Added ${esc(meetingDate(m.date))} to your schedule.` : `Removed ${esc(meetingDate(m.date))} from your schedule.`}</p>`;
+        } catch (err) {
+          notice = `<p class="chip warn" role="alert">${esc(err instanceof DOMException ? "This browser couldn't save your schedule, so nothing changed." : err.message)}</p>`;
+        }
+        $view.querySelector(".meetings").outerHTML = meetings();
+        $view.querySelector(`.meetings [data-cal-add="${CSS.escape(m?.id ?? "")}"], .meetings [data-cal-remove="${CSS.escape(m?.id ?? "")}"]`)?.focus();
+        return;
+      }
+      if (e.target.closest("[data-withdraw]")) {
+        if (!confirm(`Withdraw from ${c.name}?`)) return;
+        try { c = await src.clubs.withdraw(id); render(); $announce.textContent = `Withdrawn from ${c.name}.`; } catch (err) { alert(err.message); }
+      }
+    };
+    src.clubs.get(id).then((club) => { if (!stillHere()) return; c = club; render(); })
+      .catch((err) => { if (stillHere()) $view.innerHTML = `${back}<section class="stack"><h1 class="page-title">Couldn't load this club</h1><p class="fine">${esc(err.message)}</p></section>`; });
+  },
+
+  join() {
+    const id = param();
+    const back = `<div class="head"><a class="back" href="#/club/${encodeURIComponent(id)}">${icon.back}Club</a></div>`;
+    const stillHere = () => current === "join" && param() === id;
+    $view.innerHTML = `${back}<p class="fine" role="status">Loading…</p>`;
+    Promise.all([src.clubs.get(id), src.clubOptions(), src.getMode()]).then(([c, o, mode]) => {
+      if (!stillHere()) return;
+      if (c.my_application || c.is_organizer || c.status === "Full") { go(`#/club/${encodeURIComponent(id)}`); return; }
+      let waitlist = c.status === "Waitlist";
+      const lim = o.limits;
+      const field = (label, input, note = "") => `<label class="field"><span>${label}${note ? ` <span class="field-note">${note}</span>` : ""}</span>${input}</label>`;
+      $view.innerHTML = `${back}<section class="stack stagger">
+        <div><h1 class="page-title">${waitlist ? "Join the waitlist" : c.requires_approval ? "Apply to join" : "Join"}</h1><p class="lede">${esc(c.name)}</p></div>
+        <form class="form" id="join-club" novalidate>
+          <p class="chip warn" id="full-note" role="status"${waitlist ? "" : " hidden"}>This club is full. You'll join its waitlist, in sign-up order.</p>
+          ${field("Full name", `<input name="name" required maxlength="${lim.applicant_name}" autocomplete="name">`)}
+          ${field("School email", `<input name="email" type="email" required maxlength="${lim.email}" autocomplete="email" inputmode="email" placeholder="name@bu.edu">`)}
+          ${field("Year", `<select name="year" required><option value="">Choose…</option>${o.years.map((y) => `<option>${esc(y)}</option>`).join("")}</select>`)}
+          ${field("Other contact", `<input name="contact" maxlength="${lim.contact}" placeholder="Phone or handle">`, "optional")}
+          ${field("Why do you want to join?", `<textarea name="reason" rows="3" maxlength="${lim.reason}"></textarea>`, "optional")}
+          ${field("Availability", `<input name="availability" maxlength="${lim.availability}" placeholder="e.g. weekday evenings">`, "optional")}
+          <p class="fine">Only this club's organizer sees these details. ${mode === "static" ? "Demo mode: they're stored in this browser only." : "They're stored on the BU-sy demo server."} BU-sy doesn't send emails.</p>
+          <p class="form-error" role="alert"></p>
+          <button class="btn primary" type="submit">${waitlist ? "Join waitlist" : c.requires_approval ? "Send application" : "Join club"}</button>
+        </form></section>`;
+      const form = $view.querySelector("#join-club"), $err = form.querySelector(".form-error"), $btn = form.querySelector("button");
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const d = Object.fromEntries(new FormData(form));
+        for (const el of form.querySelectorAll("[aria-invalid]")) el.removeAttribute("aria-invalid");
+        const problem = src.applicationProblem(d, o);          // same rules as the server
+        if (problem) {
+          $err.textContent = problem.message;
+          const el = form.elements.namedItem(problem.field);
+          el?.setAttribute("aria-invalid", "true"); el?.focus();
+          return;
+        }
+        $btn.disabled = true;
+        try {
+          const updated = await src.clubs.apply(id, { ...d, join_waitlist: waitlist });
+          const a = updated.my_application;
+          const [title, text] = { approved: ["You're in", `You're a member of ${updated.name}. ${clubWhen(updated) === "Schedule TBD" ? "Its meeting time isn't set yet." : `It meets ${clubWhen(updated)}.`}`],
+            pending: ["Application sent", `An officer of ${updated.name} will review it. You won't get an email; check back here.`],
+            waitlisted: [`You're #${a.position} on the waitlist`, `If a spot opens at ${updated.name}, you move up automatically in sign-up order.`] }[a.status];
+          $view.innerHTML = `${back}<section class="stack stagger done" role="status"><div class="logo">${icon.check}</div>
+            <h1 class="page-title">${esc(title)}</h1><p class="lede">${esc(text)}</p>
+            <div class="btn-col"><a class="btn primary" href="#/club/${encodeURIComponent(id)}">Back to the club</a><a class="btn" href="#/explore">Explore more clubs</a></div></section>`;
+          $view.focus({ preventScroll: true });
+        } catch (err) {
+          $btn.disabled = false;
+          if (err.status === 409 && /waitlist instead/.test(err.message)) {   // filled up while typing
+            waitlist = true;
+            form.querySelector("#full-note").hidden = false;
+            $btn.textContent = "Join waitlist";
+            $err.textContent = "The last spot was just taken. You can join the waitlist instead.";
+          } else {
+            $err.textContent = err.message;
+          }
+        }
+      });
+    }).catch((err) => { if (stillHere()) $view.innerHTML = `${back}<section class="stack"><h1 class="page-title">Couldn't load this club</h1><p class="fine">${esc(err.message)}</p></section>`; });
   },
 };
 
@@ -462,12 +693,13 @@ function renderAnswer(o, result, count, back) {
   $view.innerHTML = `${back}<section class="answer stagger">
       <div><span class="fine" style="font-size:14px;font-weight:600">${sentence.chosen && o !== result.options[0] ? "Your pick" : "Go to"}</span>
         <h1 class="place">${esc(o.place.name)}</h1></div>
-      <p class="what"><b>${o.activity} min</b> to ${esc(act.verb)} · <span class="busy">${L.busyIcon(busy.peak, busy.text)}<span class="lvl" data-level="${busy.peak}">${esc(busy.text)}</span></span></p>
+      <p class="what"><b>${o.activity} min</b> to ${esc(act.verb)}</p>
+      <p class="what">${L.busyBadge(busy.peak ?? "unknown", { text: busy.text, label: `${busy.text} during your visit, simulated` })}</p>
       ${bar(o)}
       <ol class="steps">${steps.map(([t, text]) => `<li><time>${fmtTime(t)}</time><span>${text}</span></li>`).join("")}</ol>
       <div class="spacer"></div>
       <div class="btn-col">
-        ${directions ? `<a class="btn primary" href="${esc(directions)}" data-directions>Open directions</a>` : `<a class="btn primary" href="index.html#/place/${encodeURIComponent(o.place.facility_id)}">See this place</a>`}
+        ${directions ? `<a class="btn primary" href="${esc(directions)}" data-directions>Open directions</a>` : `<a class="btn primary" href="#/place/${encodeURIComponent(o.place.facility_id)}">See this place</a>`}
         ${count > 1 ? `<a class="btn" href="#/options">See all ${count} options</a>` : ""}
         <p class="fine" style="text-align:center">Busyness is simulated, not live. Walks are estimates; check hours before you go.</p>
       </div>
@@ -484,7 +716,7 @@ function optionCard(o, first) {
   const busy = L.visitWords(o);
   const req = engine.normalizeRequest(request());
   return `<article class="opt-card${first ? " best" : ""}">
-    <div class="top"><h2>${esc(o.place.name)}</h2><span class="busy" style="font-size:13px">${L.busyIcon(busy.peak, busy.text)}<span class="lvl" data-level="${busy.peak}">${esc(busy.text)}</span></span></div>
+    <div class="top"><h2>${esc(o.place.name)}</h2>${L.busyBadge(busy.peak ?? "unknown", { text: busy.text, label: `${busy.text} during your visit, simulated` })}</div>
     ${bar(o)}
     <div class="facts"><span>Leave<b>${o.there ? fmtTime(o.depart) : "Here"}</b></span><span>${esc(actInfo(req.activity).label)}<b>${o.activity} min</b></span>
       <span>${req.to ? `At ${esc(locName(req.to))}` : "Free until"}<b>${fmtTime(req.to ? o.arriveNext : o.windowEnd)}</b></span></div>
@@ -563,7 +795,7 @@ const PICKERS = {
 };
 
 // Statuses and "free now" move with the clock: refresh the live screens every minute.
-setInterval(() => { if (["schedule", "explore"].includes(current) && !document.querySelector(".sheet")) SCREENS[current](); }, 60_000);
+setInterval(() => { if (["schedule", "explore", "place"].includes(current) && !document.querySelector(".sheet")) SCREENS[current](); }, 60_000);
 
 // Imports go through the main app's validator and storage, so both see the same schedule.
 function wireImport() {

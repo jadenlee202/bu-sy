@@ -48,7 +48,7 @@ test("visit busyness reads as one level or the order it changes in; the icon tak
   assert.deepEqual(L.visitWords({ visit: null, busy: { level: "unknown" } }), { level: "unknown", text: "no busyness data" });
 });
 
-test("the busyness icon fills one bar per level and none when closed or unknown", () => {
+test("the busyness icon fills one person per level and none when closed or unknown", () => {
   const filled = (svg) => (svg.match(/class="on"/g) ?? []).length;
   assert.equal(filled(L.busyIcon("quiet")), 1);
   assert.equal(filled(L.busyIcon("moderate")), 2);
@@ -58,6 +58,39 @@ test("the busyness icon fills one bar per level and none when closed or unknown"
   assert.match(L.busyIcon("busy", "busy, simulated"), /role="img" aria-label="Busyness: busy, simulated"/);
   assert.equal(L.peakLevel(["quiet", "moderate", "quiet"]), "moderate");
   assert.equal(L.peakLevel([]), "unknown");
+});
+
+test("the busyness badge says the level in words and how full it is, never colour alone", () => {
+  assert.equal(L.percentFull(280, 600), 47);
+  assert.equal(L.percentFull(900, 870), 100);
+  assert.equal(L.percentFull(null, 600), null);
+  assert.equal(L.percentFull(10, 0), null);
+  const busy = L.busyBadge("busy", { pct: 82, label: "busy, simulated" });
+  assert.match(busy, /data-level="busy"/);
+  assert.match(busy, />Busy<\/span>/);
+  assert.match(busy, /82% full/);
+  assert.match(busy, /aria-label="Busyness: busy, simulated"/);
+  // No crowd figure without a level: closed and unknown never show a percentage.
+  assert.doesNotMatch(L.busyBadge("closed", { pct: 40 }), /% full/);
+  assert.match(L.busyBadge("unknown"), />No data<\/span>/);
+  assert.match(L.busyBadge("quiet", { text: "quiet, then busy" }), />Quiet, then busy<\/span>/);
+});
+
+test("the quietest time is the lowest level still open today, then the emptiest", () => {
+  const slots = [
+    { minute: 600, open: true, level: "quiet", pct: 10 },
+    { minute: 660, open: true, level: "busy", pct: 90 },
+    { minute: 720, open: true, level: "moderate", pct: 50 },
+    { minute: 780, open: true, level: "quiet", pct: 30 },
+    { minute: 840, open: false, level: "closed", pct: null },
+    { minute: 900, open: true, level: "quiet", pct: 20 },
+  ];
+  assert.equal(L.quietestFrom(slots, 0).minute, 600);
+  assert.equal(L.quietestFrom(slots, 640).minute, 600);         // 10:40 is still inside the 10 AM hour
+  assert.equal(L.quietestFrom(slots, 700).minute, 900);         // later: the emptiest quiet hour
+  assert.equal(L.quietestFrom(slots.slice(1, 3), 0).minute, 720);
+  assert.equal(L.quietestFrom(slots, 2000), null);              // nothing open is left today
+  assert.equal(L.quietestFrom([{ minute: 600, open: true, level: "unknown", pct: null }], 0), null);
 });
 
 test("the engine request keeps defaults, then the sentence, then suggestion patches", () => {

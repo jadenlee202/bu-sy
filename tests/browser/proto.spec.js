@@ -40,7 +40,8 @@ test("one sentence plans the gap with the shared engine", async ({ page }) => {
   await page.getByRole("link", { name: "Find a spot" }).click();
   await expect(page.locator(".place")).toHaveText("Marciano Commons");
   await expect(page.locator(".what .busy-icon")).toHaveAttribute("data-level", "quiet");
-  await expect(page.locator(".what .busy-icon rect.on")).toHaveCount(1);
+  await expect(page.locator(".what .busy-icon g.on")).toHaveCount(1);
+  await expect(page.locator(".what .busy-badge")).toContainText("Quiet");
   await expect(page.locator(".steps")).toContainText("3:08 PM");
   await expect(page.locator(".steps")).toContainText("there by 3:50 PM");
 
@@ -89,17 +90,90 @@ test("explore shows live status and filters places and clubs", async ({ page }) 
   await page.locator('.tabs a[data-tab="explore"]').click();
   await expect(page.locator("#results")).toContainText("Mugar Library");
   await expect(page.locator("#results li", { hasText: "FitRec" })).toContainText("Open now · until 11:00 PM");
-  // every open place shows a busyness meter with its word; unverified hours show empty bars and "no data", not "closed"
-  const fitrec = page.locator("#results li", { hasText: "FitRec" }).locator(".busy-icon");
-  await expect(fitrec).toHaveAttribute("aria-label", /Busyness: (quiet|moderate|busy|no data), simulated/);
+  // every open place shows a crowd badge with its word and how full it is; unverified hours show an
+  // empty crowd and "No data", never "closed" and never a percentage
+  const fitrec = page.locator("#results li", { hasText: "FitRec" }).locator(".busy-badge");
+  await expect(fitrec.locator(".busy-icon")).toHaveAttribute("aria-label", /Busyness: (quiet|moderate|busy), simulated/);
+  await expect(fitrec).toContainText(/(Quiet|Moderate|Busy)\s*\d+% full/);
   const fenway = page.locator("#results li", { hasText: "Fenway Dining" });
   await expect(fenway.locator(".busy-icon")).toHaveAttribute("data-level", "unknown");
-  await expect(fenway.locator(".busy-icon rect.on")).toHaveCount(0);
-  await expect(fenway.locator(".busy")).toHaveText("no data");
+  await expect(fenway.locator(".busy-icon g.on")).toHaveCount(0);
+  await expect(fenway.locator(".busy-badge")).toHaveText("No data");
+  // nothing in the prototype's lists leads back to the old UI
+  await expect(page.locator('#results a[href^="index.html"]')).toHaveCount(0);
   await page.getByRole("tab", { name: "Clubs" }).click();
   await page.getByLabel("Search places and clubs").fill("run");
   await expect(page.locator("#results li:not([hidden])")).toHaveCount(1);
   await expect(page.locator("#results li:not([hidden])")).toContainText("Charles River Run Club");
+  await expect(page.locator('#results a[href^="index.html"]')).toHaveCount(0);
+});
+
+test("a place page shows busyness now, today hour by hour, and the quietest time", async ({ page }) => {
+  const errors = browserErrors(page);
+  await onboard(page);
+  await page.locator('.tabs a[data-tab="explore"]').click();
+  await page.locator("#results a", { hasText: "Mugar Library" }).click();
+  await expect(page).toHaveURL(/proto\.html#\/place\/mugar-synthetic$/);
+  await expect(page.getByRole("heading", { name: "Mugar Library" })).toBeVisible();
+  const now = page.locator(".busy-now .busy-badge");
+  await expect(now).toHaveClass(/lg/);
+  await expect(now).toContainText(/(Quiet|Moderate|Busy)\s*\d+% full/);
+  await expect(page.locator(".busy-now")).toContainText(/About [\d,]+ people, against an illustrative capacity of 600/);
+  // one column per open hour, the current hour marked, and an accessible summary of the day
+  await expect(page.locator(".day-chart .col.now")).toHaveCount(1);
+  await expect(page.locator(".day-chart")).toHaveAttribute("aria-label", /^Busyness today, simulated: .*3p (quiet|moderate|busy)/);
+  await expect(page.locator(".quietest")).toContainText(/Quietest (later today|from now)/);
+  await page.locator(".back", { hasText: "Explore" }).click();
+  await expect(page.getByRole("tab", { name: "Places" })).toHaveAttribute("aria-selected", "true");
+
+  // a place without verified hours today says so instead of charting a guess
+  await page.locator("#results a", { hasText: "Fenway Dining" }).click();
+  await expect(page.locator(".busy-now")).toContainText("No data");
+  await expect(page.locator(".day-chart")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("a club page is in the new UI: busy at meeting time, add a meeting, join", async ({ page }) => {
+  const errors = browserErrors(page);
+  await onboard(page);
+  await page.locator('.tabs a[data-tab="explore"]').click();
+  await page.getByRole("tab", { name: "Clubs" }).click();
+  await page.locator("#results a", { hasText: "Charles River Run Club" }).click();
+  await expect(page).toHaveURL(/proto\.html#\/club\/[^/]+$/);
+  await expect(page.getByRole("heading", { name: "Charles River Run Club" })).toBeVisible();
+  await expect(page.locator(".card", { hasText: "Busy at meeting time?" }).locator(".busy-badge")).toContainText(/Moderate\s*43% full/);
+
+  // a weekly meeting goes on the shared schedule and comes off again
+  const first = page.locator(".meetings li").first();
+  await first.getByRole("button", { name: /^Add the meeting/ }).click();
+  await expect(page.locator(".meetings [role=status]")).toContainText("to your schedule");
+  await expect(page.locator(".meetings li").first().getByRole("button", { name: /^Remove the meeting/ })).toBeFocused();
+  await page.locator('.tabs a[data-tab="schedule"]').click();
+  await expect(page.getByRole("button", { name: /classes and clubs \(\d+\)/ })).toBeVisible();
+  await page.goBack();
+  await page.locator(".meetings li").first().getByRole("button", { name: /^Remove the meeting/ }).click();
+  await expect(page.locator(".meetings [role=status]")).toContainText("from your schedule");
+
+  // join: the same validation as the server, then a confirmation and the status on the club page
+  await page.getByRole("link", { name: "Join", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Join" })).toBeVisible();
+  await expect(page.locator("#full-note")).toBeHidden();
+  await page.getByLabel("Full name").fill("Sample Student");
+  await page.getByLabel("School email").fill("student@gmail.com");
+  await page.getByLabel("Year").selectOption("Junior");
+  await page.getByRole("button", { name: "Join club" }).click();
+  await expect(page.locator(".form-error")).toHaveText("Use your school email (name@bu.edu).");
+  await expect(page.getByLabel("School email")).toHaveAttribute("aria-invalid", "true");
+  await page.getByLabel("School email").fill("student@bu.edu");
+  await page.getByRole("button", { name: "Join club" }).click();
+  await expect(page.getByRole("heading", { name: "You're in" })).toBeVisible();
+  await page.getByRole("link", { name: "Back to the club" }).click();
+  await expect(page.locator(".join-status")).toHaveText("You're a member");
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Withdraw" }).click();
+  await expect(page.getByRole("link", { name: "Join", exact: true })).toBeVisible();
+  await expect(page.locator('a[href^="index.html"]')).toHaveCount(0);
+  expect(errors).toEqual([]);
 });
 
 test("directions show the logo loader, then hand over to Google Maps", async ({ page, context }) => {
