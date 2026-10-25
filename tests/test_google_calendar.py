@@ -374,13 +374,27 @@ def test_rate_limited_quota_error_is_retried_then_reported(calendar_client, monk
     assert len(calls) == 3
 
 
-def test_calendar_endpoints_are_rate_limited_per_client(calendar_client):
+def test_calendar_endpoints_are_rate_limited_per_session(calendar_client, monkeypatch):
+    authorize(calendar_client, monkeypatch)
+
+    async def empty_response(access_token, body):
+        return 200, {"calendars": {"primary": {"busy": []}}}
+
+    monkeypatch.setattr(gc, "_calendar_post", empty_response)
+    gc._rate_buckets.clear()
     for _ in range(gc.RATE_LIMIT):
-        assert calendar_client.get("/api/calendar/status").status_code == 200
-    limited = calendar_client.get("/api/calendar/status")
+        assert freebusy(calendar_client).status_code == 200
+    limited = freebusy(calendar_client)
     assert limited.status_code == 429
     assert int(limited.headers["retry-after"]) >= 1
+    # Status never calls Google, so page loads keep working; other API routes are unaffected.
+    assert calendar_client.get("/api/calendar/status").json()["connected"] is True
     assert calendar_client.get("/api/facilities").status_code == 200
+
+
+def test_status_is_not_rate_limited_for_signed_out_visitors(calendar_client):
+    for _ in range(gc.RATE_LIMIT * 2):
+        assert calendar_client.get("/api/calendar/status").status_code == 200
 
 
 def test_abandoned_authorization_expires(calendar_client, monkeypatch):

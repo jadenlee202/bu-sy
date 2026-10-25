@@ -54,7 +54,9 @@ python -m venv .venv
 ```
 This runs from the repo root and doesn't need `activate`, which PowerShell often blocks.
 The site detects the API automatically. To use an API on another host, add `?api=https://host` to the URL.
-The API allows cross-origin requests (`BUSY_CORS_ORIGINS` restricts them).
+The API allows cross-origin requests (`BUSY_CORS_ORIGINS` restricts them). Cookies are only
+allowed across origins for the exact origins listed there, which the Google Calendar session needs
+when the site and API are on different origins.
 
 ### Optional Google Calendar availability
 
@@ -105,8 +107,10 @@ HTTPS and configure Google Cloud:
    Generate a Fernet key with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
    Preserve that key and the SQLite database across restarts; losing the key invalidates stored
    sessions. The database file is restricted to owner read/write access. SQLite storage assumes
-   one backend instance with a persistent disk. Calendar endpoints are rate-limited to 30 requests per
-   minute per session (or client address), counted in memory per process. Temporary Google
+   one backend instance with a persistent disk. Calendar endpoints that reach Google or write sessions
+   (`connect`, `callback`, `freebusy`, `disconnect`) are rate-limited to 30 requests per minute per
+   session (or client address), counted in memory per process; behind a reverse proxy run Uvicorn
+   with `--proxy-headers` so client addresses are real. Temporary Google
    failures (network errors, 5xx, rate limits) are retried twice with backoff, and authorizations
    left unfinished expire after 10 minutes. Configure reverse-proxy/access logs to redact
    `/api/calendar/callback` query strings, which contain a short-lived OAuth authorization code;

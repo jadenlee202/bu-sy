@@ -56,7 +56,10 @@ def _rate_limit(request: Request):
     hits.append(now)
 
 
-router = APIRouter(prefix="/api/calendar", tags=["calendar"], dependencies=[Depends(_rate_limit)])
+# /status only reads the local session table, so it is not limited: page loads call it, and
+# signed-out visitors behind one proxy would otherwise share a single address bucket.
+router = APIRouter(prefix="/api/calendar", tags=["calendar"])
+LIMITED = [Depends(_rate_limit)]
 
 
 class FreeBusyRequest(BaseModel):
@@ -320,7 +323,7 @@ def calendar_status(busy_calendar_session: Optional[str] = Cookie(default=None, 
     return {"configured": True, "connected": bool(session and session[4])}
 
 
-@router.post("/connect")
+@router.post("/connect", dependencies=LIMITED)
 def calendar_connect(
     request: Request,
     response: Response,
@@ -361,7 +364,7 @@ def calendar_connect(
     return {"authorization_url": f"https://accounts.google.com/o/oauth2/v2/auth?{query}"}
 
 
-@router.get("/callback")
+@router.get("/callback", dependencies=LIMITED)
 async def calendar_callback(
     request: Request,
     response: Response,
@@ -471,7 +474,7 @@ async def _valid_access_token(config, session):
     return await _refresh_access_token(config, session)
 
 
-@router.post("/freebusy")
+@router.post("/freebusy", dependencies=LIMITED)
 async def calendar_freebusy(
     request: Request,
     body: FreeBusyRequest,
@@ -524,7 +527,7 @@ async def calendar_freebusy(
     }
 
 
-@router.delete("/disconnect", status_code=204)
+@router.delete("/disconnect", status_code=204, dependencies=LIMITED)
 async def calendar_disconnect(
     request: Request,
     response: Response,

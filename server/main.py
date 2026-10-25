@@ -74,15 +74,23 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 FACILITIES = load_all()
 CAMPUS = load_campus(FACILITIES)
 
-# Lets a site on another origin use this API (`?api=https://host`). No cookies or
-# credentials are involved. Restrict with BUSY_CORS_ORIGINS="https://a,https://b".
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=os.environ.get("BUSY_CORS_ORIGINS", "*").split(","),
-    allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Content-Type", "X-BUsy-Device"],
-    allow_credentials=True,
-)
+def cors_options(origins_env):
+    """Lets a site on another origin use this API (`?api=https://host`).
+
+    With the default "*", any origin may read it but no cookies are sent. Credentials
+    (the Google Calendar session cookie) are only allowed for the exact origins listed in
+    BUSY_CORS_ORIGINS="https://a,https://b"; with "*" Starlette would echo every origin back.
+    """
+    origins = [origin.strip() for origin in (origins_env or "*").split(",") if origin.strip()] or ["*"]
+    return {
+        "allow_origins": origins,
+        "allow_methods": ["GET", "POST", "DELETE"],
+        "allow_headers": ["Content-Type", "X-BUsy-Device"],
+        "allow_credentials": "*" not in origins,
+    }
+
+
+app.add_middleware(CORSMiddleware, **cors_options(os.environ.get("BUSY_CORS_ORIGINS")))
 
 
 @app.middleware("http")
