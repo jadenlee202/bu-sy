@@ -23,6 +23,13 @@ The product is BU-sy: a vanilla-JS frontend (`web/`), a FastAPI backend
 introduce a framework, build step, database, or auth system the stack cannot
 support without explicit human approval.
 
+## Standing product decisions (do not reverse without explicit human approval)
+
+- **Phone display, always.** BU-sy is presented as a phone app at every width —
+  the centered phone frame with the bottom tab bar, on all screen sizes
+  including desktop. Do not reintroduce the desktop sidebar layout. Fix layout
+  issues inside the frame, never by restoring the desktop shell.
+
 ---
 
 # Part I — The Team (roles every agent plays)
