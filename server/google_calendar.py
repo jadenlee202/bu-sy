@@ -1,4 +1,6 @@
+import asyncio
 import base64
+from collections import deque
 from contextlib import contextmanager
 import hashlib
 import os
@@ -13,15 +15,48 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
-from fastapi import APIRouter, Cookie, HTTPException, Request, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 COOKIE_NAME = "busy_calendar_session"
 SCOPE = "https://www.googleapis.com/auth/calendar.freebusy"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 FREEBUSY_URL = "https://www.googleapis.com/calendar/v3/freeBusy"
 SESSION_TTL = 30 * 24 * 60 * 60
+PENDING_TTL = 10 * 60  # an authorization nobody finished
+RATE_LIMIT = 30  # calendar requests per session (or client address) per RATE_WINDOW
+RATE_WINDOW = 60
+RETRY_DELAYS = (0.5, 1.0)  # backoff before each retry of a temporary Google failure
+RATE_REASONS = {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"}
+_rate_buckets = {}
+_sleep = asyncio.sleep
+
+
+def _rate_limit(request: Request):
+    """In-memory sliding window, so one browser can't spend the app's Google quota.
+
+    Per process: with several server instances each one keeps its own count.
+    """
+    session = request.cookies.get(COOKIE_NAME)
+    key = _session_hash(session) if session else f"ip:{request.client.host if request.client else 'unknown'}"
+    now = time.monotonic()
+    if len(_rate_buckets) > 10_000:
+        for stale in [k for k, hits in _rate_buckets.items() if not hits or hits[-1] < now - RATE_WINDOW]:
+            del _rate_buckets[stale]
+    hits = _rate_buckets.setdefault(key, deque())
+    while hits and hits[0] < now - RATE_WINDOW:
+        hits.popleft()
+    if len(hits) >= RATE_LIMIT:
+        retry_after = max(1, int(hits[0] + RATE_WINDOW - now) + 1)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many calendar requests. Please wait a minute and retry.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    hits.append(now)
+
+
+router = APIRouter(prefix="/api/calendar", tags=["calendar"], dependencies=[Depends(_rate_limit)])
 
 
 class FreeBusyRequest(BaseModel):
@@ -121,6 +156,10 @@ def _database(config):
         if "frontend_query" not in columns:
             connection.execute("ALTER TABLE calendar_sessions ADD COLUMN frontend_query TEXT NOT NULL DEFAULT ''")
         connection.execute("DELETE FROM calendar_sessions WHERE created_at < ?", (time.time() - SESSION_TTL,))
+        connection.execute(
+            "DELETE FROM calendar_sessions WHERE refresh_token IS NULL AND created_at < ?",
+            (time.time() - PENDING_TTL,),
+        )
         connection.commit()
         try:
             path.chmod(0o600)
@@ -227,6 +266,30 @@ async def _calendar_post(access_token, body):
     except ValueError:
         payload = {}
     return response.status_code, payload
+
+
+def _rate_limited(status_code, result):
+    if status_code == 429:
+        return True
+    if status_code != 403:
+        return False
+    error_body = result.get("error", {}) if isinstance(result, dict) else {}
+    errors = error_body.get("errors", []) if isinstance(error_body, dict) else []
+    return bool({error.get("reason") for error in errors if isinstance(error, dict)} & RATE_REASONS)
+
+
+async def _calendar_post_with_retry(access_token, body):
+    """FreeBusy with bounded exponential backoff for temporary failures (network, 5xx, rate limits)."""
+    for delay in (*RETRY_DELAYS, None):
+        try:
+            status_code, result = await _calendar_post(access_token, body)
+        except httpx.RequestError:
+            if delay is None:
+                raise
+        else:
+            if not (status_code >= 500 or _rate_limited(status_code, result)) or delay is None:
+                return status_code, result
+        await _sleep(delay)
 
 
 async def revoke_google_token(refresh_token):
@@ -431,10 +494,10 @@ async def calendar_freebusy(
         "items": [{"id": "primary"}],
     }
     try:
-        status_code, result = await _calendar_post(access_token, payload)
+        status_code, result = await _calendar_post_with_retry(access_token, payload)
         if status_code == 401:
             access_token = await _refresh_access_token(config, session)
-            status_code, result = await _calendar_post(access_token, payload)
+            status_code, result = await _calendar_post_with_retry(access_token, payload)
     except httpx.RequestError:
         raise HTTPException(status_code=503, detail="Google Calendar is temporarily unreachable. Please retry.")
     if status_code == 401:
@@ -443,16 +506,8 @@ async def calendar_freebusy(
         raise HTTPException(status_code=401, detail="Google authorization expired or was revoked. Reconnect your calendar.")
     if status_code == 429:
         raise HTTPException(status_code=429, detail="Google Calendar is busy. Please wait and retry.")
-    if status_code == 403:
-        error_body = result.get("error", {})
-        errors = error_body.get("errors", []) if isinstance(error_body, dict) else []
-        reasons = {
-            error.get("reason")
-            for error in errors
-            if isinstance(error, dict)
-        }
-        if reasons & {"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"}:
-            raise HTTPException(status_code=429, detail="Google Calendar's quota is temporarily exceeded. Please wait and retry.")
+    if _rate_limited(status_code, result):
+        raise HTTPException(status_code=429, detail="Google Calendar's quota is temporarily exceeded. Please wait and retry.")
     if status_code >= 400:
         raise HTTPException(status_code=502, detail="Google Calendar could not return availability.")
     calendar = result.get("calendars", {}).get("primary")

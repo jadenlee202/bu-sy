@@ -25,7 +25,15 @@ def calendar_client(tmp_path, monkeypatch):
     monkeypatch.setenv("CALENDAR_FRONTEND_URL", f"{ORIGIN}/")
     monkeypatch.setenv("CALENDAR_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
     monkeypatch.setenv("CALENDAR_SESSION_DB", str(tmp_path / "calendar.sqlite3"))
+    monkeypatch.setattr(gc, "_rate_buckets", {})
+    sleeps = []
+
+    async def no_wait(seconds):
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(gc, "_sleep", no_wait)
     with TestClient(main.app, base_url="https://api.test", follow_redirects=False) as client:
+        client.sleeps = sleeps
         yield client
 
 
@@ -306,3 +314,80 @@ def test_access_log_filter_redacts_oauth_callback_query_parameters():
     main.CalendarCallbackLogFilter().filter(record)
     assert "private-code" not in str(record.args)
     assert "private-state" not in str(record.args)
+
+
+def freebusy(calendar_client):
+    return calendar_client.post(
+        "/api/calendar/freebusy",
+        json={"date": "2026-10-24", "timezone": "America/New_York"},
+        headers={"Origin": ORIGIN},
+    )
+
+
+def test_temporary_google_failures_are_retried_with_backoff(calendar_client, monkeypatch):
+    authorize(calendar_client, monkeypatch)
+    responses = [(500, {}), (503, {}), (200, {"calendars": {"primary": {"busy": []}}})]
+
+    async def flaky_response(access_token, body):
+        return responses.pop(0)
+
+    monkeypatch.setattr(gc, "_calendar_post", flaky_response)
+    response = freebusy(calendar_client)
+    assert response.status_code == 200
+    assert response.json()["busy"] == []
+    assert calendar_client.sleeps == [0.5, 1.0]
+
+
+def test_retries_are_bounded_for_persistent_outages_and_network_errors(calendar_client, monkeypatch):
+    authorize(calendar_client, monkeypatch)
+    calls = []
+
+    async def outage(access_token, body):
+        calls.append(body)
+        return 503, {}
+
+    monkeypatch.setattr(gc, "_calendar_post", outage)
+    assert freebusy(calendar_client).status_code == 502
+    assert len(calls) == 3
+
+    async def unreachable(access_token, body):
+        calls.append(body)
+        raise gc.httpx.ConnectError("offline")
+
+    monkeypatch.setattr(gc, "_calendar_post", unreachable)
+    assert freebusy(calendar_client).status_code == 503
+    assert len(calls) == 6
+
+
+def test_rate_limited_quota_error_is_retried_then_reported(calendar_client, monkeypatch):
+    authorize(calendar_client, monkeypatch)
+    quota = (403, {"error": {"errors": [{"reason": "userRateLimitExceeded"}]}})
+    calls = []
+
+    async def limited(access_token, body):
+        calls.append(body)
+        return quota
+
+    monkeypatch.setattr(gc, "_calendar_post", limited)
+    response = freebusy(calendar_client)
+    assert response.status_code == 429
+    assert len(calls) == 3
+
+
+def test_calendar_endpoints_are_rate_limited_per_client(calendar_client):
+    for _ in range(gc.RATE_LIMIT):
+        assert calendar_client.get("/api/calendar/status").status_code == 200
+    limited = calendar_client.get("/api/calendar/status")
+    assert limited.status_code == 429
+    assert int(limited.headers["retry-after"]) >= 1
+    assert calendar_client.get("/api/facilities").status_code == 200
+
+
+def test_abandoned_authorization_expires(calendar_client, monkeypatch):
+    state, _ = connect(calendar_client)
+    real_time = gc.time.time
+    monkeypatch.setattr(gc.time, "time", lambda: real_time() + gc.PENDING_TTL + 1)
+    response = calendar_client.get("/api/calendar/callback", params={"code": "temporary-code", "state": state})
+    assert response.status_code == 303
+    assert "calendar_error=authorization" in response.headers["location"]
+    assert calendar_client.get("/api/calendar/status").json()["connected"] is False
