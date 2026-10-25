@@ -6,8 +6,8 @@
 import json
 from pathlib import Path
 
+import clubs
 import main
-from community_events import SEED_EVENTS
 
 OUT = main.WEB_DIR / "data"
 
@@ -30,4 +30,4 @@ if __name__ == "__main__":
         for day in facility.playback_days:
             write(OUT / "history" / facility_id / f"{day}.json", dump(main.get_history(facility_id, on=day)))
     write(OUT / "campus.json", dump(main.get_campus()))
-    write(OUT / "community_events_seed.json", SEED_EVENTS)
+    write(OUT / "clubs_seed.json", clubs.static_seed(main.FACILITIES))

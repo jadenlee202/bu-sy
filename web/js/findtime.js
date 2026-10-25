@@ -1,10 +1,10 @@
-// "Find a time to eat" / "Find free time here" on a place's detail page. It reads the
-// student's free/busy for the next 7 days (only when Google Calendar is connected) and the
-// place's verified hours in hours.json, using the window and timezone saved on the Calendar page.
+// "Find a time to eat" / "Find free time here" on a place's detail page. It reads the busy
+// times from the schedule the student uploaded on the Calendar page (kept in this browser) and
+// the place's verified hours in hours.json, for 7 days from a chosen date.
 import { findOpportunities } from "./availability.js";
-import { durationLabel, formatInstant, loadCalendarPrefs, MIN_OPTIONS, TZ } from "./calendar.js";
-import * as src from "./source.js";
-import { esc, loading } from "./ui.js";
+import { DEFAULT_TZ, durationLabel, formatInstant, loadCalendarPrefs, MIN_OPTIONS, saveCalendarPrefs } from "./calendar.js";
+import { busyOf, loadSchedule } from "./schedule.js";
+import { esc } from "./ui.js";
 
 const DAYS = 7;
 const MEALS = [["", "Any meal"], ["breakfast", "Breakfast"], ["brunch", "Brunch"], ["lunch", "Lunch"], ["dinner", "Dinner"]];
@@ -19,6 +19,7 @@ const REASONS = {
   unverified: "Hours unverified",
   not_applicable: "No hours on file",
   invalid_window: "Your availability hours don't exist on this date",
+  not_covered: "Outside the dates your calendar covers",
 };
 const todayIn = (zone) => new Intl.DateTimeFormat("en-CA", {
   timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
@@ -35,90 +36,74 @@ const dayName = (isoDate, today) => {
 export async function findTimeCard($card, facility, scheduleLocation) {
   const dining = facility.category === "dining";
   const name = esc(facility.facility_name);
-  const prefs = loadCalendarPrefs();
-  const zone = prefs.timezone ?? TZ;
-  const from = prefs.from ?? "08:00";
-  const until = prefs.until ?? "22:00";
-  let minimum = prefs.minimum ?? 30;
-  let meal = "";
-  let busy = null;
-  let startDate = todayIn(zone);
   const head = `<h2>${dining ? "Find a time to eat" : "Find free time here"}</h2>`;
-
-  $card.innerHTML = head + loading("Checking your calendar connection…");
-  let status = null;
-  try {
-    status = await src.calendarStatus();
-  } catch {
-    // No calendar API on this deployment: handled below like "not connected".
-  }
-  if (!status?.connected) {
+  const schedule = loadSchedule();
+  if (!schedule) {
     $card.innerHTML = `${head}
-      <p>Connect Google Calendar to find times in the next ${DAYS} days when you're free and ${name} is ${dining ? "serving a meal" : "open"}.</p>
-      <p class="help">${!status ? "Google Calendar isn't available on this version of BU-sy."
-        : !status.configured ? "Google Calendar isn't set up on this BU-sy server."
-        : "Only free/busy times are used. Event titles and details are never read."}</p>
-      ${status?.configured ? `<a class="btn" href="#/calendar">Connect on the Calendar page</a>` : ""}`;
+      <p>Upload your class schedule (.ics) to find times in the next ${DAYS} days when you're free and ${name} is ${dining ? "serving a meal" : "open"}.</p>
+      <p class="help">Your calendar file is read in this browser and never uploaded. No sign-in needed.</p>
+      <a class="btn" href="#/calendar">Upload on the Calendar page</a>`;
     return;
   }
 
+  const prefs = loadCalendarPrefs();
+  const zone = prefs.timezone ?? DEFAULT_TZ;
+  const today = todayIn(zone);
+  let { from = "08:00", until = "22:00", minimum = 30 } = prefs;
+  let startDate = today;
+  let meal = "";
+
   $card.innerHTML = `${head}
     <div class="calendar-controls calendar-controls-grid">
+      <label>Starting<input type="date" data-find="date" value="${startDate}"></label>
       ${dining ? `<label>Meal<select data-find="meal">${MEALS.map(([id, label]) => `<option value="${id}">${label}</option>`).join("")}</select></label>` : ""}
       <label>Minimum time<select data-find="minimum">${MIN_OPTIONS.map((minutes) => `<option value="${minutes}"${minutes === minimum ? " selected" : ""}>${minutes} minutes</option>`).join("")}</select></label>
+      <label>Available from<input type="time" data-find="from" value="${from}"></label>
+      <label>Available until<input type="time" data-find="until" value="${until}"></label>
     </div>
-    <p class="help">Using your availability window ${esc(from)}–${esc(until)} (${esc(zone)}). <a href="#/calendar">Change it on the Calendar page</a>.</p>
-    <div data-find="results">${loading()}</div>`;
+    <p class="help">Using your schedule from ${esc(schedule.fileName)} (${esc(zone)}). <a href="#/calendar">Replace or remove it on the Calendar page</a>.</p>
+    <div data-find="results"></div>`;
   const $results = $card.querySelector('[data-find="results"]');
 
   const render = () => {
+    if (!from || !until || until <= from) {
+      $results.innerHTML = `<p class="calendar-error">Choose an "available until" time later than "available from".</p>`;
+      return;
+    }
     const { matches, outcomes } = findOpportunities(
-      busy, { ...scheduleLocation, category: facility.category }, startDate, DAYS,
-      { timezone: zone, from, until, minimum, now: Date.now(), meal: meal || null },
+      busyOf(schedule), { ...scheduleLocation, category: facility.category }, startDate, DAYS,
+      { timezone: zone, from, until, minimum, now: Date.now(), meal: meal || null, coverage: schedule.coverage },
     );
     const what = dining ? `serving ${meal || "a meal"}` : "open";
     if (!matches.length) {
-      $results.innerHTML = `<p>No time in the next ${DAYS} days when you're free for at least ${minimum} minutes and ${name} is ${esc(what)}.</p>
+      $results.innerHTML = `<p>No time in these ${DAYS} days when you're free for at least ${minimum} minutes and ${name} is ${esc(what)}.</p>
         <ul class="calendar-matches">${outcomes.map(({ date, reason }) =>
-          `<li><strong>${dayName(date, startDate)}</strong><span>${REASONS[reason] ?? "No match"}</span></li>`).join("")}</ul>
-        <p class="help">Try a shorter minimum${dining ? ", another meal" : ""}, or wider hours on the Calendar page.</p>`;
+          `<li><strong>${dayName(date, today)}</strong><span>${REASONS[reason] ?? "No match"}</span></li>`).join("")}</ul>
+        <p class="help">Try another starting date, a shorter minimum${dining ? ", another meal" : ""}, wider hours, or another place.</p>`;
       return;
     }
     const [next, ...later] = matches;
     const range = (match) => `${formatInstant(match.start, zone)}–${formatInstant(match.end, zone)}`;
-    const assumed = (match) => (match.assumed ? " · assumed hours" : "");
-    const detail = (match) => `${durationLabel(match.end - match.start)} free · ${dining ? `Serving ${esc(match.label.toLowerCase())}` : "Open"}${assumed(match)}`;
+    const detail = (match) => `${durationLabel(match.end - match.start)} free · ${dining ? `Serving ${esc(match.label.toLowerCase())}` : "Open"}${match.assumed ? " · assumed hours" : ""}`;
     $results.innerHTML = `<h3>Your next opportunity${dining ? " to eat" : ""}</h3>
-      <p class="calendar-total"><strong>${dayName(next.date, startDate)}, ${range(next)}</strong><br>
-        You have ${durationLabel(next.end - next.start)} available. ${name} is open${dining ? ` and serving ${esc(next.label.toLowerCase())}` : ""}${next.assumed ? " (assumed: repeats the published weekly hours)" : ""}.</p>
+      <p class="calendar-total"><strong>${dayName(next.date, today)}, ${range(next)}</strong><br>
+        ${durationLabel(next.end - next.start)} available. ${name} is open${dining ? ` and serving ${esc(next.label.toLowerCase())}` : ""} during this period${next.assumed ? " (assumed: repeats the published weekly hours)" : ""}.</p>
       ${later.length ? `<h3>Later</h3><ul class="calendar-matches">${later.slice(0, 4).map((match) =>
-        `<li><strong>${dayName(match.date, startDate)}, ${range(match)}</strong><span>${detail(match)}</span></li>`).join("")}</ul>` : ""}
-      <p class="help">Travel time is not included. Based on your free/busy times and ${name}'s published hours (campus time).</p>`;
-  };
-
-  const load = async () => {
-    $results.innerHTML = loading();
-    startDate = todayIn(zone);
-    try {
-      busy = (await src.calendarFreeBusy(startDate, zone, DAYS)).busy;
-      render();
-    } catch (error) {
-      busy = null;
-      $results.innerHTML = error.status === 401
-        ? `<p class="calendar-error">${esc(error.message || "Reconnect Google Calendar.")}</p><a class="btn" href="#/calendar">Reconnect on the Calendar page</a>`
-        : `<p class="calendar-error">${esc(error.message || "Calendar availability could not be loaded.")}</p><button class="btn" type="button" data-find="retry">Retry</button>`;
-    }
+        `<li><strong>${dayName(match.date, today)}, ${range(match)}</strong><span>${detail(match)}</span></li>`).join("")}</ul>` : ""}
+      <p class="help">Travel time isn't included. Based on your uploaded schedule and ${name}'s published hours (campus time).</p>`;
   };
 
   $card.addEventListener("change", (event) => {
     const field = event.target.dataset.find;
-    if (field === "meal") meal = event.target.value;
-    else if (field === "minimum") minimum = Number(event.target.value);
+    const value = event.target.value;
+    if (field === "date" && value) startDate = value;
+    else if (field === "meal") meal = value;
+    else if (field === "minimum") minimum = Number(value);
+    else if (field === "from" && value) from = value;
+    else if (field === "until" && value) until = value;
     else return;
-    if (busy) render();
+    if (["minimum", "from", "until"].includes(field)) saveCalendarPrefs({ minimum, from, until });
+    render();
   });
-  $card.addEventListener("click", (event) => {
-    if (event.target.closest('[data-find="retry"]')) void load();
-  });
-  await load();
+  render();
 }

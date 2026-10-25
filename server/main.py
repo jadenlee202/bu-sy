@@ -6,8 +6,10 @@ Endpoint shapes follow the shared brief:
     GET  /api/facilities/{id}/history
     GET  /api/campus                                   (planner data: places, sample hours + walking times)
     GET  /api/schedule, /api/programs                  (sample official schedule)
-    GET  /api/community-events                         (unofficial, student-run)
-    POST /api/community-events, /{id}/join, /{id}/leave, /{id}/cancel
+    GET  /api/clubs, /api/clubs/{id}                   (club directory; sample clubs + student-created)
+    POST /api/clubs, /{id}/edit, /{id}/apply, /{id}/withdraw
+    GET  /api/clubs/{id}/applications                  (organizer token only)
+    POST /api/clubs/{id}/applications/{app_id}/decide  (organizer token only)
 
 How it works
     1. sources.py loads data/bu_campus_synthetic_occupancy.csv (SYNTHETIC: one
@@ -48,7 +50,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-import community_events as ce
+import clubs
 from campus import Campus, load_campus
 from analytics import THRESHOLD_NOTE, latest_at
 from schedule_data import CLUB_SPORTS, INTRAMURALS, SCHEDULE
@@ -464,31 +466,46 @@ def get_programs():
     return {"club_sports": CLUB_SPORTS, "intramurals": INTRAMURALS}
 
 
-# ---------- community events (unofficial) ----------
-@app.get("/api/community-events")
-def list_community_events(device: Optional[str] = Header(None, alias="X-BUsy-Device")):
-    """The device token comes in a header, not the URL, so it stays out of access logs."""
-    return ce.list_events(device)
+# ---------- club directory (sample clubs + student-created; demo-grade organizer gating) ----------
+@app.get("/api/clubs")
+def list_clubs(device: Optional[str] = Header(None, alias="X-BUsy-Device")):
+    return clubs.list_clubs(device, FACILITIES)
 
 
-@app.post("/api/community-events", status_code=201)
-def create_community_event(body: ce.NewEvent):
-    return ce.create_event(body)
+@app.get("/api/clubs/{club_id}")
+def get_club(club_id: str, device: Optional[str] = Header(None, alias="X-BUsy-Device")):
+    return clubs.get_club(club_id, device, FACILITIES)
 
 
-@app.post("/api/community-events/{event_id}/join")
-def join_community_event(event_id: str, body: ce.JoinRequest):
-    return ce.join_event(event_id, body)
+@app.post("/api/clubs", status_code=201)
+def create_club(body: clubs.ClubFields):
+    return clubs.create_club(body, FACILITIES)
 
 
-@app.post("/api/community-events/{event_id}/leave")
-def leave_community_event(event_id: str, body: ce.TokenRequest):
-    return ce.leave_event(event_id, body)
+@app.post("/api/clubs/{club_id}/edit")
+def edit_club(club_id: str, body: clubs.ClubFields):
+    return clubs.edit_club(club_id, body, FACILITIES)
 
 
-@app.post("/api/community-events/{event_id}/cancel", status_code=204)
-def cancel_community_event(event_id: str, body: ce.TokenRequest):
-    ce.cancel_event(event_id, body)
+@app.post("/api/clubs/{club_id}/apply")
+def apply_to_club(club_id: str, body: clubs.Application):
+    return clubs.apply(club_id, body, FACILITIES)
+
+
+@app.post("/api/clubs/{club_id}/withdraw")
+def withdraw_from_club(club_id: str, body: clubs.TokenRequest):
+    return clubs.withdraw(club_id, body, FACILITIES)
+
+
+@app.get("/api/clubs/{club_id}/applications")
+def club_applications(club_id: str, device: Optional[str] = Header(None, alias="X-BUsy-Device")):
+    """Organizer only. The token comes in a header, never the URL."""
+    return clubs.applications(club_id, device)
+
+
+@app.post("/api/clubs/{club_id}/applications/{app_id}/decide")
+def decide_application(club_id: str, app_id: str, body: clubs.Decision):
+    return clubs.decide(club_id, app_id, body, FACILITIES)
 
 
 # The web app, served from the same origin so it finds /api automatically.

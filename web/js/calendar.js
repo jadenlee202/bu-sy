@@ -1,16 +1,23 @@
 import { daySegments, freeWindows, matchFreeWindows, usableWindows, zonedInstant } from "./availability.js";
 import { daySchedule, formatPeriod } from "./hours.js";
+import {
+  busyOf, clearSchedule, covers, DEFAULT_TZ, importCalendarFile, ImportError, loadSchedule, saveSchedule, skippedText,
+} from "./schedule.js";
 import * as src from "./source.js";
 import { esc, failure, loading } from "./ui.js";
 
-export const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
+export { DEFAULT_TZ };
 export const MIN_OPTIONS = [15, 30, 45, 60];
 const PREFS_KEY = "busy.calendar.prefs.v1";
 const SEGMENT_LABELS = { busy: "Busy", available: "Available", short: "Free · too short", past: "Past" };
-const dateInputValue = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+const STORED_IN = {
+  local: "Saved in this browser's local storage on this device until you remove it.",
+  session: "Kept in this tab only and cleared when you close it.",
+  memory: "Kept only while this page is open: this browser blocks storage.",
 };
+const dateInputValue = () => new Intl.DateTimeFormat("en-CA", {
+  timeZone: DEFAULT_TZ, year: "numeric", month: "2-digit", day: "2-digit",
+}).format(new Date());
 const plusDays = (isoDate, amount) => {
   const day = new Date(`${isoDate}T12:00:00Z`);
   day.setUTCDate(day.getUTCDate() + amount);
@@ -18,6 +25,9 @@ const plusDays = (isoDate, amount) => {
 };
 export const formatInstant = (timestamp, timezone) => new Intl.DateTimeFormat("en-US", {
   timeZone: timezone, hour: "numeric", minute: "2-digit", timeZoneName: "short",
+}).format(new Date(timestamp));
+const formatDay = (timestamp, timezone) => new Intl.DateTimeFormat("en-US", {
+  timeZone: timezone, month: "short", day: "numeric", year: "numeric",
 }).format(new Date(timestamp));
 export const durationLabel = (milliseconds) => {
   const minutes = Math.round(milliseconds / 60_000);
@@ -35,7 +45,7 @@ const validZone = (zone) => {
   }
 };
 
-// Settings only, never calendar data: busy times stay in memory for this page.
+// Settings only, never calendar data (that lives in schedule.js).
 export function loadCalendarPrefs() {
   try {
     const raw = JSON.parse(src.store.get(PREFS_KEY) ?? "null") ?? {};
@@ -52,7 +62,23 @@ export function loadCalendarPrefs() {
   }
 }
 
-// What a location publishes for one campus date, for the not-connected calendar.
+export function saveCalendarPrefs(changes) {
+  src.store.set(PREFS_KEY, JSON.stringify({ ...loadCalendarPrefs(), ...changes }));
+}
+
+/** "12 events imported (340 times between Sep 24, 2026 and Oct 26, 2027). 1 skipped: …" */
+export function importSummary(schedule) {
+  const { stats, coverage } = schedule;
+  const parts = [`${stats.events} event${stats.events === 1 ? "" : "s"} imported (${stats.occurrences} busy time${stats.occurrences === 1 ? "" : "s"} between ${formatDay(coverage.start, DEFAULT_TZ)} and ${formatDay(coverage.end - 1, DEFAULT_TZ)}).`];
+  const skipped = Object.values(stats.skipped).reduce((sum, count) => sum + count, 0);
+  if (skipped) parts.push(`${skipped} skipped: ${skippedText(stats.skipped)}.`);
+  if (stats.cancelled) parts.push(`${stats.cancelled} cancelled ${stats.cancelled === 1 ? "event or occurrence" : "events or occurrences"} ignored.`);
+  if (stats.free) parts.push(`${stats.free} marked free, not counted as busy.`);
+  if (stats.truncated) parts.push("Some repeating events had too many occurrences and were cut short.");
+  return parts.join(" ");
+}
+
+// What a location publishes for one campus date, shown when free time can't be worked out.
 function hoursSummary(locationHours, category, isoDate) {
   const building = daySchedule(locationHours, isoDate, "building");
   if (building.status === "closed") return `<p>Closed on this date.</p>`;
@@ -74,35 +100,36 @@ function hoursSummary(locationHours, category, isoDate) {
 
 export async function calendarView($view) {
   const prefs = loadCalendarPrefs();
-  const selectedDate = dateInputValue();
-  let connected = false;
-  let configured = false;
-  let backendReachable = false;
   let facilities = [];
   let hours = null;
-  let busy = [];
-  let requestId = 0;
+  let schedule = loadSchedule();
 
   $view.innerHTML = `
     <div class="page-head"><h1 class="title">Your availability</h1>
-      <p class="tagline">Find real free time and match it with verified campus hours.</p></div>
-    <section class="card calendar-connect" aria-live="polite"><div id="calendar-connection">${loading()}</div></section>
+      <p class="tagline">Upload your class schedule, see your free time, and match it with verified campus hours.</p></div>
+    <section class="card calendar-connect" aria-labelledby="schedule-title">
+      <div id="schedule-card"></div>
+      <input id="schedule-file" type="file" accept=".ics,text/calendar" hidden>
+      <div id="schedule-status" role="status" aria-live="polite"></div>
+    </section>
     <section class="card calendar-controls" aria-label="Availability settings">
       <div class="calendar-controls-grid">
         <label>Date<div class="calendar-date-controls"><button class="icon-btn" type="button" data-date-step="-1" aria-label="Previous day">‹</button>
-          <input id="calendar-date" type="date" value="${selectedDate}">
+          <input id="calendar-date" type="date" value="${dateInputValue()}">
           <button class="icon-btn" type="button" data-date-step="1" aria-label="Next day">›</button></div></label>
-        <label>Calendar timezone<input id="calendar-timezone" value="${esc(prefs.timezone ?? TZ)}" autocomplete="off" aria-describedby="calendar-timezone-help"></label>
+        <label>Timezone<input id="calendar-timezone" value="${esc(prefs.timezone ?? DEFAULT_TZ)}" autocomplete="off" aria-describedby="calendar-timezone-help"></label>
         <label>Minimum time<select id="calendar-minimum">${MIN_OPTIONS.map((minutes) => `<option value="${minutes}"${minutes === (prefs.minimum ?? 30) ? " selected" : ""}>${minutes} minutes</option>`).join("")}</select></label>
         <label>Available from<input id="calendar-from" type="time" value="${prefs.from ?? "08:00"}"></label>
         <label>Available until<input id="calendar-until" type="time" value="${prefs.until ?? "22:00"}"></label>
         <label>Campus location<select id="calendar-location"></select></label>
       </div>
-      <p class="help" id="calendar-timezone-help">Defaulted to your browser timezone. If your Google Calendar uses a different timezone, enter its IANA name (for example, America/New_York). These settings are saved in this browser only.</p>
+      <p class="help" id="calendar-timezone-help">Your day and preferred hours are read in this timezone (Boston time by default; enter an IANA name such as America/Los_Angeles to change it). Event times keep the timezone written in your calendar file. These settings are saved in this browser only.</p>
     </section>
     <section class="card calendar-results" aria-live="polite"><div id="calendar-results">${loading()}</div></section>`;
 
-  const $connection = $view.querySelector("#calendar-connection");
+  const $card = $view.querySelector("#schedule-card");
+  const $file = $view.querySelector("#schedule-file");
+  const $status = $view.querySelector("#schedule-status");
   const $results = $view.querySelector("#calendar-results");
   const $date = $view.querySelector("#calendar-date");
   const $timezone = $view.querySelector("#calendar-timezone");
@@ -111,83 +138,52 @@ export async function calendarView($view) {
   const $until = $view.querySelector("#calendar-until");
   const $location = $view.querySelector("#calendar-location");
 
+  const renderCard = () => {
+    if (!schedule) {
+      $card.innerHTML = `<h2 id="schedule-title">Upload your schedule</h2>
+        <p>Upload a calendar file (.ics) with your classes. BU-sy reads it in this browser to find your free time: the file isn't sent anywhere, and there's nothing to sign in to.</p>
+        <details class="how-export"><summary>How to export your calendar</summary><ul>
+          <li><strong>Google Calendar</strong> (on a computer): Settings → Import &amp; export → Export. Unzip the download and choose the .ics file for your class calendar.</li>
+          <li><strong>Apple Calendar</strong> (Mac): select the calendar, then File → Export → Export….</li>
+          <li><strong>Outlook</strong> (Windows): File → Save Calendar, and save it as an iCalendar (.ics) file.</li>
+        </ul></details>
+        <label class="check"><input type="checkbox" id="schedule-remember"> Remember my schedule on this device</label>
+        <div class="calendar-actions"><span class="pill">No schedule uploaded</span>
+          <button class="btn btn-primary" type="button" data-schedule="pick">Upload Calendar File</button></div>`;
+      return;
+    }
+    $card.innerHTML = `<h2 id="schedule-title">Schedule imported</h2>
+      <p><strong>${esc(schedule.fileName)}</strong> · imported ${esc(formatDay(schedule.importedAt, DEFAULT_TZ))}</p>
+      <p>${esc(importSummary(schedule))}</p>
+      <p class="help">Only your merged busy times are kept, not the file or any event titles, descriptions, locations or guests. ${STORED_IN[schedule.storedIn]}</p>
+      <label class="check"><input type="checkbox" id="schedule-remember"${schedule.storedIn === "local" ? " checked" : ""}> Remember my schedule on this device</label>
+      <div class="calendar-actions">
+        <button class="btn" type="button" data-schedule="pick">Replace schedule</button>
+        <button class="btn btn-quiet" type="button" data-schedule="remove">Remove schedule</button></div>`;
+  };
+
   try {
     [facilities, hours] = await Promise.all([src.listFacilities(), src.getHours()]);
-    const options = facilities.filter((facility) => facility.data_mode !== "historical_playback");
-    $location.innerHTML = options.map((facility) =>
+    facilities = facilities.filter((facility) => facility.data_mode !== "historical_playback");
+    $location.innerHTML = facilities.map((facility) =>
       `<option value="${esc(facility.facility_id)}">${esc(facility.facility_name)}</option>`,
     ).join("");
-    const dining = options.find((facility) => facility.category === "dining");
-    if (options.some((facility) => facility.facility_id === prefs.location)) $location.value = prefs.location;
+    const dining = facilities.find((facility) => facility.category === "dining");
+    if (facilities.some((facility) => facility.facility_id === prefs.location)) $location.value = prefs.location;
     else if (dining) $location.value = dining.facility_id;
   } catch (error) {
-    $connection.innerHTML = failure(error);
-    $results.textContent = "Campus schedules could not be loaded.";
+    renderCard();
+    $results.innerHTML = failure(error);
     return {};
   }
 
-  const savePrefs = () => src.store.set(PREFS_KEY, JSON.stringify({
+  const savePrefs = () => saveCalendarPrefs({
     timezone: $timezone.value.trim(),
     minimum: Number($minimum.value),
     from: $from.value,
     until: $until.value,
     location: $location.value,
-  }));
-
-  const disconnectLocally = () => {
-    connected = false;
-    busy = [];
-    requestId += 1;
-    renderConnection();
-    renderResults();
-  };
-
-  const queryBusy = async (id = ++requestId) => {
-    if (!connected) return;
-    $results.innerHTML = loading();
-    try {
-      const result = await src.calendarFreeBusy($date.value, $timezone.value.trim());
-      if (id !== requestId) return;
-      busy = result.busy;
-      renderResults();
-    } catch (error) {
-      if (id !== requestId) return;
-      busy = [];
-      if (error.status === 401) {
-        disconnectLocally();
-        $connection.insertAdjacentHTML("beforeend", `<p class="calendar-error">${esc(error.message || "Reconnect Google Calendar.")}</p>`);
-        return;
-      }
-      $results.innerHTML = `<p class="calendar-error">${esc(error.message || "Calendar availability could not be loaded.")}</p><button class="btn" type="button" data-calendar-retry>Retry</button>`;
-    }
-  };
-
-  const renderConnection = () => {
-    const returnedError = new URLSearchParams(location.search).get("calendar_error");
-    if (!backendReachable) {
-      $connection.innerHTML = `<h2>Google Calendar isn't available here</h2>
-        <p>This version of BU-sy runs without its calendar server, so Google Calendar can't be connected. Campus hours below still work. No calendar data is being accessed.</p>
-        <span class="pill">Not connected · no events shown</span>
-        <p class="help">Running your own BU-sy server? Open the site with <code>?api=https://your-server</code>.</p>`;
-    } else if (!configured) {
-      $connection.innerHTML = `<h2>Google Calendar isn't set up on this server</h2>
-        <p>The BU-sy server doesn't have Google sign-in configured, so Google Calendar can't be connected. Campus hours below still work. No calendar data is being accessed.</p>
-        <span class="pill">Not connected · no events shown</span>`;
-    } else if (connected) {
-      $connection.innerHTML = `<h2>Google Calendar connected</h2>
-        <p>Only busy/free times from your primary calendar are used. Event titles, descriptions, and guests are never requested or stored.</p>
-        <div class="calendar-actions"><span class="pill">Connected · primary calendar</span>
-          <button class="btn btn-secondary" type="button" data-calendar-disconnect>Disconnect</button></div>`;
-    } else {
-      const notice = returnedError ? `<p class="calendar-error">${returnedError === "denied"
-        ? "Google Calendar access was declined. You can connect whenever you are ready."
-        : "Google Calendar could not be connected. Please try again."}</p>` : "";
-      $connection.innerHTML = `<h2>Connect Google Calendar</h2>
-        <p>BU-sy will request read-only access to free/busy information for your primary calendar only. It will not read event titles or send calendar data to an AI service or other third party. Your authorization can be disconnected here or revoked in your Google Account.</p>
-        ${notice}<div class="calendar-actions"><span class="pill">Not connected · no events shown</span>
-          <button class="btn" type="button" data-calendar-connect>Connect Google Calendar</button></div>`;
-    }
-  };
+  });
 
   const renderResults = () => {
     const zone = $timezone.value.trim();
@@ -216,20 +212,24 @@ export async function calendarView($view) {
     const isDining = matchingLocation?.category === "dining";
     const verifiedNote = locationHours?.lastVerified ? `Location hours last verified ${esc(locationHours.lastVerified)}.` : "";
     const range = `${formatInstant(start, zone)}–${formatInstant(end, zone)}`;
+    const publishedHours = `<h3>Hours at ${locationName}</h3>
+      ${locationHours ? hoursSummary(locationHours, matchingLocation?.category, $date.value) : `<p class="help">Hours for this location are unverified.</p>`}
+      <p class="help">These are the location's published hours (campus time), not a recommendation for you. ${verifiedNote}</p>`;
 
-    // Empty default calendar: no events at all, and no claim that the day is free.
-    if (!connected) {
+    // Without a schedule, or outside the dates it covers, there's no claim that the day is free.
+    if (!schedule || !covers(schedule, start, end)) {
       $results.innerHTML = `<h2>${esc(dateLabel($date.value))}</h2>
         <h3>Your day</h3>
-        <ul class="calendar-timeline"><li class="calendar-interval" data-kind="unknown"><strong>No events shown</strong>
-          <span>${range}</span><span>Schedule unknown</span></li></ul>
-        <p class="help">Google Calendar isn't connected, so BU-sy doesn't know when you're busy or free.</p>
-        <h3>Hours at ${locationName}</h3>
-        ${locationHours ? hoursSummary(locationHours, matchingLocation?.category, $date.value) : `<p class="help">Hours for this location are unverified.</p>`}
-        <p class="help">These are the location's published hours (campus time), not a recommendation for you. ${verifiedNote}</p>`;
+        <ul class="calendar-timeline"><li class="calendar-interval" data-kind="unknown"><strong>Schedule unknown</strong>
+          <span>${range}</span></li></ul>
+        <p class="help">${schedule
+          ? `This date is outside the dates your imported calendar covers (${esc(formatDay(schedule.coverage.start, DEFAULT_TZ))}–${esc(formatDay(schedule.coverage.end - 1, DEFAULT_TZ))}). Upload a newer export to see it.`
+          : "No schedule uploaded, so BU-sy doesn't know when you're busy or free. Upload an .ics file above."}</p>
+        ${publishedHours}`;
       return;
     }
 
+    const busy = busyOf(schedule);
     const now = Date.now();
     const segments = daySegments(busy, start, end, minimum, now);
     const usable = usableWindows(freeWindows(busy, start, end), minimum, now);
@@ -238,6 +238,9 @@ export async function calendarView($view) {
       ? matchFreeWindows(usable, { ...locationHours, category: matchingLocation?.category }, $date.value, minimum)
       : { status: "unverified", matches: [] };
     const assumedNote = match.assumed ? " Hours for this date are assumed to repeat the published weekly schedule." : "";
+    const afterLastEvent = !schedule.openEnded && (schedule.lastBusyEnd == null || start >= schedule.lastBusyEnd)
+      ? `<p class="help">Your calendar has no events ${schedule.lastBusyEnd == null ? "in the imported range" : `after ${esc(formatDay(schedule.lastBusyEnd, zone))}`}. If it only covers one semester, this free time may not match your real schedule.</p>`
+      : "";
     const timelineHtml = segments.length ? `<ul class="calendar-timeline">${segments.map((interval) =>
       `<li class="calendar-interval" data-kind="${interval.kind}"><strong>${SEGMENT_LABELS[interval.kind]}</strong>
         <span>${formatInstant(interval.start, zone)}–${formatInstant(interval.end, zone)}</span>
@@ -255,80 +258,86 @@ export async function calendarView($view) {
     } else {
       matchesHtml = `<ul class="calendar-matches">${match.matches.map((interval) =>
         `<li><strong>${formatInstant(interval.start, zone)}–${formatInstant(interval.end, zone)}</strong>
-          <span>${durationLabel(interval.end - interval.start)} available · ${isDining ? `Serving ${esc(interval.label.toLowerCase())}` : "Location open"}</span></li>`,
+          <span>${durationLabel(interval.end - interval.start)} available · ${isDining ? `${locationName} is open and serving ${esc(interval.label.toLowerCase())}` : `${locationName} is open`}</span></li>`,
       ).join("")}</ul>`;
     }
+
+    // Every campus place with verified hours that fits one of the free windows.
+    const fits = usable.length ? facilities.flatMap((facility) => {
+      const location = hours.locations[facility.facility_id];
+      if (!location) return [];
+      const { status, matches } = matchFreeWindows(usable, { ...location, category: facility.category }, $date.value, minimum);
+      return status === "scheduled" && matches.length ? [{ facility, matches }] : [];
+    }) : [];
+    const fitsHtml = !usable.length ? ""
+      : fits.length ? `<ul class="calendar-matches">${fits.map(({ facility, matches }) =>
+        `<li><strong><a href="#/place/${encodeURIComponent(facility.facility_id)}">${esc(facility.facility_name)}</a></strong>
+          ${matches.map((interval) => `<span>${formatInstant(interval.start, zone)}–${formatInstant(interval.end, zone)} · ${durationLabel(interval.end - interval.start)}${facility.category === "dining" ? ` · ${esc(interval.label)}` : " · Open"}</span>`).join("")}</li>`,
+      ).join("")}</ul>`
+      : `<p>No campus place with verified hours is open for ${minimum}+ minutes during your free time on this date.</p>`;
+
     $results.innerHTML = `<h2>${esc(dateLabel($date.value))}</h2>
-      <p class="calendar-total"><strong>${durationLabel(total) || "0 min"}</strong> usable free time (windows of ${minimum}+ min) during ${esc($from.value)}–${esc($until.value)} (${esc(zone)}).</p>
+      <p class="calendar-total"><strong>${durationLabel(total) || "0 min"}</strong> available (free windows of ${minimum}+ min) during ${esc($from.value)}–${esc($until.value)} (${esc(zone)}).</p>
       <h3>Your day</h3>${timelineHtml}
-      <p class="help">Events marked "Free" in Google Calendar, declined events, and most all-day events aren't counted as busy.</p>
+      <p class="help">From ${esc(schedule.fileName)}. Cancelled events, excluded occurrences and events marked free aren't counted as busy.</p>${afterLastEvent}
       <h3>Time at ${locationName}</h3>${matchesHtml}
-      <p class="help">Availability is based on free/busy only and does not include travel time. Confirm the trip fits your schedule.${assumedNote} ${verifiedNote}</p>`;
+      ${usable.length ? `<h3>Places that fit your free time</h3>${fitsHtml}` : ""}
+      <p class="help">Travel time isn't included. Confirm the trip fits your schedule.${assumedNote} ${verifiedNote}</p>`;
   };
 
-  const loadStatus = async () => {
-    $connection.innerHTML = loading();
+  const showStatus = (html) => { $status.innerHTML = html; };
+
+  const upload = async (file) => {
+    const remember = $card.querySelector("#schedule-remember")?.checked ?? false;
+    const hadSchedule = !!schedule;
+    showStatus(loading(`Reading ${esc(file.name)}…`));
     try {
-      const status = await src.calendarStatus();
-      backendReachable = true;
-      configured = !!status.configured;
-      connected = !!status.connected;
-      renderConnection();
-      if (connected) await queryBusy();
-      else renderResults();
-    } catch {
-      backendReachable = false;
-      configured = false;
-      connected = false;
-      renderConnection();
-      renderResults();
+      schedule = await importCalendarFile(file, { remember });
+      renderCard();
+      showStatus(`<p class="calendar-ok">Imported ${esc(file.name)}. ${esc(importSummary(schedule))}</p>`);
+    } catch (error) {
+      const message = error instanceof ImportError ? error.message : "The file couldn't be read.";
+      showStatus(`<p class="calendar-error">${esc(message)} ${hadSchedule ? "Your previous schedule is unchanged." : ""}</p>
+        <p class="help">Try another .ics file.</p>`);
     }
+    renderResults();
   };
 
-  $view.addEventListener("click", async (event) => {
-    const connect = event.target.closest("[data-calendar-connect]");
-    const disconnect = event.target.closest("[data-calendar-disconnect]");
-    if (event.target.closest("[data-calendar-retry]")) {
-      await queryBusy();
-    } else if (connect) {
-      connect.disabled = true;
-      connect.textContent = "Connecting…";
-      try {
-        const result = await src.calendarConnect();
-        window.location.assign(result.authorization_url);
-      } catch (error) {
-        connect.disabled = false;
-        connect.textContent = "Connect Google Calendar";
-        $connection.insertAdjacentHTML("beforeend", `<p class="calendar-error">${esc(error.message)}</p>`);
-      }
-    } else if (disconnect) {
-      disconnect.disabled = true;
-      try {
-        await src.calendarDisconnect();
-        disconnectLocally();
-      } catch (error) {
-        disconnect.disabled = false;
-        if (error.status === 503 && error.message.startsWith("Disconnected from BU-sy")) disconnectLocally();
-        $connection.insertAdjacentHTML("beforeend", `<p class="calendar-error">${esc(error.message)}</p>`);
-      }
+  $view.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-schedule]")?.dataset.schedule;
+    if (action === "pick") {
+      $file.click();
+    } else if (action === "remove") {
+      clearSchedule();
+      schedule = null;
+      renderCard();
+      showStatus(`<p class="calendar-ok">Schedule removed. Your busy times were deleted from this browser.</p>`);
+      renderResults();
+      $card.querySelector("[data-schedule]")?.focus();
     } else {
       const step = event.target.closest("[data-date-step]");
       if (step) {
         $date.value = plusDays($date.value, Number(step.dataset.dateStep));
-        if (connected) await queryBusy();
-        else renderResults();
+        renderResults();
       }
     }
   });
+  $card.addEventListener("change", (event) => {
+    if (event.target.id !== "schedule-remember" || !schedule) return;
+    schedule = { ...schedule, storedIn: saveSchedule(schedule, event.target.checked) };
+    renderCard();
+    $card.querySelector("#schedule-remember")?.focus();
+  });
+  $file.addEventListener("change", () => {
+    const [file] = $file.files;
+    $file.value = "";
+    if (file) void upload(file);
+  });
 
-  const refetch = () => { savePrefs(); if (connected) void queryBusy(); else renderResults(); };
   const rerender = () => { savePrefs(); renderResults(); };
-  $date.addEventListener("change", () => { if (connected) void queryBusy(); else renderResults(); });
-  $timezone.addEventListener("change", refetch);
-  $minimum.addEventListener("change", rerender);
-  $from.addEventListener("change", rerender);
-  $until.addEventListener("change", rerender);
-  $location.addEventListener("change", rerender);
-  await loadStatus();
+  $date.addEventListener("change", renderResults);
+  for (const $input of [$timezone, $minimum, $from, $until, $location]) $input.addEventListener("change", rerender);
+  renderCard();
+  renderResults();
   return {};
 }

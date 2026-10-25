@@ -8,7 +8,7 @@ unless it is marked *not verified*. All data in the demo is sample data; nothing
 | Need | Version | Used for |
 |---|---|---|
 | Python | 3.12 or newer (verified 3.14; CI uses 3.12) | the site's local server, the API, pytest |
-| Node | 22 or newer (verified 24; CI uses 22) | **only** the JS tests (planner engine, static meetups); not needed to run the app |
+| Node | 22 or newer (verified 24; CI uses 22) | **only** the JS tests (planner engine, static clubs, .ics import); not needed to run the app |
 | Browser | any current Chromium/Edge (verified); Firefox/Safari *not verified* | the app |
 
 ```bash
@@ -29,7 +29,7 @@ python -m http.server 8000 -d web
 ```
 Open http://localhost:8000. The footer should read *Data source: built-in demo files, no server*.
 
-**B. With the API** (meetups are then shared between devices):
+**B. With the API** (clubs and sign-ups are then shared between devices):
 ```bash
 .venv\Scripts\python -m uvicorn main:app --app-dir server --port 8000
 ```
@@ -70,7 +70,7 @@ API mode gives exactly the same text as static mode (verified).
    play, and show "Replay 5:30 PM · observed 5:24 PM (UTC−08:00)", the busyness line "Relative to this gym's
    historical traffic", the typical weekday × hour grid and **How this works** (capacity unknown, 30-minute gap
    rule, source and license). The Clemente Room (COD) is the other reference: an office room, timezone unverified.
-7. *(Optional)* **Meetups** (sidebar, or the footer on a phone): join an example, or create an invite-only one.
+7. *(Optional)* **Clubs** (sidebar, or the footer on a phone): browse the sample clubs, sign up for one, or create one.
 
 ## 3. After changing data or server code
 
@@ -127,14 +127,15 @@ The only console error in static mode is an expected 404: the app checking wheth
 | Port 8000 busy | Use another port, e.g. `8080`. |
 | Phone can't connect | Same Wi-Fi? Firewall prompt accepted? Using the laptop's IP, not `localhost`? Otherwise demo from the laptop. |
 | Old version showing | Hard refresh (Ctrl+Shift+R). |
-| Meetups cluttered | Static mode: clear this site's data in the browser. API mode: stop the server, delete `server/community_events.json` (examples come back). |
+| Clubs cluttered | Static mode: clear this site's data in the browser. API mode: stop the server, delete `server/clubs.json` (sample clubs come back). |
 
 ## 6. What is local-only
 
 | Feature | Static mode | API mode |
 |---|---|---|
 | Planner, Places, playback, About | same data and results in both | same |
-| Meetups (created, joined) | this browser only (localStorage) | shared via `server/community_events.json` (git-ignored) |
+| Clubs (created, signed up) | this browser only (localStorage) | shared via `server/clubs.json` (git-ignored) |
+| Uploaded schedule (.ics) | this tab, or this browser if remembered; never sent to the server | same |
 | Planner inputs | this tab only; cleared on reload | same |
 | Light/dark choice | this browser (localStorage) | same |
 
@@ -145,7 +146,6 @@ The only console error in static mode is an expected 404: the app checking wheth
   on every push to `main` without waiting for the tests. The `/bu-sy/` layout was checked locally by
   serving the site from that subpath.
 - *Not verified:* Python 3.12 (CI uses it), Node 22, Firefox, Safari, physical phones, screen readers.
-- Meetup dates are relative to today's real date (by design). The planner and Places don't use the clock.
 - `--host 0.0.0.0` and the API's open CORS (`*`, no credentials) suit a demo network. Restrict CORS with
   `BUSY_CORS_ORIGINS` for anything public.
 - pytest prints a Starlette deprecation warning about `httpx` in the test client. It's harmless today.

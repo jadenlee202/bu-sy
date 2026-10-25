@@ -31,5 +31,28 @@ export function latestAt(observations, minute, coverageEnd, maxHoldMin = null) {
   return o && maxHoldMin != null && sec - obsSec(o) > maxHoldMin * 60 ? null : o;
 }
 
+/**
+ * Time-weighted mean count over [startMin, endMin), plus the covered seconds. Each count
+ * holds until the next observation, the end of coverage, or `maxHoldMin` after it; time
+ * with no coverage is left out, never counted as zero. Same rule as the server's
+ * time_weighted_mean (server/analytics.py).
+ */
+export function meanOver(observations, startMin, endMin, coverageEnd, maxHoldMin = null) {
+  const from = startMin * 60, to = endMin * 60, end = clockSec(coverageEnd);
+  let weighted = 0, covered = 0;
+  observations.forEach((o, i) => {
+    const s = obsSec(o);
+    let e = Math.min(i + 1 < observations.length ? obsSec(observations[i + 1]) : end, end);
+    if (maxHoldMin != null) e = Math.min(e, s + maxHoldMin * 60);
+    const lo = Math.max(s, from), hi = Math.min(e, to);
+    if (hi > lo) { weighted += o.occupancy_count * (hi - lo); covered += hi - lo; }
+  });
+  return { mean: covered ? weighted / covered : null, covered };
+}
+
+/** Demo thresholds, same as the server's classify(): quiet < 40%, moderate < 75%, else busy. */
+export const THRESHOLD_NOTE = "demo thresholds (quiet <40%, moderate <75%, busy >=75%), not validated limits";
+export const classify = (ratio) => (ratio == null ? "unknown" : ratio < 0.4 ? "quiet" : ratio < 0.75 ? "moderate" : "busy");
+
 /** The UTC offset written on an observation ("-08:00"), or null when the source gives none. */
 export const obsOffset = (o) => o.observed_at.match(/[+-]\d\d:\d\d$/)?.[0] ?? null;

@@ -1,10 +1,12 @@
 import { clockSec, fmtHHMM, fmtHour, fmtShort, fmtTime, latestAt, obsMinute, obsOffset } from "./clock.js";
+import { clubFormView, clubView, clubsView, joinView, manageView, myClubsView } from "./clubs.js";
 import { icon, paw, terrier } from "./icons.js";
 import { planView } from "./plan.js";
 import { hoursText, openSegments } from "./recommend.js";
-import { placeAvailability } from "./availability.js";
-import { calendarView, formatInstant, loadCalendarPrefs, MIN_OPTIONS, TZ } from "./calendar.js";
+import { placeAvailability, zonedInstant } from "./availability.js";
+import { calendarView, DEFAULT_TZ, formatInstant, loadCalendarPrefs, MIN_OPTIONS } from "./calendar.js";
 import { findTimeCard } from "./findtime.js";
+import { busyOf, covers, loadSchedule } from "./schedule.js";
 import {
   addDays, buildingHoursSummary, campusDateTime, dateLabel, daySchedule, displaySchedule, formatPeriod,
   selectedBuildingStatus, selectedStatusLabel, serviceAtTime, serviceStatusLabel, weekRangeLabel, weekStart,
@@ -23,10 +25,11 @@ const TICK_MS = 300;
 
 const CATEGORY = { fitness: "Fitness", dining: "Dining", library: "Library", office: "Office" };
 const FILTERS = [["all", "All"], ["fitness", "Fitness"], ["dining", "Dining"], ["library", "Library"], ["historical", "Historical"]];
-// Availability filters combine with the category chips. Only "open_now" works without Google Calendar.
+// Availability filters combine with the category chips. Only "open_now" works without an uploaded schedule.
 const AVAIL_FILTERS = [["any", "Any time"], ["open_now", "Open now"], ["free", "Open during my free time"],
+  ["breakfast", "Serving breakfast during my free time"], ["brunch", "Serving brunch during my free time"],
   ["lunch", "Serving lunch during my free time"], ["dinner", "Serving dinner during my free time"]];
-const CALENDAR_FILTERS = new Set(["free", "lunch", "dinner"]);
+const CALENDAR_FILTERS = new Set(["free", "breakfast", "brunch", "lunch", "dinner"]);
 
 const state = { minute: FIRST_VIEW, playing: false, timer: null, filter: "all", query: "", avail: "any" };
 const $view = document.getElementById("view");
@@ -169,21 +172,18 @@ async function placesView() {
     return {};
   }
 
-  // Free-time filters: busy times stay in this screen's memory only and are refetched on each visit.
+  // Free-time filters read the schedule uploaded on the Calendar page (kept in this browser).
+  const schedule = loadSchedule();
   const prefs = loadCalendarPrefs();
-  const zone = prefs.timezone ?? TZ;
+  const zone = prefs.timezone ?? DEFAULT_TZ;
   const todayLocal = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const freeFilter = { date: todayLocal, minimum: prefs.minimum ?? 30, from: prefs.from ?? "08:00", until: prefs.until ?? "22:00" };
-  let calendar = null;      // calendar status, or null when there's no calendar API
-  let calendarKnown = false;
-  let busy = null;          // { key, busy } for the selected date, or { key, error }
-  let busyRequest = 0;
   const $availChips = $view.querySelector("#avail-chips");
   const $availPanel = $view.querySelector("#avail-panel");
 
   const renderAvailControls = () => {
-    if (calendarKnown && CALENDAR_FILTERS.has(state.avail) && !calendar?.connected) state.avail = "any";
-    const offered = AVAIL_FILTERS.filter(([id]) => !CALENDAR_FILTERS.has(id) || calendar?.connected);
+    if (CALENDAR_FILTERS.has(state.avail) && !schedule) state.avail = "any";
+    const offered = AVAIL_FILTERS.filter(([id]) => !CALENDAR_FILTERS.has(id) || schedule);
     $availChips.innerHTML = offered.map(([id, label]) =>
       `<button class="chip" data-avail="${id}" aria-pressed="${state.avail === id}">${label}</button>`).join("");
     if (CALENDAR_FILTERS.has(state.avail)) {
@@ -192,42 +192,14 @@ async function placesView() {
           <label>Free for at least<select data-free="minimum">${MIN_OPTIONS.map((minutes) =>
             `<option value="${minutes}"${minutes === freeFilter.minimum ? " selected" : ""}>${minutes} minutes</option>`).join("")}</select></label>
         </div>
-        <p class="help">Using your Google Calendar free/busy times within ${esc(freeFilter.from)}–${esc(freeFilter.until)} (${esc(zone)}). <a href="#/calendar">Change on the Calendar page</a>. Travel time isn't included.</p>`;
+        <p class="help">Using your uploaded schedule (${esc(schedule.fileName)}) within ${esc(freeFilter.from)}–${esc(freeFilter.until)} (${esc(zone)}). <a href="#/calendar">Change on the Calendar page</a>. Travel time isn't included.</p>`;
     } else if (state.avail === "open_now") {
       $availPanel.innerHTML = `<p class="help">Open right now by each place's published hours (campus time), not the replay slider.</p>`;
     } else {
-      $availPanel.innerHTML = calendar?.connected ? ""
-        : calendar?.configured ? `<p class="help"><a href="#/calendar">Connect Google Calendar</a> to filter places by your free time.</p>` : "";
+      $availPanel.innerHTML = schedule ? ""
+        : `<p class="help"><a href="#/calendar">Upload your class schedule (.ics)</a> to find places open during your free time. It's read in this browser and never uploaded.</p>`;
     }
   };
-
-  const loadBusy = async () => {
-    const key = `${freeFilter.date}|${zone}`;
-    if (!CALENDAR_FILTERS.has(state.avail) || busy?.key === key) return;
-    const id = ++busyRequest;
-    busy = { key, loading: true };
-    update();
-    try {
-      const result = await src.calendarFreeBusy(freeFilter.date, zone);
-      if (id === busyRequest) busy = { key, busy: result.busy };
-    } catch (error) {
-      if (id !== busyRequest) return;
-      busy = { key, error };
-      if (error.status === 401) {
-        calendar = { ...calendar, connected: false };
-        renderAvailControls();
-      }
-    }
-    if (id === busyRequest) update();
-  };
-
-  src.calendarStatus().then((status) => { calendar = status; }).catch(() => { calendar = null; })
-    .finally(() => {
-      calendarKnown = true;
-      renderAvailControls();
-      update();
-      void loadBusy();
-    });
   renderAvailControls();
 
   const visible = () => {
@@ -238,20 +210,24 @@ async function placesView() {
   };
 
   // Applies the availability filter. Returns the kept places with their first matching window,
-  // the places whose hours can't be checked, and a notice when the calendar couldn't be read.
+  // the places whose hours can't be checked, and a notice when the date can't be checked at all.
   const applyAvailability = (rows) => {
     if (state.avail === "any") return { rows, windows: {}, unchecked: [], notice: "" };
     const calendarMode = CALENDAR_FILTERS.has(state.avail);
-    if (calendarMode && (!busy || busy.loading)) return { rows: [], windows: {}, unchecked: [], notice: loading("Checking your free time…") };
-    if (calendarMode && busy.error) {
-      return {
-        rows, windows: {}, unchecked: [],
-        notice: `<p class="calendar-error">${esc(busy.error.message || "Your calendar couldn't be read.")} Showing all places.</p>
-          <button class="btn" type="button" data-free-retry>Retry</button>`,
-      };
+    if (calendarMode) {
+      let covered = false;
+      try {
+        covered = covers(schedule, zonedInstant(freeFilter.date, freeFilter.from, zone), zonedInstant(freeFilter.date, freeFilter.until, zone));
+      } catch { /* a preferred hour that doesn't exist on this date: treated as not covered */ }
+      if (!covered) {
+        return {
+          rows: [], windows: {}, unchecked: [],
+          notice: `<p class="help">This date is outside the dates your uploaded calendar covers, so BU-sy can't tell when you're free. Choose another date or <a href="#/calendar">upload a newer export</a>.</p>`,
+        };
+      }
     }
     const context = calendarMode
-      ? { busy: busy.busy, date: freeFilter.date, timezone: zone, from: freeFilter.from, until: freeFilter.until, minimum: freeFilter.minimum, now: Date.now() }
+      ? { busy: busyOf(schedule), date: freeFilter.date, timezone: zone, from: freeFilter.from, until: freeFilter.until, minimum: freeFilter.minimum, now: Date.now() }
       : { now: Date.now() };
     const kept = [];
     const windows = {};
@@ -338,7 +314,6 @@ async function placesView() {
     state.avail = chip.dataset.avail;
     renderAvailControls();
     update();
-    void loadBusy();
   });
   $availPanel.addEventListener("change", (e) => {
     const field = e.target.dataset.free;
@@ -346,12 +321,6 @@ async function placesView() {
     else if (field === "minimum") freeFilter.minimum = Number(e.target.value);
     else return;
     update();
-    void loadBusy();
-  });
-  $list.addEventListener("click", (e) => {
-    if (!e.target.closest("[data-free-retry]")) return;
-    busy = null;
-    void loadBusy();
   });
   update();
   return { update };
@@ -678,185 +647,6 @@ function barChart(el, hist) {
   };
 }
 
-// ---------- screen: events ----------
-const dayLabel = (iso) => {
-  const today = src.campusNow().date;
-  const d = new Date(`${iso}T12:00:00Z`);
-  const diff = Math.round((d - new Date(`${today}T12:00:00Z`)) / 864e5);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Tomorrow";
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
-};
-
-async function eventsView() {
-  const mode = await src.getMode();
-  $view.innerHTML = `
-    <div class="title-row"><h1 class="title">Meetups</h1>
-      <a class="btn btn-primary" href="#/events/new">${icon("plus", 16)} New</a></div>
-    <p class="hint">Unofficial and student-run, not FitRec programming. ${mode === "static"
-      ? "<strong>Demo mode:</strong> events are saved in this browser only. Nobody else can see or join them."
-      : "Shared with everyone using this server: anyone can see each event's time and place."}</p>
-    <div id="events" aria-live="polite">${loading()}</div>`;
-  const $list = $view.querySelector("#events");
-  let open = null; // id of the event whose join form is showing
-
-  async function render() {
-    let events;
-    try {
-      events = await src.communityEvents.list();
-    } catch (err) {
-      $list.innerHTML = failure(err);
-      return;
-    }
-    if (!events.length) {
-      $list.innerHTML = `<div class="state">${terrier({ size: 52, sleepy: true })}<p>Nothing planned yet.</p>
-        <a class="btn btn-primary" href="#/events/new">Start a run</a></div>`;
-      return;
-    }
-    let lastDay = "";
-    $list.innerHTML = `<ul class="events">${events.map((e) => {
-      const header = e.date !== lastDay ? `<li class="day">${dayLabel(e.date)}</li>` : "";
-      lastDay = e.date;
-      const full = e.spots && e.going_count >= e.spots;
-      const action = e.is_host ? `<span class="pill">Hosting</span>`
-        : e.joined ? `<span class="going"><button class="link" data-act="leave" data-id="${esc(e.id)}">Leave</button><span class="pill pill-going">${icon("check", 14)} Going</span></span>`
-        : full ? `<span class="pill">Full</span>`
-        : `<button class="btn" data-act="open" data-id="${esc(e.id)}">Join</button>`;
-      return `${header}<li class="event">
-        <div class="event-time num">${fmtHHMM(e.start)} – ${fmtHHMM(e.end)}</div>
-        <div class="event-title">${esc(e.title)}${e.invite_only ? ` <span class="lock" title="A code is needed to join. The time and place are visible to everyone.">${icon("lock", 13)} Invite only</span>` : ""}</div>
-        <div class="event-place">${esc(e.place)}${e.note ? ` · ${esc(e.note)}` : ""}</div>
-        <div class="event-foot"><span class="muted">${e.going_count}${e.spots ? `/${e.spots}` : ""} going · ${esc(e.host)}</span>${action}</div>
-        ${open === e.id ? joinForm(e) : ""}
-        ${e.is_host ? `<div class="host-box">${e.invite_code ? `<span>Invite code <code>${esc(e.invite_code)}</code></span>
-          <button class="link" data-act="copy" data-code="${esc(e.invite_code)}">Copy</button>` : "<span>Open to anyone</span>"}
-          <button class="link danger" data-act="cancel" data-id="${esc(e.id)}">Cancel event</button></div>` : ""}
-      </li>`;
-    }).join("")}</ul>`;
-    $list.querySelector(".join-form input")?.focus();
-  }
-
-  const joinForm = (e) => `<form class="join-form" data-id="${esc(e.id)}">
-    <input name="name" required maxlength="${src.LIMITS.name}" placeholder="Your first name or nickname" aria-label="Your name" value="${esc(src.savedName())}">
-    ${e.invite_only ? `<input name="code" required maxlength="${src.LIMITS.code}" placeholder="Invite code" aria-label="Invite code" autocapitalize="characters">` : ""}
-    <button class="btn btn-primary">Join</button>
-    <p class="form-error" role="alert"></p>
-  </form>`;
-
-  $list.addEventListener("click", async (ev) => {
-    const btn = ev.target.closest("[data-act]");
-    if (!btn) return;
-    const { act, id } = btn.dataset;
-    try {
-      if (act === "open") { open = id; await render(); }
-      if (act === "leave") { await src.communityEvents.leave(id); await render(); }
-      if (act === "cancel" && confirm("Cancel this event for everyone?")) { await src.communityEvents.cancel(id); await render(); }
-      if (act === "copy") {
-        await navigator.clipboard?.writeText(btn.dataset.code);
-        btn.textContent = "Copied";
-      }
-    } catch (err) {
-      alert(err.message);
-    }
-  });
-  $list.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    const form = ev.target;
-    const data = new FormData(form);
-    const name = data.get("name").trim();
-    try {
-      await src.communityEvents.join(form.dataset.id, { name, code: data.get("code") });
-      src.saveName(name);
-      open = null;
-      await render();
-    } catch (err) {
-      form.querySelector(".form-error").textContent = err.message;
-    }
-  });
-  await render();
-  return {};
-}
-
-async function newEventView() {
-  $view.innerHTML = `<a class="back" href="#/events">${icon("back", 16)} Meetups</a>${loading()}`;
-  let places;
-  try {
-    const facilities = await src.listFacilities();
-    const fitrec = facilities.find((f) => f.category === "fitness" && f.campus_eligible);
-    const areas = fitrec ? (await src.getHistory(fitrec.facility_id)).areas.map((a) => a.name) : [];
-    const others = facilities.filter((f) => f.campus_eligible && f !== fitrec).map((f) => f.facility_name);
-    places = { FitRec: areas, "Elsewhere on campus": [...others, "Somewhere else on campus"] };
-  } catch (err) {
-    $view.innerHTML = `<a class="back" href="#/events">${icon("back", 16)} Meetups</a>${failure(err)}`;
-    return {};
-  }
-  const mode = await src.getMode();
-  const now = src.campusNow();
-  const nextHour = Math.min(22, Number(now.time.slice(0, 2)) + 1);
-  const pad = (n) => String(n).padStart(2, "0");
-  const lastDay = new Date(Date.parse(`${now.date}T12:00:00Z`) + src.LIMITS.daysAhead * 864e5).toISOString().slice(0, 10);
-  const L = src.LIMITS;
-
-  $view.innerHTML = `
-    <a class="back" href="#/events">${icon("back", 16)} Meetups</a>
-    <h1 class="title">New meetup</h1>
-    <p class="hint">Unofficial: you host it and nothing is booked with FitRec. ${mode === "static"
-      ? "<strong>Demo mode:</strong> this event is saved in this browser only. Nobody else will see it."
-      : "Everyone using this server will see it."}</p>
-    <form class="form panel" id="new-event" novalidate>
-      <label>What<input name="title" required maxlength="${L.title}" placeholder="Basketball run"></label>
-      <label>Where<select name="place" required>
-        ${Object.entries(places).map(([group, list]) => `<optgroup label="${esc(group)}">${list.map((p) => `<option>${esc(p)}</option>`).join("")}</optgroup>`).join("")}
-      </select></label>
-      <label><span>Details <span class="opt">optional</span></span><input name="note" maxlength="${L.note}" placeholder="Court 4, bring a ball"></label>
-      <div class="form-row">
-        <label>Date<input name="date" type="date" required min="${now.date}" max="${lastDay}" value="${now.date}"></label>
-        <label>Start<input name="start" type="time" required value="${pad(nextHour)}:00"></label>
-        <label>End<input name="end" type="time" required value="${pad(nextHour + 1)}:00"></label>
-      </div>
-      <label><span>Spots <span class="opt">optional</span></span><input name="spots" type="number" min="${L.minSpots}" max="${L.maxAttendees}" inputmode="numeric" placeholder="10"></label>
-      <fieldset class="segmented"><legend>Who can join</legend>
-        <label><input type="radio" name="visibility" value="open" checked><span>Anyone</span></label>
-        <label><input type="radio" name="visibility" value="invite"><span>${icon("lock", 14)} Invite only</span></label>
-      </fieldset>
-      <p class="help">Invite only means people need a code to join. Everyone can still see the time and place,
-        so don't use it for anything private.${mode === "static" ? " In demo mode the code only works in this browser." : ""}</p>
-      <label>Your name<input name="host" required maxlength="${L.host}" placeholder="First name or nickname" value="${esc(src.savedName())}"></label>
-      <p class="form-error" role="alert"></p>
-      <button class="btn btn-primary btn-block">Create event</button>
-    </form>`;
-
-  const form = $view.querySelector("#new-event");
-  form.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    const d = new FormData(form);
-    const $err = form.querySelector(".form-error");
-    const get = (k) => String(d.get(k) ?? "").trim();
-    const data = {
-      title: get("title"), place: get("place"), note: get("note"), date: get("date"),
-      start: get("start"), end: get("end"), host: get("host"), spots: get("spots") ? Number(get("spots")) : null,
-      invite_only: d.get("visibility") === "invite",
-    };
-    const problem = src.eventProblem(data);  // same rules as the server
-    if (problem) { $err.textContent = problem; return; }
-    try {
-      const e = await src.communityEvents.create(data);
-      src.saveName(get("host"));
-      if (!e.invite_code) { location.hash = "#/events"; return; }
-      $view.innerHTML = `<div class="state">${terrier({ size: 52 })}
-        <h1 class="title">You're hosting</h1>
-        <p>${mode === "static"
-          ? "Demo mode: this code only works in this browser, because the event isn't shared."
-          : "Share this code with the people you invite. Anyone who has it can join."}</p>
-        <p class="code-big">${esc(e.invite_code)}</p>
-        <a class="btn btn-primary" href="#/events">Done</a></div>`;
-    } catch (err) {
-      $err.textContent = err.message;
-    }
-  });
-  return {};
-}
-
 // ---------- screen: about ----------
 function aboutView() {
   const doi = `<a href="https://doi.org/10.5281/zenodo.996587" target="_blank" rel="noopener">doi:10.5281/zenodo.996587</a>`;
@@ -873,7 +663,7 @@ function aboutView() {
       ${item("Busyness", `<p>A count compared with capacity (sample places) or the room's usual high (Clemente): under 40% quiet, under 75% moderate, above that busy. These are demo thresholds. Suggestions use the count at the selected demo time, which is not a forecast for when you arrive, and a building count doesn't show free seats or equipment.</p>`)}
       ${item("Hourly averages", `<p>Time-weighted: each count holds until the next one, and never past the end of the recorded day.</p>`)}
       ${item("Your settings", `<p>Preferences and your last chosen starting point stay in this browser. Reset them under Preferences. BU-sy never detects your location.</p>`)}
-      ${item("Meetups", `<p>Created by students and unofficial. We store only a nickname and a random device ID.</p>`)}
+      ${item("Clubs", `<p>Sample clubs are labeled and aren't real BU organizations. Signing up stores your name, school email and year (plus anything optional you add) for that club's organizer only; on the built-in demo files that stays in this browser. Organizer access is a device token, not a login. Busyness hints for meeting times are estimates from the simulated campus data.</p>`)}
     </div>
     <p class="fineprint">BU-sy is an independent student prototype, not affiliated with Boston University. A real version would need verified hours, real walking routes and an authorized, aggregate campus count.</p>`;
   return {};
@@ -888,15 +678,22 @@ const clock = {
 // ---------- router ----------
 async function route() {
   const hash = location.hash.replace(/^#\/?/, "");
-  const [section, id] = hash.split("/");
-  const current = section === "" ? "plan" : section === "place" ? "places" : section;
+  const [section, id, sub] = hash.split("/");
+  const current = section === "" ? "plan" : section === "place" ? "places"
+    : ["club", "my-clubs"].includes(section) ? "clubs" : section;
+  const clubId = id ? decodeURIComponent(id) : null;
   for (const a of document.querySelectorAll("[data-section]")) a.toggleAttribute("aria-current", a.dataset.section === current);
   view = null;
   window.scrollTo(0, 0);
   const next =
     section === "place" && id ? placeView(decodeURIComponent(id))
-    : section === "events" && id === "new" ? newEventView()
-    : section === "events" ? eventsView()
+    : section === "clubs" && id === "new" ? clubFormView($view)
+    : section === "clubs" ? clubsView($view)
+    : section === "club" && clubId && sub === "join" ? joinView($view, clubId)
+    : section === "club" && clubId && sub === "edit" ? clubFormView($view, clubId)
+    : section === "club" && clubId && sub === "manage" ? manageView($view, clubId)
+    : section === "club" && clubId ? clubView($view, clubId)
+    : section === "my-clubs" ? myClubsView($view)
     : section === "calendar" ? calendarView($view)
     : section === "about" ? aboutView()
     : section === "places" ? placesView()
@@ -933,7 +730,7 @@ src.getMode().then((mode) => {
   if (mode === "static" && src.REQUESTED_API) {
     const $notice = document.getElementById("notice");
     $notice.textContent = `Couldn't reach the API at ${src.REQUESTED_API}. Showing the built-in demo files instead: `
-      + "the same sample data, but meetups are saved on this device only.";
+      + "the same sample data, but clubs and sign-ups are saved on this device only.";
     $notice.hidden = false;
   }
 });

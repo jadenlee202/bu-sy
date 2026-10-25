@@ -132,10 +132,11 @@ export function matchFreeWindows(free, location, isoDate, minimum, campusTimezon
 /**
  * Search `days` local dates from `startDate` for times the student is free and the location is
  * open (and, for dining, serving `meal` when given). Returns every match in order plus each
- * day's outcome, so a caller can explain why nothing was found.
+ * day's outcome, so a caller can explain why nothing was found. With `coverage` ({ start, end }),
+ * days outside the range the busy times describe are "not_covered" rather than free.
  */
 export function findOpportunities(busy, location, startDate, days, options) {
-  const { timezone, from, until, minimum, now = -Infinity, meal = null } = options;
+  const { timezone, from, until, minimum, now = -Infinity, meal = null, coverage = null } = options;
   const outcomes = [];
   const matches = [];
   for (let offset = 0; offset < days; offset += 1) {
@@ -147,6 +148,10 @@ export function findOpportunities(busy, location, startDate, days, options) {
       end = zonedInstant(date, until, timezone);
     } catch {
       outcomes.push({ date, reason: "invalid_window" });
+      continue;
+    }
+    if (coverage && (start < coverage.start || end > coverage.end)) {
+      outcomes.push({ date, reason: "not_covered" });
       continue;
     }
     const usable = end > start ? usableWindows(freeWindows(busy, start, end), minimum, now) : [];
@@ -164,7 +169,7 @@ export function findOpportunities(busy, location, startDate, days, options) {
   return { matches, outcomes };
 }
 
-const UNCHECKABLE = new Set(["unverified", "unpublished", "not_applicable", "invalid_window"]);
+const UNCHECKABLE = new Set(["unverified", "unpublished", "not_applicable", "invalid_window", "not_covered"]);
 
 /**
  * Does one place pass a Places availability filter? `mode` is "open_now", "free" (building open

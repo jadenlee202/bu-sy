@@ -8,11 +8,12 @@ __pycache__/
 .env
 .env.*
 
-# Runtime state for community events (recreated with examples on startup)
-server/community_events.json
 server/calendar_sessions.sqlite3
 server/calendar_sessions.sqlite3-shm
 server/calendar_sessions.sqlite3-wal
 
 # Raw download, if you keep a local copy
 COD.zip
+
+# Club directory store (api mode)
+server/clubs.json
